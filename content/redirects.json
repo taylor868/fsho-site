@@ -1,0 +1,82 @@
+[
+  {
+    "from": "/get-a-cash-offer-today/",
+    "to": "/",
+    "code": 301
+  },
+  {
+    "from": "/get-your-cash-offer-today/",
+    "to": "/",
+    "code": 301
+  },
+  {
+    "from": "/step-2-2/",
+    "to": "/step-2/",
+    "code": 301
+  },
+  {
+    "from": "/how-we-buy-houses/",
+    "to": "/how-it-works/",
+    "code": 301
+  },
+  {
+    "from": "/blog/",
+    "to": "/",
+    "code": 301
+  },
+  {
+    "from": "/sell-your-house-fast-in-missouri-2/",
+    "to": "/sell-your-house-fast-in-missouri/",
+    "code": 301
+  },
+  {
+    "from": "/sell-your-house-fast-in-michigan-2/",
+    "to": "/sell-your-house-fast-in-michigan/",
+    "code": 301
+  },
+  {
+    "from": "/sell-your-house-fast-for-cash-in-michigan/",
+    "to": "/sell-your-house-fast-in-michigan/",
+    "code": 301
+  },
+  {
+    "from": "/sell-your-house-fast-for-cash-in-indiana/",
+    "to": "/sell-your-house-fast-in-indiana/",
+    "code": 301
+  },
+  {
+    "from": "/sell-your-house-fast-for-cash-in-ohio/",
+    "to": "/sell-your-house-fast-in-ohio/",
+    "code": 301
+  },
+  {
+    "from": "/sell-your-house-fast-for-cash-in-kentucky/",
+    "to": "/sell-your-house-fast-in-kentucky/",
+    "code": 301
+  },
+  {
+    "from": "/sell-your-house-fast-for-cash-in-tennessee/",
+    "to": "/sell-your-house-fast-in-tennessee/",
+    "code": 301
+  },
+  {
+    "from": "/sell-your-house-fast-for-cash-in-pennsylvania/",
+    "to": "/sell-your-house-fast-in-pennsylvania/",
+    "code": 301
+  },
+  {
+    "from": "/sell-your-house-fast-for-cash-in-north-carolina/",
+    "to": "/sell-your-house-fast-in-north-carolina/",
+    "code": 301
+  },
+  {
+    "from": "/sell-your-house-fast-for-cash-in-wisconsin/",
+    "to": "/sell-your-house-fast-in-wisconsin/",
+    "code": 301
+  },
+  {
+    "from": "/sell-your-house-fast-for-cash-in-minnesota/",
+    "to": "/sell-your-house-fast-in-minnesota/",
+    "code": 301
+  }
+]

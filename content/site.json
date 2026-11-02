@@ -1,0 +1,277 @@
+{
+  "company": "Fair & Simple Home Offer",
+  "company_html": "Fair &amp; Simple Home Offer",
+  "legal_name": "Andrew Collier LLC",
+  "domain": "https://fairandsimplehomeoffer.com",
+  "phone": "(910) 636-6669",
+  "tel": "+19106366669",
+  "brand": {
+    "orange": "#B8501C",
+    "navy": "#1F3C56",
+    "_note": "orange #B8501C is the darkened accessible version, pending approval (original #E67A45)"
+  },
+  "logo": "/logo.webp",
+  "favicon": "/favicon.png",
+  "preview": true,
+  "lead_form": {
+    "enabled": false,
+    "endpoint": "",
+    "_note": "stays off until lead routing (FSHO CRM vs REsimpli) is decided"
+  },
+  "gtm_id": "GTM-WWPBQGDZ",
+  "clickcease_id": "",
+  "tracking": false,
+  "nav": [
+    {
+      "label": "How It Works",
+      "href": "/how-it-works/"
+    },
+    {
+      "label": "Our Company",
+      "href": "/our-company/"
+    },
+    {
+      "label": "Reviews",
+      "href": "/reviews/"
+    },
+    {
+      "label": "FAQ",
+      "href": "/faq/"
+    },
+    {
+      "label": "Areas",
+      "href": "/service-areas/"
+    },
+    {
+      "label": "Contact",
+      "href": "/contact-us/"
+    }
+  ],
+  "footer": {
+    "about": "We are a real estate solutions and investment firm that helps homeowners sell burdensome houses. Fair &amp; Simple Home Offer is operated by Andrew Collier LLC.",
+    "company_extra": [
+      {
+        "label": "Stop Foreclosure",
+        "href": "/stop-foreclosure/"
+      }
+    ],
+    "legal": [
+      {
+        "label": "Privacy Policy",
+        "href": "/privacy/"
+      },
+      {
+        "label": "Terms &amp; Conditions",
+        "href": "/terms-conditions/"
+      },
+      {
+        "label": "Text Messaging Terms",
+        "href": "/text-messaging-terms/"
+      }
+    ],
+    "copyright": "© 2026 Fair &amp; Simple Home Offer. Not a licensed real estate brokerage unless stated; we buy property as principals. Submitting a form does not obligate you to sell."
+  },
+  "trust_badges": [
+    "⭐ 5-star rated on Google &amp; Facebook",
+    "🛡️ A+ BBB rating",
+    "👨‍👩‍👧 Family-owned since 2017",
+    "💵 No fees or commissions"
+  ],
+  "hero_eyebrow": "Sell your house as-is · No fees · No repairs",
+  "consent": "I agree Fair and Simple Home Offer and its agents may call, text, and email me, including marketing by autodialer or artificial, prerecorded, or AI voice. Consent isn’t required to buy or sell. Msg freq varies; msg &amp; data rates may apply. Reply STOP to opt out, HELP for help.",
+  "qualifier": "<strong>Quick check before you start:</strong> We buy single-family houses from the owner. We do <u>not</u> buy mobile/manufactured homes, condos, apartments, vacant land, or homes currently listed with an agent. Listed with a Realtor, or owned less than 7 years? <a href=\"tel:+19106366669\">Call us first</a>. No wholesalers, investors, or agents, please.",
+  "situations": [
+    {
+      "icon": "🏚️",
+      "title": "Inherited / probate",
+      "text": "Settle the estate without cleaning out, fixing up, or listing a house you never planned to own."
+    },
+    {
+      "icon": "⚠️",
+      "title": "Facing foreclosure",
+      "text": "Behind on payments? A fast sale may let you avoid foreclosure. Time matters, so call early."
+    },
+    {
+      "icon": "🔑",
+      "title": "Tired landlord",
+      "text": "Bad tenants, vacancies, repairs. Sell the rental as-is and be done."
+    },
+    {
+      "icon": "🛠️",
+      "title": "Needs repairs",
+      "text": "Roof, foundation, hoarder house, fire damage. No repairs, no cleaning."
+    },
+    {
+      "icon": "💔",
+      "title": "Divorce",
+      "text": "A clean, quick, private sale so both sides can move forward."
+    },
+    {
+      "icon": "🚚",
+      "title": "Relocating",
+      "text": "Moving for work or family? Pick a closing date that fits your move."
+    }
+  ],
+  "steps": [
+    {
+      "n": 1,
+      "title": "Tell us about the house",
+      "text": "Fill out the short form or call/text <a href=\"tel:+19106366669\">(910) 636-6669</a>."
+    },
+    {
+      "n": 2,
+      "title": "Review your options",
+      "text": "We evaluate the property and walk you through a no-obligation cash offer, or selling on the market with our team handling the process."
+    },
+    {
+      "n": 3,
+      "title": "Close on your timeline",
+      "text": "Pick the date. We coordinate with a reputable title company. Cash in as little as 10–14 business days in most cases."
+    }
+  ],
+  "comparison": {
+    "headers": [
+      "Fair &amp; Simple Cash Offer",
+      "Our Market-Sale Option",
+      "Traditional Listing"
+    ],
+    "rows": [
+      [
+        "Commissions",
+        "None",
+        "Discussed up front",
+        "Often ~6%*"
+      ],
+      [
+        "Closing costs",
+        "We cover them",
+        "Varies",
+        "Seller typically pays some*"
+      ],
+      [
+        "Repairs &amp; cleaning",
+        "None, sell as-is",
+        "Sell as-is",
+        "Usually expected"
+      ],
+      [
+        "Showings / open houses",
+        "None",
+        "Some",
+        "Many"
+      ],
+      [
+        "Typical timeline",
+        "10–14 business days",
+        "45–90 days",
+        "Often months"
+      ],
+      [
+        "Sale price",
+        "Below full retail; fast &amp; certain",
+        "Closer to market value",
+        "Market value, if it sells"
+      ]
+    ],
+    "note": "*Typical industry figures; your costs may differ. Speed and price trade off: we'll show you both options honestly."
+  },
+  "testimonials": [
+    {
+      "quote": "One of the easiest processes I have done. Very quick and extremely friendly. Contacted me through every step of the process highly recommend these guys.",
+      "name": "Brett C."
+    }
+  ],
+  "video_ids": [
+    "k3iyV-hwVSs",
+    "pwZIyFiirKQ",
+    "vSytu6IDw6s"
+  ],
+  "faq": [
+    {
+      "q": "What types of properties do you buy?",
+      "a": "Single-family houses in any condition: inherited homes, houses with liens or judgments, homes needing repairs, vacant houses, properties behind on taxes, and hoarder houses. We do not buy mobile/manufactured homes, condos, apartments, vacant land, or homes listed with an agent."
+    },
+    {
+      "q": "How much will you offer?",
+      "a": "Every property is reviewed by a person, not an algorithm. A cash offer is typically below full retail value because we take on repairs, closing costs, and risk. If a cash offer isn't your best option, we'll also show you a market-sale option that may net you more."
+    },
+    {
+      "q": "How fast can you close?",
+      "a": "Usually 10–14 business days in most scenarios. If you need more time, we close on the date you choose."
+    },
+    {
+      "q": "Are there fees or commissions?",
+      "a": "No commissions or hidden fees on our cash offer, and we cover closing costs."
+    },
+    {
+      "q": "Can selling stop a foreclosure?",
+      "a": "Often, if there's enough time before the sale date. Call us as early as possible. We're not attorneys; for legal advice, talk with a foreclosure attorney or a HUD-approved housing counselor."
+    },
+    {
+      "q": "Do I have to clean or make repairs?",
+      "a": "No. Sell as-is. Leave what you don't want; we handle cleanup."
+    },
+    {
+      "q": "What does no-obligation mean?",
+      "a": "You're free to say no. There's no cost to get an offer and no pressure to accept it."
+    },
+    {
+      "q": "Is this legit?",
+      "a": "Yes. Fair &amp; Simple Home Offer is operated by Andrew Collier LLC, holds an A+ BBB rating, and is 5-star rated on Google and Facebook. Always compare offers. We encourage it."
+    }
+  ],
+  "cta": {
+    "heading": "Ready to see your options?",
+    "text": "Get a no-obligation offer. Talk to a real person, not a call center.",
+    "button": "Get My Fair Cash Offer"
+  },
+  "step2_fields": [
+    {
+      "name": "condition",
+      "label": "Property condition",
+      "type": "select",
+      "options": [
+        "Move-in ready",
+        "Needs minor repairs",
+        "Needs major repairs",
+        "Not livable"
+      ]
+    },
+    {
+      "name": "occupancy",
+      "label": "Is it occupied?",
+      "type": "select",
+      "options": [
+        "I live there",
+        "Tenant",
+        "Vacant"
+      ]
+    },
+    {
+      "name": "timeline",
+      "label": "How soon do you want to sell?",
+      "type": "select",
+      "options": [
+        "ASAP",
+        "Within 30 days",
+        "1–3 months",
+        "Just exploring"
+      ]
+    },
+    {
+      "name": "listed",
+      "label": "Is the house listed with an agent?",
+      "type": "select",
+      "options": [
+        "No",
+        "Yes"
+      ]
+    },
+    {
+      "name": "notes",
+      "label": "Anything else we should know?",
+      "type": "textarea"
+    }
+  ],
+  "_step2_note": "Placeholder fields until the real Carrot Form 6 fields are confirmed"
+}
