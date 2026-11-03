@@ -1,9 +1,9 @@
 {
   "id": "qualifier",
-  "version": 2,
+  "version": 3,
   "page": "/step-2/",
   "start": "type",
-  "_how": "EMOTA qualifier. Contact + address come first from the hero form (partial lead saved). One question per screen. next = question id, @score (grade EMOTA) or @end:<ending>. pass = true/false for the question's own letter, or {\"M\":false,...} for several letters. A letter passes only if every answer in it passed. Categories are internal; sellers never see them.",
+  "_how": "EMOTA qualifier. Contact + address come first from the hero form (partial lead saved). Order: property > O > T > M > E > A, one tap each (6 questions). next = question id, @score (grade EMOTA) or @end:<ending>. pass = true/false for the question's own letter, or {\"M\":false,...} for several letters. A letter passes only if every answer in it passed. Categories are internal; sellers never see them.",
   "categories": {
     "property": "Property gate (hard declines, not scored)",
     "E": "Equity",
@@ -35,7 +35,7 @@
         {
           "label": "Single-family house",
           "value": "sfh",
-          "next": "listed"
+          "next": "ownership"
         },
         {
           "label": "Townhouse",
@@ -46,7 +46,7 @@
         {
           "label": "Multi-family (2-4 units)",
           "value": "multi_2_4",
-          "next": "listed"
+          "next": "ownership"
         },
         {
           "label": "Condo",
@@ -69,195 +69,33 @@
       ]
     },
     {
-      "id": "listed",
-      "category": "M",
-      "label": "Is the house listed with an agent right now?",
-      "options": [
-        {
-          "label": "No, it's not listed",
-          "value": "not_listed",
-          "pass": {
-            "M": true,
-            "T": true
-          },
-          "next": "equity"
-        },
-        {
-          "label": "Yes, it's listed",
-          "value": "listed",
-          "next": "listed_days"
-        },
-        {
-          "label": "It was, but the listing expired",
-          "value": "expired",
-          "pass": {
-            "M": true,
-            "T": true
-          },
-          "tag": "expired-listing",
-          "next": "equity"
-        }
-      ]
-    },
-    {
-      "id": "listed_days",
-      "category": "M",
-      "label": "How long has it been listed?",
-      "options": [
-        {
-          "label": "Less than 90 days",
-          "value": "under_90",
-          "pass": {
-            "M": false
-          },
-          "tag": "listed-under-90",
-          "next": "equity"
-        },
-        {
-          "label": "90 days or more",
-          "value": "over_90",
-          "pass": {
-            "M": true,
-            "T": true
-          },
-          "tag": "listed-over-90",
-          "next": "equity"
-        }
-      ]
-    },
-    {
-      "id": "equity",
-      "category": "E",
-      "label": "Roughly how much is still owed on the house?",
-      "options": [
-        {
-          "label": "Nothing, it's paid off",
-          "value": "free_clear",
-          "pass": true,
-          "next": "situation"
-        },
-        {
-          "label": "Less than half of what it's worth",
-          "value": "under_half",
-          "pass": true,
-          "next": "situation"
-        },
-        {
-          "label": "More than half of what it's worth",
-          "value": "over_half",
-          "pass": true,
-          "next": "situation"
-        },
-        {
-          "label": "About what it's worth, or more",
-          "value": "underwater",
-          "pass": false,
-          "next": "situation"
-        }
-      ]
-    },
-    {
-      "id": "situation",
-      "category": "M",
-      "label": "What's the main reason you're thinking of selling?",
-      "options": [
-        {
-          "label": "Inherited / probate",
-          "value": "probate",
-          "pass": true,
-          "next": "title"
-        },
-        {
-          "label": "Behind on payments",
-          "value": "behind",
-          "pass": true,
-          "next": "title"
-        },
-        {
-          "label": "Code violations or fines",
-          "value": "code",
-          "pass": true,
-          "next": "title"
-        },
-        {
-          "label": "Fire, water, or storm damage",
-          "value": "damage",
-          "pass": true,
-          "next": "title"
-        },
-        {
-          "label": "Tired of tenants",
-          "value": "tenants",
-          "pass": true,
-          "next": "title"
-        },
-        {
-          "label": "Needs too many repairs",
-          "value": "needs_work",
-          "pass": true,
-          "next": "title"
-        },
-        {
-          "label": "Divorce, job move, or other life change",
-          "value": "life_change",
-          "pass": true,
-          "next": "title"
-        },
-        {
-          "label": "Something else / just curious",
-          "value": "curious",
-          "pass": false,
-          "next": "title"
-        }
-      ]
-    },
-    {
-      "id": "title",
+      "id": "ownership",
       "category": "O",
-      "label": "Are you on the title, or the legal decision-maker?",
+      "label": "Are you the owner, or can you make the decision to sell?",
       "options": [
         {
-          "label": "Yes, I'm on the title",
-          "value": "owner",
+          "label": "Yes, I'm the only owner",
+          "value": "sole_owner",
           "pass": true,
-          "next": "owners_agree"
+          "next": "timeline"
         },
         {
-          "label": "I'm the executor, POA, or heir",
+          "label": "Yes, and all owners agree",
+          "value": "all_agree",
+          "pass": true,
+          "next": "timeline"
+        },
+        {
+          "label": "I'm an heir, executor, or POA",
           "value": "decision_maker",
           "pass": true,
-          "next": "owners_agree"
+          "next": "timeline"
         },
         {
-          "label": "No",
+          "label": "No, or not everyone agrees",
           "value": "no",
           "pass": false,
           "tag": "not-decision-maker",
-          "next": "owners_agree"
-        }
-      ]
-    },
-    {
-      "id": "owners_agree",
-      "category": "O",
-      "label": "Is everyone on the title on board with selling?",
-      "options": [
-        {
-          "label": "Yes, or I'm the only owner",
-          "value": "yes",
-          "pass": true,
-          "next": "timeline"
-        },
-        {
-          "label": "No",
-          "value": "no",
-          "pass": false,
-          "next": "timeline"
-        },
-        {
-          "label": "Not sure yet",
-          "value": "unsure",
-          "pass": false,
           "next": "timeline"
         }
       ]
@@ -271,105 +109,167 @@
           "label": "As soon as possible",
           "value": "asap",
           "pass": true,
-          "next": "issues"
+          "next": "situation"
         },
         {
           "label": "Within 30 days",
           "value": "30d",
           "pass": true,
-          "next": "issues"
+          "next": "situation"
         },
         {
           "label": "In 30-90 days",
           "value": "30_90d",
           "pass": true,
-          "next": "issues"
+          "next": "situation"
         },
         {
           "label": "More than 90 days out",
           "value": "over_90d",
           "pass": false,
-          "next": "issues"
+          "next": "situation"
         },
         {
           "label": "No rush, just looking",
           "value": "no_rush",
           "pass": false,
           "tag": "long-term",
-          "next": "issues"
+          "next": "situation"
         }
       ]
     },
     {
-      "id": "issues",
+      "id": "situation",
+      "category": "M",
+      "label": "What's the main reason you're selling?",
+      "options": [
+        {
+          "label": "Behind on payments",
+          "value": "behind",
+          "pass": true,
+          "next": "equity"
+        },
+        {
+          "label": "Inherited / probate",
+          "value": "probate",
+          "pass": true,
+          "next": "equity"
+        },
+        {
+          "label": "Needs repairs or has damage",
+          "value": "repairs",
+          "pass": true,
+          "next": "equity"
+        },
+        {
+          "label": "Tired of tenants",
+          "value": "tenants",
+          "pass": true,
+          "next": "equity"
+        },
+        {
+          "label": "Divorce, job move, or other life change",
+          "value": "life_change",
+          "pass": true,
+          "next": "equity"
+        },
+        {
+          "label": "It's been listed 90+ days, or the listing expired",
+          "value": "listed_over_90",
+          "pass": true,
+          "tag": "listed-over-90",
+          "next": "equity"
+        },
+        {
+          "label": "It's listed, but for less than 90 days",
+          "value": "listed_under_90",
+          "pass": false,
+          "tag": "listed-under-90",
+          "next": "equity"
+        },
+        {
+          "label": "Just curious what it's worth",
+          "value": "curious",
+          "pass": false,
+          "next": "equity"
+        }
+      ]
+    },
+    {
+      "id": "equity",
+      "category": "E",
+      "label": "Roughly how much is still owed on the house?",
+      "options": [
+        {
+          "label": "Nothing, it's paid off",
+          "value": "free_clear",
+          "pass": true,
+          "next": "ability"
+        },
+        {
+          "label": "Less than half of what it's worth",
+          "value": "under_half",
+          "pass": true,
+          "next": "ability"
+        },
+        {
+          "label": "More than half of what it's worth",
+          "value": "over_half",
+          "pass": true,
+          "next": "ability"
+        },
+        {
+          "label": "About what it's worth, or more",
+          "value": "underwater",
+          "pass": false,
+          "next": "ability"
+        }
+      ]
+    },
+    {
+      "id": "ability",
       "category": "A",
       "label": "Anything that could hold up a sale?",
       "options": [
         {
-          "label": "Nothing that I know of",
-          "value": "none",
+          "label": "Nothing, ready to go",
+          "value": "ready",
           "pass": true,
-          "next": "move_out"
+          "next": "@score"
         },
         {
-          "label": "Liens or back taxes the sale should cover",
+          "label": "Some liens or back taxes, the sale should cover them",
           "value": "liens_covered",
           "pass": true,
           "tag": "liens",
-          "next": "move_out"
-        },
-        {
-          "label": "Liens or back taxes bigger than the house is worth",
-          "value": "liens_over",
-          "pass": false,
-          "tag": "liens-over-value",
-          "next": "move_out"
+          "next": "@score"
         },
         {
           "label": "Probate is already open",
           "value": "probate_open",
           "pass": true,
           "tag": "probate-open",
-          "next": "move_out"
-        },
-        {
-          "label": "Probate hasn't been started",
-          "value": "probate_not_started",
-          "pass": false,
-          "tag": "probate-not-started",
-          "next": "move_out"
-        },
-        {
-          "label": "Not sure",
-          "value": "unsure",
-          "pass": true,
-          "tag": "check-title",
-          "next": "move_out"
-        }
-      ]
-    },
-    {
-      "id": "move_out",
-      "category": "A",
-      "label": "Could you be moved out by closing day?",
-      "options": [
-        {
-          "label": "Yes, or it's already empty",
-          "value": "yes",
-          "pass": true,
           "next": "@score"
         },
         {
-          "label": "Yes, with a little extra time",
+          "label": "I need a little extra time to move",
           "value": "need_time",
           "pass": true,
           "tag": "needs-extra-time",
           "next": "@score"
         },
         {
-          "label": "No",
-          "value": "no",
+          "label": "Probate not started, or liens bigger than the value",
+          "value": "probate_or_liens",
           "pass": false,
+          "tag": "probate-or-liens-over",
+          "next": "@score"
+        },
+        {
+          "label": "I can't move out by closing",
+          "value": "cant_move",
+          "pass": false,
+          "tag": "cant-move-out",
           "next": "@score"
         }
       ]

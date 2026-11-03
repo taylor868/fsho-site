@@ -111,13 +111,13 @@ Required: `state, slug, title, meta_description, headline, hero_sub`. `cities` (
 
 Fails on: missing required fields, bad template, bad slug characters, duplicate slugs across pages and markets, bad colors/phone, malformed FAQ/testimonials, bad redirects, images over 200 KB or not .webp.
 
-## Qualifier form: `content/forms/qualifier.json` (EMOTA, version 2)
+## Qualifier form: `content/forms/qualifier.json` (EMOTA, version 3)
 
 This is the lead qualifier on `/step-2/` (shortcode `{{qualifier_form}}`). It is graded on Taylor's **EMOTA** framework: **E**quity, **M**otivation, **O**wnership, **T**imeframe, **A**bility. A lead is **Hot only if all 5 pass**. Hot is the only result that fires a Google Ads conversion (`qualified_lead`).
 
 1. The hero form on every landing page collects the address and name / phone / email. It sends a **partial lead** (`stage: "partial"`, `lead_id`) and goes to `/step-2/`.
-2. A property gate comes first. Condo, townhouse, mobile/manufactured home and vacant land go to `not_fit`, the lead is saved and tagged, and no conversion fires. (Townhouse is declined pending Taylor's confirmation.)
-3. Then 1-2 one-tap questions per letter follow. Letters are internal and never shown to sellers.
+2. A property gate comes first. Condo, townhouse, mobile/manufactured home and vacant land go to `not_fit`, the lead is saved and tagged, and no conversion fires. (Townhouse declined: confirmed by Taylor.)
+3. Then one one-tap question per letter, in the order O, T, M, E, A. Letters are internal and never shown to sellers.
 4. `@score` grades the letters. All pass gives Hot (`speed-to-lead`, `qualified_lead`). Any fail gives Nurture (`60day`, **no conversion**) with tags `emota-fail-<L>` for each failed letter, plus `emota-4of5` when exactly one letter failed (the old "Warm", now a tag only). Every outcome is still sent to the CRM.
 
 `build/qualifier.js` (about 2.7 KB, budget 3.5 KB) and the JSON are inlined into `/step-2/` only.
@@ -128,29 +128,30 @@ This is the lead qualifier on `/step-2/` (shortcode `{{qualifier_form}}`). It is
 | `start` | First question id. |
 | `categories` | `{"property": ..., "E": "Equity", "M": ..., "O": ..., "T": ..., "A": ...}`. `property` is a gate and isn't graded. |
 | `questions[]` | `{id, category, label, options[]}`. `category` is required and must be a key of `categories`. |
-| `options[]` | `{label, value, pass, tag?, next}`. `pass` is `true`/`false` for the question's own letter, or an object such as `{"M": false}` / `{"M": true, "T": true}` for an answer that counts toward several letters. A letter passes only if **every** graded answer in it passed. Gate answers have no `pass`. An answer can skip `pass` only if it leads to another question of the same letter (e.g. "Yes, it's listed" leads to "How long?"). `next` is a question id, `@score`, or `@end:<ending>`. |
+| `options[]` | `{label, value, pass, tag?, next}`. `pass` is `true`/`false` for the question's own letter, or an object such as `{"M": false}` / `{"M": true, "T": true}` for an answer that counts toward several letters. A letter passes only if **every** graded answer in it passed. Gate answers have no `pass`. `next` is a question id, `@score`, or `@end:<ending>`. |
 | `result.all_pass` | `{tier, ending, cadence}`. Hot. |
 | `result.any_fail` | `{tier, ending, cadence, fail_tag, near_miss_tag}`. Nurture, 60-day. |
 | `endings{}` | `{headline, body, conversion, tier?, cadence?}`. Only the all-pass ending may have a `conversion` other than `"none"`. Stop endings (`not_fit`) set their own tier/cadence. |
 | `consent` | `{enabled, required, field, text}`. **Off for now.** `--check` refuses `enabled: true` while the text is a placeholder. |
 
-### Questions and pass rules
+### Questions and pass rules (version 3: 6 one-tap questions after contact info)
 
-| Letter | Question | Pass | Fail |
-|---|---|---|---|
-| Gate | Property type | Single-family, multi-family 2-4 | Condo, townhouse, mobile/manufactured, vacant land: `not_fit` |
-| M (+T) | Listed with an agent? | Not listed, expired | (Listed: asks how long) |
-| M | How long listed? | 90 days or more | Under 90 days |
-| E | How much is owed? | Paid off, under half, over half of value | About what it's worth or more |
-| M | Main reason for selling | Probate, behind on payments, code violations, damage, tenants, repairs, life change | Something else / just curious |
-| O | On title or legal decision-maker? | On title; executor/POA/heir | No |
-| O | Everyone on title on board? | Yes / only owner | No, not sure |
-| T | When do you need to sell? | ASAP, 30 days, 30-90 days | Over 90 days, no rush |
-| A | Anything that could hold up a sale? | Nothing; liens the sale covers; probate open; not sure (tag `check-title`) | Liens bigger than the value; probate not started |
-| A | Moved out by closing? | Yes / empty; yes with extra time (tag `needs-extra-time`) | No |
+Order (Taylor): property type > Ownership > Timeline > Motivation > Equity > Ability.
+
+| # | Letter | Question (`id`) | Pass | Fail |
+|---|---|---|---|---|
+| 1 | Gate | What kind of property is it? (`type`) | Single-family, multi-family 2-4 | Condo, townhouse, mobile/manufactured, vacant land: `not_fit` |
+| 2 | O | Are you the owner, or can you make the decision to sell? (`ownership`) | Only owner; all owners agree; heir/executor/POA | No, or not everyone agrees |
+| 3 | T | When do you need to sell? (`timeline`) | ASAP, 30 days, 30-90 days | Over 90 days, no rush |
+| 4 | M | What's the main reason you're selling? (`situation`) | Behind on payments, inherited/probate, repairs/damage, tenants, life change, listed 90+ days or expired | Listed under 90 days, just curious |
+| 5 | E | Roughly how much is still owed? (`equity`) | Paid off, under half, over half of value | About what it's worth or more |
+| 6 | A | Anything that could hold up a sale? (`ability`) | Nothing; liens the sale covers; probate open; needs a little extra time to move | Probate not started or liens bigger than value; can't move out by closing |
+
+Tags: `no-condo`, `no-townhouse`, `no-mobile`, `no-land`, `not-decision-maker`, `long-term`, `listed-over-90`, `listed-under-90`, `liens`, `probate-open`, `needs-extra-time`, `probate-or-liens-over`, `cant-move-out`, plus `emota-fail-<L>` and `emota-4of5`.
 
 **`gen.py --check` rules:**
 - every question has a valid category, and all 5 EMOTA letters exist
+- at most one question per category (one tap per step)
 - every graded answer has a valid `pass`, and gate answers have none
 - `pass` objects can't be empty and must include the question's own letter
 - only `@end:not_fit` may stop the form; every other result comes from `@score`
@@ -167,9 +168,9 @@ This is the lead qualifier on `/step-2/` (shortcode `{{qualifier_form}}`). It is
 **Payload.** It is POSTed to `site.json` `lead_form.endpoint` (FSHO CRM `create_lead`) when `lead_form.enabled`; until then it only goes to `console.info`. The CRM should upsert on `lead_id`.
 
 ```json
-{"form":"qualifier","form_version":2,"stage":"complete","lead_id":"t1","first":"Pat","phone":"3305551234",
- "answers":{"type":"sfh","listed":"listed","listed_days":"under_90","equity":"free_clear","situation":"behind","title":"owner","owners_agree":"yes","timeline":"asap","issues":"none","move_out":"yes"},
- "emota":{"M":false,"E":true,"O":true,"T":true,"A":true},"failed":["M"],
+{"form":"qualifier","form_version":3,"stage":"complete","lead_id":"t1","first":"Pat","phone":"3305551234",
+ "answers":{"type":"sfh","ownership":"sole_owner","timeline":"asap","situation":"listed_under_90","equity":"free_clear","ability":"ready"},
+ "emota":{"E":true,"M":false,"O":true,"T":true,"A":true},"failed":["M"],
  "tags":["listed-under-90","emota-fail-M","emota-4of5"],"tier":"nurture","cadence":"60day","conversion":"none",
  "page":"/step-2/","ts":"...","gclid":"","utm_campaign":"","utm_term":"","utm_source":"","utm_medium":""}
 ```

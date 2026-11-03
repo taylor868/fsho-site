@@ -86,6 +86,9 @@ def check_qualifier(q):
         if l not in cats: E.append(f'{src}: categories is missing EMOTA letter {l}')
         if not any(x.get('category') == l for x in Q.values()): E.append(f'{src}: no question asks about {l} ({cats.get(l, "?")}). All 5 EMOTA categories need one')
     if 'tiers' in q: E.append(f'{src}: "tiers" is a v1 key and is no longer used. Use result.all_pass / result.any_fail')
+    for l in list(cats):
+        n = sum(1 for x in Q.values() if x.get('category') == l)
+        if n > 1: E.append(f'{src}: {n} questions in category {l}. Keep it to one tap per step: merge them into one question')
     ap, af = res.get('all_pass', {}), res.get('any_fail', {})
     for k, r in (('all_pass', ap), ('any_fail', af)):
         if r.get('ending') not in ends: E.append(f'{src}: result.{k} ending "{r.get("ending")}" does not exist')
