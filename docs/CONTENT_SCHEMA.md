@@ -110,3 +110,41 @@ Required: `state, slug, title, meta_description, headline, hero_sub`. `cities` (
 ## Validation (`--check`)
 
 Fails on: missing required fields, bad template, bad slug characters, duplicate slugs across pages and markets, bad colors/phone, malformed FAQ/testimonials, bad redirects, images over 200 KB or not .webp.
+
+## Qualifier form: `content/forms/qualifier.json`
+
+The lead qualifier that runs on `/step-2/` (shortcode `{{qualifier_form}}`). Flow:
+
+1. Hero form on every landing page: address, then name / phone / email. On submit a **partial lead** is sent (`stage: "partial"`, with a `lead_id`) and the visitor goes to `/step-2/`.
+2. `/step-2/`: one question per screen, one tap per answer, progress bar, Back link.
+3. The last answer either scores the lead (`@score`) or stops at an ending (`@end:<id>`). A tier-specific thank-you replaces the form and the **complete lead** is sent with the same `lead_id`.
+
+The JSON is inlined into `/step-2/` at build time together with `build/qualifier.js` (about 2.7 KB, budget 3.5 KB). No other page loads it, and there are no third-party scripts.
+
+| Key | Meaning |
+|---|---|
+| `id`, `version` | Sent in the payload as `form` / `form_version`. Bump `version` when questions change. |
+| `start` | Id of the first question. |
+| `questions[]` | `{id, label, type?, options[] | next}`. `type: "text"` = optional free-text box with a single `next`. |
+| `options[]` | `{label, value, points, next, tag?, force_tier?}`. `value` is what the CRM stores. `next` = question id, `@score`, or `@end:<ending>`. `tag` is added to `tags[]`. `force_tier` pins the tier whatever the score. |
+| `tiers[]` | `{id, min, ending, cadence}`, highest `min` first. Score ≥ `min` → that tier. The lowest tier must cover the lowest reachable score. |
+| `endings{}` | `{headline, body, conversion, tier?, cadence?}`. Endings used by a tier inherit its tier/cadence. Stop endings (e.g. `not_fit`) set their own (`disqualified` / `none`). `conversion` is pushed to the dataLayer (`qualified_lead` for Hot). |
+| `consent` | `{enabled, required, field, text}`. **Off for now.** When on, a non-prechecked checkbox appears on the contact screen and `<field>` + `consent_text` go in the payload. `--check` refuses `enabled: true` while the text is still a placeholder. |
+
+**Taylor's rules (Nov 3, 2026):** no condos (they stop at `not_fit`, tagged `no-condo`, and the lead is still saved). Mobile homes only if the seller owns the land (follow-up question). Listed under 90 days is forced to Nurture. Over 90 days and expired listings continue. Nurture = `cadence: "60day"`. Leads go to FSHO CRM.
+
+**`gen.py --check` rules:** no dead ends (every `next` exists), no loops, every question reachable, every path ends at an ending, tiers ordered with unique mins and no score below the lowest tier, every tier/ending has a cadence, no protected-class wording (Fair Housing word list), consent config valid, JSON ≤ 20 KB, `qualifier.js` ≤ 3.5 KB.
+
+**Payload** (POSTed as JSON to `site.json` `lead_form.endpoint` when `lead_form.enabled`; otherwise `console.info` only):
+
+```json
+{"form":"qualifier","form_version":1,"stage":"complete","lead_id":"mw13jklyhthfj",
+ "first":"Pat","last":"Seller","phone":"3305551234","email":"pat@example.com","address":"123 Main St, Akron, OH 44301",
+ "answers":{"listed":"listed","listed_days":"under_90","type":"sfh","title":"owner","timeline":"asap","situation":"behind"},
+ "tags":["listed-under-90"],"score":75,"tier":"nurture","cadence":"60day","conversion":"lead",
+ "page":"/step-2/","ts":"2026-11-03T19:44:23.327Z","gclid":"TESTGCLID","utm_campaign":"HotMarkets","utm_term":"","utm_source":"google","utm_medium":""}
+```
+
+The partial payload (`stage: "partial"`) carries `lead_id`, contact fields, address, `consent`, and gclid/UTMs. The CRM should upsert on `lead_id`.
+
+**Editor notes (Website tab):** question list (reorder, add, disable), option rows (label, value, points, tag, a "goes to" dropdown of question ids + `@score` + `@end:*`, force tier), tier editor (min / cadence / ending), ending text, consent toggle, a flow preview built from `next`, and a test mode that walks the same logic and shows the payload. Always run `gen.py --check` before saving.

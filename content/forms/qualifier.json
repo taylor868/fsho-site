@@ -1,0 +1,63 @@
+{
+  "id": "qualifier",
+  "version": 1,
+  "page": "/step-2/",
+  "start": "listed",
+  "_how": "Contact info + address are collected first by the hero form (partial lead saved). These questions run on /step-2/, one per screen. next = a question id, \"@score\" (add up points, pick a tier) or \"@end:<ending id>\" (stop now). force_tier pins the tier no matter the score.",
+  "questions": [
+    {"id": "listed", "label": "Is the house listed with a real estate agent right now?", "options": [
+      {"label": "No, it's not listed", "value": "not_listed", "points": 20, "next": "type"},
+      {"label": "Yes, it's listed", "value": "listed", "points": 0, "next": "listed_days"},
+      {"label": "It was, but the listing expired", "value": "expired", "points": 15, "tag": "expired-listing", "next": "type"}]},
+    {"id": "listed_days", "label": "How long has it been listed?", "options": [
+      {"label": "Less than 90 days", "value": "under_90", "points": 0, "tag": "listed-under-90", "force_tier": "nurture", "next": "type"},
+      {"label": "More than 90 days", "value": "over_90", "points": 10, "tag": "listed-over-90", "next": "type"}]},
+    {"id": "type", "label": "What type of property is it?", "options": [
+      {"label": "Single-family house", "value": "sfh", "points": 15, "next": "title"},
+      {"label": "Multi-family (2-4 units)", "value": "multi_2_4", "points": 15, "next": "title"},
+      {"label": "Mobile / manufactured home", "value": "mobile", "points": 5, "tag": "mobile", "next": "land"},
+      {"label": "Townhouse / condo", "value": "condo", "points": 0, "tag": "no-condo", "next": "@end:not_fit"},
+      {"label": "Vacant land", "value": "land", "points": 0, "tag": "vacant-land", "next": "@end:not_fit"}]},
+    {"id": "land", "label": "Do you own the land the home sits on?", "options": [
+      {"label": "Yes, I own the land", "value": "owns_land", "points": 5, "tag": "owns-land", "next": "title"},
+      {"label": "No, it's in a park or leased lot", "value": "no_land", "points": 0, "tag": "mobile-no-land", "next": "@end:not_fit"}]},
+    {"id": "title", "label": "Are you the owner on the title, or legally able to decide to sell?", "options": [
+      {"label": "Yes, I'm the owner on the title", "value": "owner", "points": 15, "next": "timeline"},
+      {"label": "Yes, I'm a legal decision-maker (co-owner, heir, POA)", "value": "decision_maker", "points": 10, "next": "timeline"},
+      {"label": "No", "value": "no", "points": 0, "tag": "not-decision-maker", "next": "@end:not_fit"}]},
+    {"id": "timeline", "label": "How soon do you need to sell?", "options": [
+      {"label": "ASAP", "value": "asap", "points": 25, "next": "situation"},
+      {"label": "Within 30 days", "value": "30d", "points": 20, "next": "situation"},
+      {"label": "30-90 days", "value": "30_90d", "points": 10, "next": "situation"},
+      {"label": "More than 90 days / no rush", "value": "no_rush", "points": 0, "tag": "long-term", "next": "situation"}]},
+    {"id": "situation", "label": "What's going on with the house?", "options": [
+      {"label": "Inherited or in probate", "value": "probate", "points": 20, "next": "@score"},
+      {"label": "Behind on payments", "value": "behind", "points": 20, "next": "@score"},
+      {"label": "Code violations / open permits", "value": "code", "points": 20, "next": "@score"},
+      {"label": "Fire or water damage", "value": "damage", "points": 20, "next": "@score"},
+      {"label": "Tenants who stopped paying", "value": "tenants", "points": 15, "next": "@score"},
+      {"label": "Needs work, won't fix it", "value": "needs_work", "points": 15, "next": "@score"},
+      {"label": "Full of stuff", "value": "full", "points": 10, "next": "@score"},
+      {"label": "Divorce, relocation, downsizing", "value": "life_change", "points": 10, "next": "@score"},
+      {"label": "Something else", "value": "other", "points": 5, "next": "situation_other"}]},
+    {"id": "situation_other", "label": "Tell us a little about it (optional)", "type": "text", "next": "@score"}
+  ],
+  "tiers": [
+    {"id": "hot", "min": 70, "ending": "hot", "cadence": "speed-to-lead"},
+    {"id": "warm", "min": 45, "ending": "warm", "cadence": "same-day"},
+    {"id": "nurture", "min": 0, "ending": "nurture", "cadence": "60day"}
+  ],
+  "endings": {
+    "hot": {"headline": "You're a great fit. Expect a call in the next few minutes.", "body": "Keep your phone close. Want to go faster? Call us now.", "conversion": "qualified_lead"},
+    "warm": {"headline": "Thanks! We'll call you today.", "body": "We review every property by hand and will reach out shortly.", "conversion": "lead"},
+    "nurture": {"headline": "Thanks! We've got your info.", "body": "We'll check in with options that fit your timeline. No pressure.", "conversion": "lead"},
+    "not_fit": {"headline": "Thanks for the details.", "body": "This one may not be a fit for us right now, but we saved your info and will reach out if anything changes.", "tier": "disqualified", "cadence": "none", "conversion": "none"}
+  },
+  "consent": {
+    "enabled": false,
+    "required": false,
+    "field": "sms_consent",
+    "text": "PLACEHOLDER: texting consent wording to be approved for compliance.",
+    "_note": "Off until the compliant wording is decided. When enabled, a non-prechecked checkbox shows on the contact screen and its value + text go in the payload."
+  }
+}

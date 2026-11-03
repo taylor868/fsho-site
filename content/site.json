@@ -16,7 +16,9 @@
   "lead_form": {
     "enabled": false,
     "endpoint": "",
-    "_note": "stays off until lead routing (FSHO CRM vs REsimpli) is decided"
+    "crm": "fsho-crm",
+    "endpoint_planned": "/.netlify/functions/create-lead",
+    "_note": "Leads go to FSHO CRM create_lead (REsimpli dropped). Stays disabled until the narrow create_lead token exists; while off, the hero form and qualifier log payloads to the browser console and send nothing."
   },
   "gtm_id": "GTM-WWPBQGDZ",
   "clickcease_id": "",
@@ -79,7 +81,7 @@
   ],
   "hero_eyebrow": "Sell your house as-is · No fees · No repairs",
   "consent": "I agree Fair and Simple Home Offer and its agents may call, text, and email me, including marketing by autodialer or artificial, prerecorded, or AI voice. Consent isn’t required to buy or sell. Msg freq varies; msg &amp; data rates may apply. Reply STOP to opt out, HELP for help.",
-  "qualifier": "<strong>Quick check before you start:</strong> We buy single-family houses from the owner. We do <u>not</u> buy mobile/manufactured homes, condos, apartments, vacant land, or homes currently listed with an agent. Listed with a Realtor, or owned less than 7 years? <a href=\"tel:+19106366669\">Call us first</a>. No wholesalers, investors, or agents, please.",
+  "qualifier": "<strong>Quick check before you start:</strong> We buy single-family houses from the owner. We do <u>not</u> buy condos, mobile/manufactured homes unless you own the land, apartments, vacant land, or homes currently listed with an agent. Listed with a Realtor, or owned less than 7 years? <a href=\"tel:+19106366669\">Call us first</a>. No wholesalers, investors, or agents, please.",
   "situations": [
     {
       "icon": "🏚️",

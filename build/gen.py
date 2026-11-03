@@ -62,10 +62,86 @@ def load_all():
         try: m = json.load(open(fp, encoding='utf-8')); m['_src'] = os.path.relpath(fp, ROOT); markets.append(m)
         except Exception as e: errs.append(f'{os.path.relpath(fp, ROOT)}: {e}')
     redirects = json.load(open(os.path.join(C, 'redirects.json'), encoding='utf-8'))
+    site['_qualifier'] = load_qualifier(errs)
     return site, pages, markets, redirects, errs
 
+QF = os.path.join(C, 'forms', 'qualifier.json')
+MAX_QJS = 3584  # bytes: qualifier.js budget (about 3 KB)
+PROTECTED = r'\b(race|racial|color|religio\w*|church|national origin|nationality|ethnic\w*|immigra\w*|citizen\w*|sex|gender|pregnan\w*|disab\w*|handicap\w*|wheelchair|familial|children|kids|married|marital|age|elderly|senior)\b'
+
+def load_qualifier(errs):
+    if not os.path.exists(QF): return None
+    try: return json.load(open(QF, encoding='utf-8'))
+    except Exception as e: errs.append(f'content/forms/qualifier.json: {e}'); return None
+
+def check_qualifier(q):
+    E, src = [], 'content/forms/qualifier.json'
+    if q is None: return E
+    Q = {x.get('id'): x for x in q.get('questions', [])}
+    if len(Q) != len(q.get('questions', [])): E.append(f'{src}: duplicate or missing question id')
+    ends, tiers = q.get('endings', {}), q.get('tiers', [])
+    if q.get('start') not in Q: E.append(f'{src}: start "{q.get("start")}" is not a question')
+    tids = [t.get('id') for t in tiers]
+    mins = [t.get('min') for t in tiers]
+    if not tiers: E.append(f'{src}: needs at least one tier')
+    if any(not isinstance(m, (int, float)) for m in mins): E.append(f'{src}: every tier needs a numeric min')
+    elif mins != sorted(mins, reverse=True) or len(set(mins)) != len(mins): E.append(f'{src}: tiers overlap: list them highest min first with unique mins')
+    for t in tiers:
+        if t.get('ending') not in ends: E.append(f'{src}: tier {t.get("id")} ending "{t.get("ending")}" does not exist')
+        if not t.get('cadence'): E.append(f'{src}: tier {t.get("id")} needs a cadence')
+    for k, e in ends.items():
+        if not e.get('headline'): E.append(f'{src}: ending {k} needs a headline')
+        if k not in [t.get('ending') for t in tiers] and (not e.get('tier') or not e.get('cadence')): E.append(f'{src}: ending {k} is not a tier ending, so it needs its own tier and cadence')
+    def targets(x):
+        if x.get('type') == 'text': return [(x.get('next'), 0, None)]
+        if not x.get('options'): E.append(f'{src}: question {x.get("id")} has no options'); return []
+        return [(o.get('next'), o.get('points', 0), o) for o in x['options']]
+    for x in Q.values():
+        if not x.get('label'): E.append(f'{src}: question {x.get("id")} needs a label')
+        for nx, pts, o in targets(x):
+            if o is not None:
+                if not o.get('label') or not o.get('value'): E.append(f'{src}: {x["id"]}: every option needs label and value')
+                if not isinstance(pts, (int, float)): E.append(f'{src}: {x["id"]}: points must be a number')
+                if o.get('force_tier') and o['force_tier'] not in tids: E.append(f'{src}: {x["id"]}: force_tier "{o["force_tier"]}" is not a tier')
+            if nx == '@score': continue
+            if isinstance(nx, str) and nx.startswith('@end:'):
+                if nx[5:] not in ends: E.append(f'{src}: {x["id"]}: ending "{nx[5:]}" does not exist (dead end)')
+                continue
+            if nx not in Q: E.append(f'{src}: {x["id"]}: next "{nx}" goes nowhere (dead end)')
+    # walk every path: no loops, every path ends, track min score so every score lands in a tier
+    lo = [10**9]
+    def walk(qid, seen, score, depth=0):
+        if qid in seen: E.append(f'{src}: loop: ' + ' -> '.join(seen + [qid])); return
+        if qid not in Q or depth > 50: return
+        for nx, pts, o in targets(Q[qid]):
+            sc = score + (pts if isinstance(pts, (int, float)) else 0)
+            if nx == '@score':
+                if not (o and o.get('force_tier')): lo[0] = min(lo[0], sc)
+            elif isinstance(nx, str) and nx.startswith('@end:'): pass
+            else: walk(nx, seen + [qid], sc, depth + 1)
+    if q.get('start') in Q: walk(q['start'], [], 0)
+    if tiers and all(isinstance(m, (int, float)) for m in mins) and lo[0] < 10**9 and lo[0] < min(mins):
+        E.append(f'{src}: a path can score {lo[0]}, below the lowest tier min {min(mins)}')
+    seen_ids = set()
+    def reach(qid):
+        if qid in seen_ids or qid not in Q: return
+        seen_ids.add(qid); [reach(nx) for nx, _, _ in targets(Q[qid])]
+    reach(q.get('start'))
+    for k in Q:
+        if k not in seen_ids: E.append(f'{src}: question {k} can never be reached')
+    words = ' '.join([x.get('label', '') for x in Q.values()] + [o.get('label', '') for x in Q.values() for o in x.get('options', [])] + [e.get('headline', '') + ' ' + e.get('body', '') for e in ends.values()])
+    for w in sorted(set(m.group(0).lower() for m in re.finditer(PROTECTED, words, re.I))):
+        E.append(f'{src}: Fair Housing: wording mentions "{w}". Ask about the property and situation, never protected classes')
+    c = q.get('consent', {})
+    if not isinstance(c.get('enabled'), bool) or not c.get('field'): E.append(f'{src}: consent needs enabled (true/false) and field')
+    if c.get('enabled') and (not c.get('text') or 'PLACEHOLDER' in c.get('text', '')): E.append(f'{src}: consent is on but the wording is still a placeholder')
+    if os.path.getsize(QF) > 20000: E.append(f'{src}: over the 20 KB size limit')
+    qjs = os.path.join(B, 'qualifier.js')
+    if os.path.getsize(qjs) > MAX_QJS: E.append(f'build/qualifier.js: {os.path.getsize(qjs)} bytes is over the {MAX_QJS} byte budget')
+    return E
+
 def check(site, pages, markets, redirects, errs):
-    E = list(errs)
+    E = list(errs) + check_qualifier(site.get('_qualifier'))
     for k in ['company', 'phone', 'tel', 'domain', 'brand', 'nav', 'footer', 'trust_badges', 'faq', 'situations', 'steps', 'comparison', 'testimonials', 'cta']:
         if k not in site: E.append(f'content/site.json: missing "{k}"')
     for c in ('orange', 'navy'):
@@ -115,10 +191,25 @@ def build(site, pages, markets, redirects, live):
     JS = re.sub(r'var FSHO=\{endpoint:"[^"]*"', 'var FSHO={endpoint:"%s"' % (S['lead_form'].get('endpoint', '') if lead_on else ''), JS)
     JS = re.sub(r'tracking:(true|false)', 'tracking:' + ('true' if S.get('tracking') else 'false'), JS)
     JS = re.sub(r'gtm:"[^"]*",clickcease:""', 'gtm:"%s",clickcease:"%s"' % (S.get('gtm_id', ''), S.get('clickcease_id', '')), JS)
-    if not lead_on:
+    if not lead_on and not preview:
         JS = 'document.addEventListener("submit",function(e){e.preventDefault();e.stopImmediatePropagation();alert("Preview only, forms are off. Nothing was sent.")},true);' + JS
     navl = ''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S['nav'])
     trust = '<ul class="trust">' + ''.join(f'<li>{t}</li>' for t in S['trust_badges']) + '</ul>'
+    QC = S.get('_qualifier') or {}
+    def consent_box():
+        c = QC.get('consent', {})
+        if not c.get('enabled'): return ''
+        return f'<label class="chk"><input type="checkbox" name="consent"{" required" if c.get("required") else ""}> <small>{c["text"]} <a href="/text-messaging-terms/">Text Terms</a> · <a href="/privacy/">Privacy</a></small></label>'
+    def qualifier_form():
+        cfg = {k: QC[k] for k in ('id', 'version', 'start', 'tiers', 'endings') if k in QC}
+        cfg['questions'] = [{k: v for k, v in x.items() if not k.startswith('_')} for x in QC['questions']]
+        cfg['consent'] = {k: QC['consent'][k] for k in ('enabled', 'field', 'text')}
+        qjs = open(os.path.join(B, 'qualifier.js'), encoding='utf-8').read().strip()
+        data = json.dumps(cfg, separators=(',', ':'), ensure_ascii=False).replace('</', '<\\/')
+        return (f'<div class="lead qf" id="qf"><div class="qbar" role="progressbar" aria-label="Progress"><i></i></div><div class="qbox" aria-live="polite">'
+                f'<noscript><p>Please call or text <a href="tel:{TEL}">{PH}</a> and we\'ll finish this together.</p></noscript></div>'
+                f'<p class="fine">Prefer to talk? Call/text <a href="tel:{TEL}">{PH}</a></p></div>'
+                f'<script type="application/json" id="qcfg">{data}</script><script>{qjs}</script>')
     def form():
         return f'''<form class="lead" id="f" action="/step-2/" method="post" novalidate>
 <div class="lead-h"><strong>Get your fair cash offer</strong><span>Takes about 60 seconds. No obligation.</span></div>
@@ -127,7 +218,7 @@ def build(site, pages, markets, redirects, live):
 <button type="button" class="btn btn-o nx">Get My Offer &rarr;</button></fieldset>
 <fieldset class="s2" hidden><div class="row"><label>First name<input name="first" autocomplete="given-name" required></label><label>Last name<input name="last" autocomplete="family-name"></label></div>
 <label>Phone<input name="phone" type="tel" autocomplete="tel" required></label><label>Email<input name="email" type="email" autocomplete="email" required></label>
-<label class="chk"><input type="checkbox" name="sms"> <small>{S["consent"]} <a href="/text-messaging-terms/">Text Terms</a> · <a href="/privacy/">Privacy</a></small></label>
+{consent_box()}
 <button class="btn btn-o">Send Me My Offer</button><button type="button" class="bk">&larr; Back</button></fieldset>
 <p class="fine">🔒 Your info stays private. Or call/text <a href="tel:{TEL}">{PH}</a></p></form>'''
     def step2():
@@ -165,6 +256,7 @@ def build(site, pages, markets, redirects, live):
             if k == 'cta': return cta(arg or None)
             if k == 'states': return states
             if k == 'step2_form': return step2()
+            if k == 'qualifier_form': return qualifier_form()
             if k == 'phone': return PH
             raise ValueError(f'unknown shortcode {{{{{k}}}}}')
         return re.sub(r'\{\{([a-z0-9_]+(?::[^}]*)?)\}\}', rep, body)
@@ -191,7 +283,7 @@ def build(site, pages, markets, redirects, live):
     os.makedirs(OUT)
     def page(path, title, desc, body, noindex):
         robots = '<meta name="robots" content="noindex,nofollow">' if (preview or noindex) else ''
-        banner = '<div style="background:#c00;color:#fff;text-align:center;font:700 13px system-ui;padding:4px">PREVIEW: not the live site. Forms are off.</div>' if preview else ''
+        banner = '<div style="background:#c00;color:#fff;text-align:center;font:700 13px system-ui;padding:4px">PREVIEW: not the live site. Form data is only logged, never sent.</div>' if preview else ''
         doc = f'''<!doctype html><html lang="en"><head>{robots}<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{title}</title><meta name="description" content="{desc}"><link rel="icon" href="/favicon.png"><link rel="canonical" href="{S["domain"]}{path}"><style>{CSS}</style>
 
 <script type="application/ld+json">{{"@context":"https://schema.org","@type":"RealEstateAgent","name":"{S["company"]}","legalName":"{S["legal_name"]}","telephone":"{TEL}","url":"{S["domain"]}/","logo":"{S["domain"]}{S["logo"]}"}}</script></head><body>{banner}
