@@ -1,5 +1,6 @@
 [build]
-  command = "pip install -r requirements.txt && python build/gen.py --check && python build/gen.py"
+  # Pure standard-library Python: no pip step needed.
+  command = "python3 build/gen.py --check && python3 build/gen.py"
   publish = "dist"
 
 [build.environment]

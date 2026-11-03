@@ -1,6 +1,6 @@
 # FSHO content schema
 
-Everything an editor can change lives under `content/`. The build (`python build/gen.py`) never needs code edits for copy, pages, markets, redirects, colors, or tracking IDs. Always run `python build/gen.py --check` before committing; it exits non-zero and prints `ERROR <file>: <problem>` lines the editor UI can show verbatim.
+Everything an editor can change lives under `content/`. The build (`python3 build/gen.py`) never needs code edits for copy, pages, markets, redirects, colors, or tracking IDs. Always run `python3 build/gen.py --check` before committing; it exits non-zero and prints `ERROR <file>: <problem>` lines the editor UI can show verbatim.
 
 HTML is allowed (and expected) in text fields; values are inserted as-is, so use `&amp;` for a literal `&` inside HTML-rendered fields. Page `title` is raw text.
 

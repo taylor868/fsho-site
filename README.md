@@ -3,9 +3,8 @@
 Lean static rebuild of fairandsimplehomeoffer.com (52 pages + 16 301 redirects). Content lives in `content/`; `build/gen.py` turns it into plain HTML in `dist/`. No framework, no client bundle: CSS is inlined, one small inline script, GTM/ClickCease load only after window load (and only when `tracking` is true).
 
 ```bash
-pip install -r requirements.txt
-python build/gen.py --check   # validate content, exits 1 on errors
-python build/gen.py           # build dist/ (preview guards on while site.json "preview" is true)
+python3 build/gen.py --check   # validate content, exits 1 on errors
+python3 build/gen.py           # build dist/ (preview guards on while site.json "preview" is true)
 ```
 
 - Content schema for editors (Sentinel console Website tab): [docs/CONTENT_SCHEMA.md](docs/CONTENT_SCHEMA.md)

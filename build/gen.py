@@ -5,10 +5,36 @@ Usage: python build/gen.py            build into dist/
        python build/gen.py --live     build without preview guards (noindex/banner/form lock) -- cutover only
 """
 import os, re, sys, json, glob, shutil
-try:
-    import yaml
-except ImportError:
-    sys.exit("PyYAML missing: pip install -r requirements.txt")
+
+def _scalar(v):
+    v = v.strip()
+    if v in ('true', 'false'): return v == 'true'
+    if v in ('', '~', 'null'): return None if v else ''
+    if v == '[]': return []
+    if len(v) >= 2 and v[0] == v[-1] == '"': return json.loads(v)
+    if len(v) >= 2 and v[0] == v[-1] == "'": return v[1:-1].replace("''", "'")
+    if re.fullmatch(r'-?\d+', v): return int(v)
+    return v
+
+def parse_frontmatter(text):
+    """Dependency-free parser for the YAML subset used in content/pages:
+    `key: scalar` lines and a list of flat mappings (`faq:` then `  - q: ..` / `    a: ..`)."""
+    out, key, item = {}, None, None
+    for n, line in enumerate(text.split('\n'), 1):
+        if not line.strip() or line.lstrip().startswith('#'): continue
+        m = re.match(r'^([A-Za-z_][\w-]*):(?:\s+(.*))?$', line)
+        if m and not line[0].isspace():
+            val = (m.group(2) or '').split(' #')[0] if not (m.group(2) or '').lstrip().startswith(('"', "'")) else m.group(2)
+            key = m.group(1)
+            out[key] = [] if val.strip() == '' else _scalar(val); item = None; continue
+        m = re.match(r'^\s+-\s+([A-Za-z_]\w*):\s*(.*)$', line)
+        if m and key and isinstance(out.get(key), list):
+            item = {m.group(1): _scalar(m.group(2))}; out[key].append(item); continue
+        m = re.match(r'^\s+([A-Za-z_]\w*):\s*(.*)$', line)
+        if m and item is not None:
+            item[m.group(1)] = _scalar(m.group(2)); continue
+        raise ValueError(f'frontmatter line {n} not understood: {line.strip()[:60]}')
+    return out
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 C = os.path.join(ROOT, 'content'); OUT = os.path.join(ROOT, 'dist'); B = os.path.join(ROOT, 'build')
@@ -19,7 +45,7 @@ def load_page(fp):
     raw = open(fp, encoding='utf-8').read()
     m = re.match(r'^---\n(.*?)\n---\n?(.*)$', raw, re.S)
     if not m: raise ValueError('missing YAML frontmatter')
-    fm = yaml.safe_load(m.group(1)) or {}
+    fm = parse_frontmatter(m.group(1))
     fm.setdefault('slug', os.path.splitext(os.path.basename(fp))[0])
     if fm['slug'] == 'home': fm['slug'] = ''
     fm['body'] = m.group(2)
