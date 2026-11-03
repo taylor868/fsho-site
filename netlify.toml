@@ -1,0 +1,8 @@
+[build]
+  # Pure standard-library Python (3.8+): no pip step, no pinned interpreter.
+  # Uses the build image's system python3 (Ubuntu Noble ships 3.12).
+  command = "python3 --version && ls build && python3 build/gen.py --check && python3 build/gen.py"
+  publish = "dist"
+
+# Preview guards (noindex, robots Disallow, X-Robots-Tag) are written by gen.py
+# into dist/_headers while content/site.json "preview" is true.
