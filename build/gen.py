@@ -106,6 +106,8 @@ def check_qualifier(q):
         c = x.get('category')
         if not x.get('label'): E.append(f'{src}: question {x.get("id")} needs a label')
         if c not in cats: E.append(f'{src}: question {x.get("id")} needs a category ({", ".join(cats) or "E/M/O/T/A"})')
+        for k in ('points', 'force_tier'):
+            if k in x: E.append(f'{src}: question {x.get("id")}: "{k}" is a v1 key and is no longer used. Use pass on its answers')
         for nx, o in targets(x):
             if not o.get('label') or not o.get('value'): E.append(f'{src}: {x["id"]}: every option needs label and value')
             p = o.get('pass')

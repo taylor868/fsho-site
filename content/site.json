@@ -81,7 +81,7 @@
   ],
   "hero_eyebrow": "Sell your house as-is · No fees · No repairs",
   "consent": "I agree Fair and Simple Home Offer and its agents may call, text, and email me, including marketing by autodialer or artificial, prerecorded, or AI voice. Consent isn’t required to buy or sell. Msg freq varies; msg &amp; data rates may apply. Reply STOP to opt out, HELP for help.",
-  "qualifier": "<strong>Quick check before you start:</strong> We buy single-family houses from the owner. We do <u>not</u> buy condos, mobile/manufactured homes, apartments, vacant land, or homes currently listed with an agent. Listed with a Realtor, or owned less than 7 years? <a href=\"tel:+19106366669\">Call us first</a>. No wholesalers, investors, or agents, please.",
+  "qualifier": "<strong>Quick check before you start:</strong> We buy single-family houses from the owner. We do <u>not</u> buy condos, townhouses, mobile/manufactured homes, apartments, vacant land, or homes currently listed with an agent. Listed with a Realtor, or owned less than 7 years? <a href=\"tel:+19106366669\">Call us first</a>. No wholesalers, investors, or agents, please.",
   "situations": [
     {
       "icon": "🏚️",
@@ -191,7 +191,7 @@
   "faq": [
     {
       "q": "What types of properties do you buy?",
-      "a": "Single-family houses in any condition: inherited homes, houses with liens or judgments, homes needing repairs, vacant houses, properties behind on taxes, and hoarder houses. We do not buy mobile/manufactured homes, condos, apartments, vacant land, or homes listed with an agent."
+      "a": "Single-family houses in any condition: inherited homes, houses with liens or judgments, homes needing repairs, vacant houses, properties behind on taxes, and hoarder houses. We do not buy mobile/manufactured homes, condos, townhouses, apartments, vacant land, or homes listed with an agent."
     },
     {
       "q": "How much will you offer?",
