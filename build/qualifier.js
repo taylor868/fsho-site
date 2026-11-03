@@ -21,7 +21,7 @@ answers:A,tags:T,score:s,tier:tier,cadence:cad,conversion:e.conversion,page:loca
 ["gclid","utm_campaign","utm_term","utm_source","utm_medium"].forEach(function(k){d[k]=at[k]||""});
 if(C.consent.enabled){d[C.consent.field]=!!L.consent;d.consent_text=C.consent.text}
 bar.style.width="100%";box.innerHTML="";box.appendChild(el("h2","",e.headline));box.appendChild(el("p","lede",e.body));
-r.dataset.tier=tier;window.dataLayer&&dataLayer.push({event:"fsho_qualifier",tier:tier,conversion:e.conversion});
+r.dataset.tier=tier;e.conversion!="none"&&window.dataLayer&&dataLayer.push({event:"fsho_qualifier",tier:tier,conversion:e.conversion});
 var u=window.FSHO&&FSHO.endpoint;if(!u){console.info("FSHO qualifier lead (preview, not sent):",d);return}
 fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d),keepalive:true})}
 show(C.start)})();

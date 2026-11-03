@@ -84,6 +84,9 @@ def check_qualifier(q):
     tids = [t.get('id') for t in tiers]
     mins = [t.get('min') for t in tiers]
     if not tiers: E.append(f'{src}: needs at least one tier')
+    for k, e in ends.items():
+        if e.get('tier') == 'disqualified' and e.get('conversion', 'none') != 'none':
+            E.append(f'{src}: ending "{k}" is disqualified, so its conversion must be "none" (no Ads conversion)')
     if any(not isinstance(m, (int, float)) for m in mins): E.append(f'{src}: every tier needs a numeric min')
     elif mins != sorted(mins, reverse=True) or len(set(mins)) != len(mins): E.append(f'{src}: tiers overlap: list them highest min first with unique mins')
     for t in tiers:
