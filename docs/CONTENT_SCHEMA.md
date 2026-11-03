@@ -152,6 +152,10 @@ This is the lead qualifier on `/step-2/` (shortcode `{{qualifier_form}}`). It is
 **`gen.py --check` rules:**
 - every question has a valid category, and all 5 EMOTA letters exist
 - every graded answer has a valid `pass`, and gate answers have none
+- `pass` objects can't be empty and must include the question's own letter
+- only `@end:not_fit` may stop the form; every other result comes from `@score`
+- v1 keys (`points`, `force_tier`, `tiers`) are rejected
+- payload `emota` keys are always ordered E, M, O, T, A
 - every path to `@score` asks all 5 letters
 - only the all-pass ending carries a conversion, and nothing can `@end` straight to it
 - no dead ends, loops, or unreachable questions

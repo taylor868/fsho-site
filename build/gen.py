@@ -85,6 +85,7 @@ def check_qualifier(q):
     for l in L:
         if l not in cats: E.append(f'{src}: categories is missing EMOTA letter {l}')
         if not any(x.get('category') == l for x in Q.values()): E.append(f'{src}: no question asks about {l} ({cats.get(l, "?")}). All 5 EMOTA categories need one')
+    if 'tiers' in q: E.append(f'{src}: "tiers" is a v1 key and is no longer used. Use result.all_pass / result.any_fail')
     ap, af = res.get('all_pass', {}), res.get('any_fail', {})
     for k, r in (('all_pass', ap), ('any_fail', af)):
         if r.get('ending') not in ends: E.append(f'{src}: result.{k} ending "{r.get("ending")}" does not exist')
@@ -108,12 +109,16 @@ def check_qualifier(q):
             if c in L and p is None and not (isinstance(nx, str) and nx.startswith('@')) and nx in Q and Q[nx].get('category') == c: pass
             elif c in L and p is None: E.append(f'{src}: {x["id"]}/{o.get("value")}: EMOTA answers need pass: true/false')
             if c not in L and p is not None: E.append(f'{src}: {x["id"]}: {c} questions are gates, not scored. Remove pass')
+            if isinstance(p, dict) and not p: E.append(f'{src}: {x["id"]}/{o.get("value")}: pass {{}} is empty')
+            elif isinstance(p, dict) and c in L and c not in p: E.append(f'{src}: {x["id"]}/{o.get("value")}: pass must include its own letter {c}')
+            for k in ('points', 'force_tier'):
+                if k in o: E.append(f'{src}: {x["id"]}/{o.get("value")}: "{k}" is a v1 key and is no longer used. Use pass')
             if isinstance(p, dict) and any(k not in L or not isinstance(v, bool) for k, v in p.items()): E.append(f'{src}: {x["id"]}/{o.get("value")}: pass must be true/false or {{"E": true, ...}}')
             elif p is not None and not isinstance(p, (bool, dict)): E.append(f'{src}: {x["id"]}/{o.get("value")}: pass must be true/false')
             if nx == '@score': continue
             if isinstance(nx, str) and nx.startswith('@end:'):
                 if nx[5:] not in ends: E.append(f'{src}: {x["id"]}: ending "{nx[5:]}" does not exist (dead end)')
-                elif nx[5:] == ap.get('ending'): E.append(f'{src}: {x["id"]}: can\'t jump straight to the all-pass ending; go through @score')
+                elif nx[5:] != 'not_fit': E.append(f'{src}: {x["id"]}: next "{nx}" is not allowed. Only @end:not_fit can stop the form; every other result must come from @score')
                 continue
             if nx not in Q: E.append(f'{src}: {x["id"]}: next "{nx}" goes nowhere (dead end)')
     # walk every path: no loops, and every path that is graded must have answered all 5 letters

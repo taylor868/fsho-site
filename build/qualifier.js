@@ -14,7 +14,7 @@ function go(nx){if(nx.indexOf("@")<0)return show(nx);
 var T=[],P={},F=[],e,res;H.forEach(function(i){var o=opt(i),c=Q[i].category,p=o.pass;if(o.tag)T.push(o.tag);
 if(p===undefined)return;if(typeof p!="object"){var x={};x[c]=p;p=x}for(var l in p)P[l]=(P[l]!==false)&&p[l]});
 if(nx=="@score"){K.forEach(function(l){if(P[l]!==true){P[l]=false;F.push(l)}});
-res=F.length?C.result.any_fail:C.result.all_pass;F.forEach(function(l){T.push(res.fail_tag+l)});if(F.length==1&&res.near_miss_tag)T.push(res.near_miss_tag);e=C.endings[res.ending]}
+var O={};K.forEach(function(l){O[l]=P[l]});P=O;res=F.length?C.result.any_fail:C.result.all_pass;F.forEach(function(l){T.push(res.fail_tag+l)});if(F.length==1&&res.near_miss_tag)T.push(res.near_miss_tag);e=C.endings[res.ending]}
 else{e=C.endings[nx.slice(5)];res=e;P=null;F=null}
 var d={form:C.id,form_version:C.version,stage:"complete",lead_id:L.lead_id||"",first:L.first||"",last:L.last||"",phone:L.phone||"",email:L.email||"",address:L.address||"",
 answers:A,emota:P,failed:F,tags:T,tier:res.tier,cadence:res.cadence,conversion:e.conversion,page:location.pathname,ts:new Date().toISOString()};
