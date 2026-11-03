@@ -77,58 +77,63 @@ def load_qualifier(errs):
 def check_qualifier(q):
     E, src = [], 'content/forms/qualifier.json'
     if q is None: return E
+    L = list('EMOTA')
     Q = {x.get('id'): x for x in q.get('questions', [])}
     if len(Q) != len(q.get('questions', [])): E.append(f'{src}: duplicate or missing question id')
-    ends, tiers = q.get('endings', {}), q.get('tiers', [])
+    ends, cats, res = q.get('endings', {}), q.get('categories', {}), q.get('result', {})
     if q.get('start') not in Q: E.append(f'{src}: start "{q.get("start")}" is not a question')
-    tids = [t.get('id') for t in tiers]
-    mins = [t.get('min') for t in tiers]
-    if not tiers: E.append(f'{src}: needs at least one tier')
-    for k, e in ends.items():
-        if e.get('tier') == 'disqualified' and e.get('conversion', 'none') != 'none':
-            E.append(f'{src}: ending "{k}" is disqualified, so its conversion must be "none" (no Ads conversion)')
-    if any(not isinstance(m, (int, float)) for m in mins): E.append(f'{src}: every tier needs a numeric min')
-    elif mins != sorted(mins, reverse=True) or len(set(mins)) != len(mins): E.append(f'{src}: tiers overlap: list them highest min first with unique mins')
-    for t in tiers:
-        if t.get('ending') not in ends: E.append(f'{src}: tier {t.get("id")} ending "{t.get("ending")}" does not exist')
-        if not t.get('cadence'): E.append(f'{src}: tier {t.get("id")} needs a cadence')
+    for l in L:
+        if l not in cats: E.append(f'{src}: categories is missing EMOTA letter {l}')
+        if not any(x.get('category') == l for x in Q.values()): E.append(f'{src}: no question asks about {l} ({cats.get(l, "?")}). All 5 EMOTA categories need one')
+    ap, af = res.get('all_pass', {}), res.get('any_fail', {})
+    for k, r in (('all_pass', ap), ('any_fail', af)):
+        if r.get('ending') not in ends: E.append(f'{src}: result.{k} ending "{r.get("ending")}" does not exist')
+        if not r.get('tier') or not r.get('cadence'): E.append(f'{src}: result.{k} needs tier and cadence')
+    if not af.get('fail_tag'): E.append(f'{src}: result.any_fail needs fail_tag (e.g. "emota-fail-")')
     for k, e in ends.items():
         if not e.get('headline'): E.append(f'{src}: ending {k} needs a headline')
-        if k not in [t.get('ending') for t in tiers] and (not e.get('tier') or not e.get('cadence')): E.append(f'{src}: ending {k} is not a tier ending, so it needs its own tier and cadence')
+        if k != ap.get('ending') and e.get('conversion', 'none') != 'none':
+            E.append(f'{src}: ending "{k}" has conversion "{e.get("conversion")}". Only the all-pass ending may fire an Ads conversion')
+        if k not in (ap.get('ending'), af.get('ending')) and (not e.get('tier') or not e.get('cadence')): E.append(f'{src}: ending {k} needs its own tier and cadence')
     def targets(x):
-        if x.get('type') == 'text': return [(x.get('next'), 0, None)]
         if not x.get('options'): E.append(f'{src}: question {x.get("id")} has no options'); return []
-        return [(o.get('next'), o.get('points', 0), o) for o in x['options']]
+        return [(o.get('next'), o) for o in x['options']]
     for x in Q.values():
+        c = x.get('category')
         if not x.get('label'): E.append(f'{src}: question {x.get("id")} needs a label')
-        for nx, pts, o in targets(x):
-            if o is not None:
-                if not o.get('label') or not o.get('value'): E.append(f'{src}: {x["id"]}: every option needs label and value')
-                if not isinstance(pts, (int, float)): E.append(f'{src}: {x["id"]}: points must be a number')
-                if o.get('force_tier') and o['force_tier'] not in tids: E.append(f'{src}: {x["id"]}: force_tier "{o["force_tier"]}" is not a tier')
+        if c not in cats: E.append(f'{src}: question {x.get("id")} needs a category ({", ".join(cats) or "E/M/O/T/A"})')
+        for nx, o in targets(x):
+            if not o.get('label') or not o.get('value'): E.append(f'{src}: {x["id"]}: every option needs label and value')
+            p = o.get('pass')
+            if c in L and p is None and not (isinstance(nx, str) and nx.startswith('@')) and nx in Q and Q[nx].get('category') == c: pass
+            elif c in L and p is None: E.append(f'{src}: {x["id"]}/{o.get("value")}: EMOTA answers need pass: true/false')
+            if c not in L and p is not None: E.append(f'{src}: {x["id"]}: {c} questions are gates, not scored. Remove pass')
+            if isinstance(p, dict) and any(k not in L or not isinstance(v, bool) for k, v in p.items()): E.append(f'{src}: {x["id"]}/{o.get("value")}: pass must be true/false or {{"E": true, ...}}')
+            elif p is not None and not isinstance(p, (bool, dict)): E.append(f'{src}: {x["id"]}/{o.get("value")}: pass must be true/false')
             if nx == '@score': continue
             if isinstance(nx, str) and nx.startswith('@end:'):
                 if nx[5:] not in ends: E.append(f'{src}: {x["id"]}: ending "{nx[5:]}" does not exist (dead end)')
+                elif nx[5:] == ap.get('ending'): E.append(f'{src}: {x["id"]}: can\'t jump straight to the all-pass ending; go through @score')
                 continue
             if nx not in Q: E.append(f'{src}: {x["id"]}: next "{nx}" goes nowhere (dead end)')
-    # walk every path: no loops, every path ends, track min score so every score lands in a tier
-    lo = [10**9]
-    def walk(qid, seen, score, depth=0):
+    # walk every path: no loops, and every path that is graded must have answered all 5 letters
+    bad = set()
+    def walk(qid, seen, got, depth=0):
         if qid in seen: E.append(f'{src}: loop: ' + ' -> '.join(seen + [qid])); return
-        if qid not in Q or depth > 50: return
-        for nx, pts, o in targets(Q[qid]):
-            sc = score + (pts if isinstance(pts, (int, float)) else 0)
+        if qid not in Q or depth > 60: return
+        g = got | ({Q[qid].get('category')} & set(L))
+        for nx, o in targets(Q[qid]):
             if nx == '@score':
-                if not (o and o.get('force_tier')): lo[0] = min(lo[0], sc)
+                miss = [l for l in L if l not in g]
+                if miss: bad.add(f'{src}: a path reaches @score via {qid} without asking {"".join(miss)}')
             elif isinstance(nx, str) and nx.startswith('@end:'): pass
-            else: walk(nx, seen + [qid], sc, depth + 1)
-    if q.get('start') in Q: walk(q['start'], [], 0)
-    if tiers and all(isinstance(m, (int, float)) for m in mins) and lo[0] < 10**9 and lo[0] < min(mins):
-        E.append(f'{src}: a path can score {lo[0]}, below the lowest tier min {min(mins)}')
+            else: walk(nx, seen + [qid], g, depth + 1)
+    if q.get('start') in Q: walk(q['start'], [], set())
+    E += sorted(bad)
     seen_ids = set()
     def reach(qid):
         if qid in seen_ids or qid not in Q: return
-        seen_ids.add(qid); [reach(nx) for nx, _, _ in targets(Q[qid])]
+        seen_ids.add(qid); [reach(nx) for nx, _ in targets(Q[qid])]
     reach(q.get('start'))
     for k in Q:
         if k not in seen_ids: E.append(f'{src}: question {k} can never be reached')
@@ -204,7 +209,7 @@ def build(site, pages, markets, redirects, live):
         if not c.get('enabled'): return ''
         return f'<label class="chk"><input type="checkbox" name="consent"{" required" if c.get("required") else ""}> <small>{c["text"]} <a href="/text-messaging-terms/">Text Terms</a> · <a href="/privacy/">Privacy</a></small></label>'
     def qualifier_form():
-        cfg = {k: QC[k] for k in ('id', 'version', 'start', 'tiers', 'endings') if k in QC}
+        cfg = {k: QC[k] for k in ('id', 'version', 'start', 'result', 'endings') if k in QC}
         cfg['questions'] = [{k: v for k, v in x.items() if not k.startswith('_')} for x in QC['questions']]
         cfg['consent'] = {k: QC['consent'][k] for k in ('enabled', 'field', 'text')}
         qjs = open(os.path.join(B, 'qualifier.js'), encoding='utf-8').read().strip()

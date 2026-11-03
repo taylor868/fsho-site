@@ -28,8 +28,8 @@ Status key:
 | 16 | Gravity Form 6 (Step 2) | Covered | `step2_fields[]` in `site.json`; fields are placeholders until real Form 6 fields confirmed. |
 | 17 | Other Gravity Forms (contact, etc.) | Drop | Inventory shows only Forms 1 and 6 in real use. |
 | 18 | Form field editing | Schema | Move Form 1 fields into `site.json` like Step 2 (labels, required) and validate. |
-| 19 | Form entries / lead inbox | Sentinel | Leads land in FSHO CRM (or REsimpli); not stored in the site. |
-| 20 | Lead routing: CRM | Schema | `lead_form.endpoint` → serverless function → FSHO CRM `create_lead` with narrow token. **Blocked on CRM vs REsimpli decision + token.** |
+| 19 | Form entries / lead inbox | Sentinel | Leads land in FSHO CRM; not stored in the site. |
+| 20 | Lead routing: CRM | Schema | `lead_form.endpoint` → serverless function → FSHO CRM `create_lead` with narrow token. **Blocked on the narrow FSHO CRM create_lead token.** |
 | 21 | Lead routing: SMS alert via Twilio | Sentinel | Done by the CRM/serverless side after create_lead (A2P 10DLC registration applies); not in site code. |
 | 22 | TCPA/SMS consent text | Covered | `site.json consent`; legal sign-off required to change. |
 | 23 | Thank-you / redirect after submit | Covered | `/step-2/` then `/thank-you/` (both noindex). |
@@ -77,7 +77,7 @@ Status key:
 | 65 | Custom domain / SSL / DNS | Sentinel (later) | Netlify handles SSL; DNS cutover from Carrot only with Taylor's yes. |
 | 66 | Site analytics dashboard (Carrot stats) | Drop | Use GA4/Ads; Sentinel can show Lighthouse + lead counts. |
 | 67 | Email notifications to owner on lead | Sentinel | CRM-side notification, alongside Twilio SMS. |
-| 68 | Carrot CRM / lead pipeline | Drop | Replaced by FSHO CRM or REsimpli (decision pending). |
+| 68 | Carrot CRM / lead pipeline | Drop | Replaced by FSHO CRM. |
 | 69 | Carrot content/marketing extras (Content Pro, SEO reports) | Drop | Unused; no subscription active. |
 | 70 | Speed/caching/CDN | Covered | Static files on Netlify CDN; Lighthouse 100 perf. |
 
@@ -92,7 +92,7 @@ Status key:
 
 ## Prioritized schema / gen.py changes
 
-1. **Lead routing** (#20, #24): serverless function in `netlify/functions/lead`, `lead_form.endpoint`, honeypot. Blocked on CRM vs REsimpli + narrow token.
+1. **Lead routing** (#20, #24): serverless function in `netlify/functions/lead`, `lead_form.endpoint`, honeypot. FSHO CRM `create_lead`; blocked only on the narrow token.
 2. **Drafts** (#9): `draft: true` frontmatter, skipped in live builds; editor needs this first.
 3. **SEO length checks + OG tags** (#27, #28, #31): warnings for title > 60 / meta > 155, duplicate titles; `og_image`/`og_title`.
 4. **FAQPage JSON-LD** (#32) from each page's FAQ.

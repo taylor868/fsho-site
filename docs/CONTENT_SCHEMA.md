@@ -111,40 +111,74 @@ Required: `state, slug, title, meta_description, headline, hero_sub`. `cities` (
 
 Fails on: missing required fields, bad template, bad slug characters, duplicate slugs across pages and markets, bad colors/phone, malformed FAQ/testimonials, bad redirects, images over 200 KB or not .webp.
 
-## Qualifier form: `content/forms/qualifier.json`
+## Qualifier form: `content/forms/qualifier.json` (EMOTA, version 2)
 
-The lead qualifier that runs on `/step-2/` (shortcode `{{qualifier_form}}`). Flow:
+This is the lead qualifier on `/step-2/` (shortcode `{{qualifier_form}}`). It is graded on Taylor's **EMOTA** framework: **E**quity, **M**otivation, **O**wnership, **T**imeframe, **A**bility. A lead is **Hot only if all 5 pass**. Hot is the only result that fires a Google Ads conversion (`qualified_lead`).
 
-1. Hero form on every landing page: address, then name / phone / email. On submit a **partial lead** is sent (`stage: "partial"`, with a `lead_id`) and the visitor goes to `/step-2/`.
-2. `/step-2/`: one question per screen, one tap per answer, progress bar, Back link.
-3. The last answer either scores the lead (`@score`) or stops at an ending (`@end:<id>`). A tier-specific thank-you replaces the form and the **complete lead** is sent with the same `lead_id`.
+1. The hero form on every landing page collects the address and name / phone / email. It sends a **partial lead** (`stage: "partial"`, `lead_id`) and goes to `/step-2/`.
+2. A property gate comes first. Condo, townhouse, mobile/manufactured home and vacant land go to `not_fit`, the lead is saved and tagged, and no conversion fires. (Townhouse is declined pending Taylor's confirmation.)
+3. Then 1-2 one-tap questions per letter follow. Letters are internal and never shown to sellers.
+4. `@score` grades the letters. All pass gives Hot (`speed-to-lead`, `qualified_lead`). Any fail gives Nurture (`60day`, **no conversion**) with tags `emota-fail-<L>` for each failed letter, plus `emota-4of5` when exactly one letter failed (the old "Warm", now a tag only). Every outcome is still sent to the CRM.
 
-The JSON is inlined into `/step-2/` at build time together with `build/qualifier.js` (about 2.7 KB, budget 3.5 KB). No other page loads it, and there are no third-party scripts.
+`build/qualifier.js` (about 2.7 KB, budget 3.5 KB) and the JSON are inlined into `/step-2/` only.
 
 | Key | Meaning |
 |---|---|
-| `id`, `version` | Sent in the payload as `form` / `form_version`. Bump `version` when questions change. |
-| `start` | Id of the first question. |
-| `questions[]` | `{id, label, type?, options[] | next}`. `type: "text"` = optional free-text box with a single `next`. |
-| `options[]` | `{label, value, points, next, tag?, force_tier?}`. `value` is what the CRM stores. `next` = question id, `@score`, or `@end:<ending>`. `tag` is added to `tags[]`. `force_tier` pins the tier whatever the score. |
-| `tiers[]` | `{id, min, ending, cadence}`, highest `min` first. Score ≥ `min` → that tier. The lowest tier must cover the lowest reachable score. |
-| `endings{}` | `{headline, body, conversion, tier?, cadence?}`. Endings used by a tier inherit its tier/cadence. Stop endings (e.g. `not_fit`) set their own (`disqualified` / `none`). `conversion` is pushed to the dataLayer (`qualified_lead` for Hot). |
-| `consent` | `{enabled, required, field, text}`. **Off for now.** When on, a non-prechecked checkbox appears on the contact screen and `<field>` + `consent_text` go in the payload. `--check` refuses `enabled: true` while the text is still a placeholder. |
+| `id`, `version` | Sent as `form` / `form_version`. Bump `version` when questions change. |
+| `start` | First question id. |
+| `categories` | `{"property": ..., "E": "Equity", "M": ..., "O": ..., "T": ..., "A": ...}`. `property` is a gate and isn't graded. |
+| `questions[]` | `{id, category, label, options[]}`. `category` is required and must be a key of `categories`. |
+| `options[]` | `{label, value, pass, tag?, next}`. `pass` is `true`/`false` for the question's own letter, or an object such as `{"M": false}` / `{"M": true, "T": true}` for an answer that counts toward several letters. A letter passes only if **every** graded answer in it passed. Gate answers have no `pass`. An answer can skip `pass` only if it leads to another question of the same letter (e.g. "Yes, it's listed" leads to "How long?"). `next` is a question id, `@score`, or `@end:<ending>`. |
+| `result.all_pass` | `{tier, ending, cadence}`. Hot. |
+| `result.any_fail` | `{tier, ending, cadence, fail_tag, near_miss_tag}`. Nurture, 60-day. |
+| `endings{}` | `{headline, body, conversion, tier?, cadence?}`. Only the all-pass ending may have a `conversion` other than `"none"`. Stop endings (`not_fit`) set their own tier/cadence. |
+| `consent` | `{enabled, required, field, text}`. **Off for now.** `--check` refuses `enabled: true` while the text is a placeholder. |
 
-**Taylor's rules (Nov 3, 2026):** no condos (they stop at `not_fit`, tagged `no-condo`, and the lead is still saved). Vacant land and all mobile/manufactured homes are declined too (tags `no-land` / `no-mobile`, no follow-up question). Disqualified endings fire no Ads conversion: the dataLayer push is skipped when `conversion` is `none`, and `--check` enforces that. Listed under 90 days is forced to Nurture. Over 90 days and expired listings continue. Nurture = `cadence: "60day"`. Leads go to FSHO CRM.
+### Questions and pass rules
 
-**`gen.py --check` rules:** no dead ends (every `next` exists), no loops, every question reachable, every path ends at an ending, tiers ordered with unique mins and no score below the lowest tier, every tier/ending has a cadence, no protected-class wording (Fair Housing word list), consent config valid, JSON ≤ 20 KB, `qualifier.js` ≤ 3.5 KB.
+| Letter | Question | Pass | Fail |
+|---|---|---|---|
+| Gate | Property type | Single-family, multi-family 2-4 | Condo, townhouse, mobile/manufactured, vacant land: `not_fit` |
+| M (+T) | Listed with an agent? | Not listed, expired | (Listed: asks how long) |
+| M | How long listed? | 90 days or more | Under 90 days |
+| E | How much is owed? | Paid off, under half, over half of value | About what it's worth or more |
+| M | Main reason for selling | Probate, behind on payments, code violations, damage, tenants, repairs, life change | Something else / just curious |
+| O | On title or legal decision-maker? | On title; executor/POA/heir | No |
+| O | Everyone on title on board? | Yes / only owner | No, not sure |
+| T | When do you need to sell? | ASAP, 30 days, 30-90 days | Over 90 days, no rush |
+| A | Anything that could hold up a sale? | Nothing; liens the sale covers; probate open; not sure (tag `check-title`) | Liens bigger than the value; probate not started |
+| A | Moved out by closing? | Yes / empty; yes with extra time (tag `needs-extra-time`) | No |
 
-**Payload** (POSTed as JSON to `site.json` `lead_form.endpoint` when `lead_form.enabled`; otherwise `console.info` only):
+**`gen.py --check` rules:**
+- every question has a valid category, and all 5 EMOTA letters exist
+- every graded answer has a valid `pass`, and gate answers have none
+- every path to `@score` asks all 5 letters
+- only the all-pass ending carries a conversion, and nothing can `@end` straight to it
+- no dead ends, loops, or unreachable questions
+- `result` endings exist and have a tier and cadence
+- Fair Housing word list
+- consent placeholder guard
+- JSON ≤ 20 KB, JS ≤ 3.5 KB
+
+**Payload.** It is POSTed to `site.json` `lead_form.endpoint` (FSHO CRM `create_lead`) when `lead_form.enabled`; until then it only goes to `console.info`. The CRM should upsert on `lead_id`.
 
 ```json
-{"form":"qualifier","form_version":1,"stage":"complete","lead_id":"mw13jklyhthfj",
- "first":"Pat","last":"Seller","phone":"3305551234","email":"pat@example.com","address":"123 Main St, Akron, OH 44301",
- "answers":{"listed":"listed","listed_days":"under_90","type":"sfh","title":"owner","timeline":"asap","situation":"behind"},
- "tags":["listed-under-90"],"score":75,"tier":"nurture","cadence":"60day","conversion":"lead",
- "page":"/step-2/","ts":"2026-11-03T19:44:23.327Z","gclid":"TESTGCLID","utm_campaign":"HotMarkets","utm_term":"","utm_source":"google","utm_medium":""}
+{"form":"qualifier","form_version":2,"stage":"complete","lead_id":"t1","first":"Pat","phone":"3305551234",
+ "answers":{"type":"sfh","listed":"listed","listed_days":"under_90","equity":"free_clear","situation":"behind","title":"owner","owners_agree":"yes","timeline":"asap","issues":"none","move_out":"yes"},
+ "emota":{"M":false,"E":true,"O":true,"T":true,"A":true},"failed":["M"],
+ "tags":["listed-under-90","emota-fail-M","emota-4of5"],"tier":"nurture","cadence":"60day","conversion":"none",
+ "page":"/step-2/","ts":"...","gclid":"","utm_campaign":"","utm_term":"","utm_source":"","utm_medium":""}
 ```
 
-The partial payload (`stage: "partial"`) carries `lead_id`, contact fields, address, `consent`, and gclid/UTMs. The CRM should upsert on `lead_id`.
+Hard declines send `emota: null`, `failed: null`, `tier: "disqualified"`, `cadence: "none"`, `conversion: "none"`.
 
-**Editor notes (Website tab):** question list (reorder, add, disable), option rows (label, value, points, tag, a "goes to" dropdown of question ids + `@score` + `@end:*`, force tier), tier editor (min / cadence / ending), ending text, consent toggle, a flow preview built from `next`, and a test mode that walks the same logic and shows the payload. Always run `gen.py --check` before saving.
+**Editor notes (Website tab):**
+- Questions are grouped under E / M / O / T / A headers, plus the property gate.
+- Each answer row has a Pass/Fail toggle, with an "also counts for" letter picker for multi-letter answers.
+- Each answer has a "goes to" dropdown: a question, `@score`, or `@end:*`.
+- Result settings: Hot / Nurture cadence and tags.
+- Endings, where conversion can be set only on Hot.
+- Consent toggle.
+- A flow preview with lines coloured by letter.
+- A test mode that shows the EMOTA grid and the payload.
+- Always run `gen.py --check` before saving.

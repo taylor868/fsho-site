@@ -1,236 +1,378 @@
 {
   "id": "qualifier",
-  "version": 1,
+  "version": 2,
   "page": "/step-2/",
-  "start": "listed",
-  "_how": "Contact info + address are collected first by the hero form (partial lead saved). These questions run on /step-2/, one per screen. next = a question id, \"@score\" (add up points, pick a tier) or \"@end:<ending id>\" (stop now). force_tier pins the tier no matter the score.",
+  "start": "type",
+  "_how": "EMOTA qualifier. Contact + address come first from the hero form (partial lead saved). One question per screen. next = question id, @score (grade EMOTA) or @end:<ending>. pass = true/false for the question's own letter, or {\"M\":false,...} for several letters. A letter passes only if every answer in it passed. Categories are internal; sellers never see them.",
+  "categories": {
+    "property": "Property gate (hard declines, not scored)",
+    "E": "Equity",
+    "M": "Motivation",
+    "O": "Ownership",
+    "T": "Timeframe",
+    "A": "Ability"
+  },
+  "result": {
+    "all_pass": {
+      "tier": "hot",
+      "ending": "hot",
+      "cadence": "speed-to-lead"
+    },
+    "any_fail": {
+      "tier": "nurture",
+      "ending": "nurture",
+      "cadence": "60day",
+      "fail_tag": "emota-fail-",
+      "near_miss_tag": "emota-4of5"
+    }
+  },
   "questions": [
     {
-      "id": "listed",
-      "label": "Is the house listed with a real estate agent right now?",
-      "options": [
-        {
-          "label": "No, it's not listed",
-          "value": "not_listed",
-          "points": 20,
-          "next": "type"
-        },
-        {
-          "label": "Yes, it's listed",
-          "value": "listed",
-          "points": 0,
-          "next": "listed_days"
-        },
-        {
-          "label": "It was, but the listing expired",
-          "value": "expired",
-          "points": 15,
-          "tag": "expired-listing",
-          "next": "type"
-        }
-      ]
-    },
-    {
-      "id": "listed_days",
-      "label": "How long has it been listed?",
-      "options": [
-        {
-          "label": "Less than 90 days",
-          "value": "under_90",
-          "points": 0,
-          "tag": "listed-under-90",
-          "force_tier": "nurture",
-          "next": "type"
-        },
-        {
-          "label": "More than 90 days",
-          "value": "over_90",
-          "points": 10,
-          "tag": "listed-over-90",
-          "next": "type"
-        }
-      ]
-    },
-    {
       "id": "type",
-      "label": "What type of property is it?",
+      "category": "property",
+      "label": "What kind of property is it?",
       "options": [
         {
           "label": "Single-family house",
           "value": "sfh",
-          "points": 15,
-          "next": "title"
+          "next": "listed"
+        },
+        {
+          "label": "Townhouse",
+          "value": "townhouse",
+          "next": "@end:not_fit",
+          "tag": "no-townhouse"
         },
         {
           "label": "Multi-family (2-4 units)",
           "value": "multi_2_4",
-          "points": 15,
-          "next": "title"
+          "next": "listed"
+        },
+        {
+          "label": "Condo",
+          "value": "condo",
+          "tag": "no-condo",
+          "next": "@end:not_fit"
         },
         {
           "label": "Mobile or manufactured home",
           "value": "mobile",
-          "points": 0,
           "tag": "no-mobile",
-          "next": "@end:not_fit"
-        },
-        {
-          "label": "Townhouse / condo",
-          "value": "condo",
-          "points": 0,
-          "tag": "no-condo",
           "next": "@end:not_fit"
         },
         {
           "label": "Vacant land",
           "value": "land",
-          "points": 0,
           "tag": "no-land",
           "next": "@end:not_fit"
         }
       ]
     },
     {
-      "id": "title",
-      "label": "Are you the owner on the title, or legally able to decide to sell?",
+      "id": "listed",
+      "category": "M",
+      "label": "Is the house listed with an agent right now?",
       "options": [
         {
-          "label": "Yes, I'm the owner on the title",
-          "value": "owner",
-          "points": 15,
-          "next": "timeline"
+          "label": "No, it's not listed",
+          "value": "not_listed",
+          "pass": {
+            "M": true,
+            "T": true
+          },
+          "next": "equity"
         },
         {
-          "label": "Yes, I'm a legal decision-maker (co-owner, heir, POA)",
-          "value": "decision_maker",
-          "points": 10,
-          "next": "timeline"
+          "label": "Yes, it's listed",
+          "value": "listed",
+          "next": "listed_days"
         },
         {
-          "label": "No",
-          "value": "no",
-          "points": 0,
-          "tag": "not-decision-maker",
-          "next": "@end:not_fit"
+          "label": "It was, but the listing expired",
+          "value": "expired",
+          "pass": {
+            "M": true,
+            "T": true
+          },
+          "tag": "expired-listing",
+          "next": "equity"
         }
       ]
     },
     {
-      "id": "timeline",
-      "label": "How soon do you need to sell?",
+      "id": "listed_days",
+      "category": "M",
+      "label": "How long has it been listed?",
       "options": [
         {
-          "label": "ASAP",
-          "value": "asap",
-          "points": 25,
+          "label": "Less than 90 days",
+          "value": "under_90",
+          "pass": {
+            "M": false
+          },
+          "tag": "listed-under-90",
+          "next": "equity"
+        },
+        {
+          "label": "90 days or more",
+          "value": "over_90",
+          "pass": {
+            "M": true,
+            "T": true
+          },
+          "tag": "listed-over-90",
+          "next": "equity"
+        }
+      ]
+    },
+    {
+      "id": "equity",
+      "category": "E",
+      "label": "Roughly how much is still owed on the house?",
+      "options": [
+        {
+          "label": "Nothing, it's paid off",
+          "value": "free_clear",
+          "pass": true,
           "next": "situation"
         },
         {
-          "label": "Within 30 days",
-          "value": "30d",
-          "points": 20,
+          "label": "Less than half of what it's worth",
+          "value": "under_half",
+          "pass": true,
           "next": "situation"
         },
         {
-          "label": "30-90 days",
-          "value": "30_90d",
-          "points": 10,
+          "label": "More than half of what it's worth",
+          "value": "over_half",
+          "pass": true,
           "next": "situation"
         },
         {
-          "label": "More than 90 days / no rush",
-          "value": "no_rush",
-          "points": 0,
-          "tag": "long-term",
+          "label": "About what it's worth, or more",
+          "value": "underwater",
+          "pass": false,
           "next": "situation"
         }
       ]
     },
     {
       "id": "situation",
-      "label": "What's going on with the house?",
+      "category": "M",
+      "label": "What's the main reason you're thinking of selling?",
       "options": [
         {
-          "label": "Inherited or in probate",
+          "label": "Inherited / probate",
           "value": "probate",
-          "points": 20,
-          "next": "@score"
+          "pass": true,
+          "next": "title"
         },
         {
           "label": "Behind on payments",
           "value": "behind",
-          "points": 20,
-          "next": "@score"
+          "pass": true,
+          "next": "title"
         },
         {
-          "label": "Code violations / open permits",
+          "label": "Code violations or fines",
           "value": "code",
-          "points": 20,
-          "next": "@score"
+          "pass": true,
+          "next": "title"
         },
         {
-          "label": "Fire or water damage",
+          "label": "Fire, water, or storm damage",
           "value": "damage",
-          "points": 20,
-          "next": "@score"
+          "pass": true,
+          "next": "title"
         },
         {
-          "label": "Tenants who stopped paying",
+          "label": "Tired of tenants",
           "value": "tenants",
-          "points": 15,
-          "next": "@score"
+          "pass": true,
+          "next": "title"
         },
         {
-          "label": "Needs work, won't fix it",
+          "label": "Needs too many repairs",
           "value": "needs_work",
-          "points": 15,
-          "next": "@score"
+          "pass": true,
+          "next": "title"
         },
         {
-          "label": "Full of stuff",
-          "value": "full",
-          "points": 10,
-          "next": "@score"
-        },
-        {
-          "label": "Divorce, relocation, downsizing",
+          "label": "Divorce, job move, or other life change",
           "value": "life_change",
-          "points": 10,
-          "next": "@score"
+          "pass": true,
+          "next": "title"
         },
         {
-          "label": "Something else",
-          "value": "other",
-          "points": 5,
-          "next": "situation_other"
+          "label": "Something else / just curious",
+          "value": "curious",
+          "pass": false,
+          "next": "title"
         }
       ]
     },
     {
-      "id": "situation_other",
-      "label": "Tell us a little about it (optional)",
-      "type": "text",
-      "next": "@score"
-    }
-  ],
-  "tiers": [
-    {
-      "id": "hot",
-      "min": 70,
-      "ending": "hot",
-      "cadence": "speed-to-lead"
+      "id": "title",
+      "category": "O",
+      "label": "Are you on the title, or the legal decision-maker?",
+      "options": [
+        {
+          "label": "Yes, I'm on the title",
+          "value": "owner",
+          "pass": true,
+          "next": "owners_agree"
+        },
+        {
+          "label": "I'm the executor, POA, or heir",
+          "value": "decision_maker",
+          "pass": true,
+          "next": "owners_agree"
+        },
+        {
+          "label": "No",
+          "value": "no",
+          "pass": false,
+          "tag": "not-decision-maker",
+          "next": "owners_agree"
+        }
+      ]
     },
     {
-      "id": "warm",
-      "min": 45,
-      "ending": "warm",
-      "cadence": "same-day"
+      "id": "owners_agree",
+      "category": "O",
+      "label": "Is everyone on the title on board with selling?",
+      "options": [
+        {
+          "label": "Yes, or I'm the only owner",
+          "value": "yes",
+          "pass": true,
+          "next": "timeline"
+        },
+        {
+          "label": "No",
+          "value": "no",
+          "pass": false,
+          "next": "timeline"
+        },
+        {
+          "label": "Not sure yet",
+          "value": "unsure",
+          "pass": false,
+          "next": "timeline"
+        }
+      ]
     },
     {
-      "id": "nurture",
-      "min": 0,
-      "ending": "nurture",
-      "cadence": "60day"
+      "id": "timeline",
+      "category": "T",
+      "label": "When do you need to sell?",
+      "options": [
+        {
+          "label": "As soon as possible",
+          "value": "asap",
+          "pass": true,
+          "next": "issues"
+        },
+        {
+          "label": "Within 30 days",
+          "value": "30d",
+          "pass": true,
+          "next": "issues"
+        },
+        {
+          "label": "In 30-90 days",
+          "value": "30_90d",
+          "pass": true,
+          "next": "issues"
+        },
+        {
+          "label": "More than 90 days out",
+          "value": "over_90d",
+          "pass": false,
+          "next": "issues"
+        },
+        {
+          "label": "No rush, just looking",
+          "value": "no_rush",
+          "pass": false,
+          "tag": "long-term",
+          "next": "issues"
+        }
+      ]
+    },
+    {
+      "id": "issues",
+      "category": "A",
+      "label": "Anything that could hold up a sale?",
+      "options": [
+        {
+          "label": "Nothing that I know of",
+          "value": "none",
+          "pass": true,
+          "next": "move_out"
+        },
+        {
+          "label": "Liens or back taxes the sale should cover",
+          "value": "liens_covered",
+          "pass": true,
+          "tag": "liens",
+          "next": "move_out"
+        },
+        {
+          "label": "Liens or back taxes bigger than the house is worth",
+          "value": "liens_over",
+          "pass": false,
+          "tag": "liens-over-value",
+          "next": "move_out"
+        },
+        {
+          "label": "Probate is already open",
+          "value": "probate_open",
+          "pass": true,
+          "tag": "probate-open",
+          "next": "move_out"
+        },
+        {
+          "label": "Probate hasn't been started",
+          "value": "probate_not_started",
+          "pass": false,
+          "tag": "probate-not-started",
+          "next": "move_out"
+        },
+        {
+          "label": "Not sure",
+          "value": "unsure",
+          "pass": true,
+          "tag": "check-title",
+          "next": "move_out"
+        }
+      ]
+    },
+    {
+      "id": "move_out",
+      "category": "A",
+      "label": "Could you be moved out by closing day?",
+      "options": [
+        {
+          "label": "Yes, or it's already empty",
+          "value": "yes",
+          "pass": true,
+          "next": "@score"
+        },
+        {
+          "label": "Yes, with a little extra time",
+          "value": "need_time",
+          "pass": true,
+          "tag": "needs-extra-time",
+          "next": "@score"
+        },
+        {
+          "label": "No",
+          "value": "no",
+          "pass": false,
+          "next": "@score"
+        }
+      ]
     }
   ],
   "endings": {
@@ -239,15 +381,10 @@
       "body": "Keep your phone close. Want to go faster? Call us now.",
       "conversion": "qualified_lead"
     },
-    "warm": {
-      "headline": "Thanks! We'll call you today.",
-      "body": "We review every property by hand and will reach out shortly.",
-      "conversion": "lead"
-    },
     "nurture": {
       "headline": "Thanks! We've got your info.",
       "body": "We'll check in with options that fit your timeline. No pressure.",
-      "conversion": "lead"
+      "conversion": "none"
     },
     "not_fit": {
       "headline": "Thanks for the details.",
