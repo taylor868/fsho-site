@@ -6,3 +6,6 @@
 
 # Preview guards (noindex, robots Disallow, X-Robots-Tag) are written by gen.py
 # into dist/_headers while content/site.json "preview" is true.
+# Custom 404: gen.py writes dist/404.html and appends `/* /404.html 404` to dist/_redirects.
+# Draft pages (frontmatter draft: true) are included on Netlify deploy-preview,
+# branch-deploy, and netlify dev, and skipped when CONTEXT=production.

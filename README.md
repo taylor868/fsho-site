@@ -1,6 +1,6 @@
 # fsho-site
 
-Lean static rebuild of fairandsimplehomeoffer.com (52 pages + 16 301 redirects). Content lives in `content/`; `build/gen.py` turns it into plain HTML in `dist/`. No framework, no client bundle: CSS is inlined, one small inline script, GTM/ClickCease load only after window load (and only when `tracking` is true).
+Lean static rebuild of fairandsimplehomeoffer.com (53 pages + 16 301 redirects). Content lives in `content/`; `build/gen.py` turns it into plain HTML in `dist/`. No framework, no client bundle: CSS is inlined, one small inline script, GTM/ClickCease load only after window load (and only when `tracking` is true).
 
 ```bash
 python3 build/gen.py --check   # validate content, exits 1 on errors
