@@ -29,7 +29,7 @@ content/
 | `brand.navy` | `#RRGGBB` | Primary text/heading color. |
 | `logo`, `favicon` | path | Files in `content/media/`, copied to site root. |
 | `preview` | bool | **true until cutover is approved.** Adds `noindex,nofollow` to every page, a red PREVIEW banner, `robots.txt Disallow: /`, and an `X-Robots-Tag` header. |
-| `lead_form.enabled` | bool | false = submit is blocked client-side, nothing is sent. Stays false until lead routing is decided. |
+| `lead_form.enabled` | bool | false = submit is blocked client-side, nothing is sent. Stays false on this branch. The create-lead function is on `cursor/carrot-lead-routing-f5f7`, awaiting verified CRM mapping (campaign, assignee, source). |
 | `lead_form.endpoint` | string | Serverless endpoint URL (only used when enabled). |
 | `gtm_id` | string | e.g. `GTM-WWPBQGDZ`. |
 | `clickcease_id` | string | Empty until supplied. |

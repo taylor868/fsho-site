@@ -29,7 +29,7 @@ Status key:
 | 17 | Other Gravity Forms (contact, etc.) | Drop | Inventory shows only Forms 1 and 6 in real use. |
 | 18 | Form field editing | Covered | `form1_fields[]` in `site.json` (name, label, type, required, step) validated by `--check`. Form stays disabled until lead routing exists. |
 | 19 | Form entries / lead inbox | Sentinel | Leads land in FSHO CRM; not stored in the site. |
-| 20 | Lead routing: CRM | Schema | `lead_form.endpoint` → serverless function → FSHO CRM `create_lead` with narrow token. **Blocked on the narrow FSHO CRM create_lead token.** |
+| 20 | Lead routing: CRM | Schema | Not in this branch. `cursor/carrot-lead-routing-f5f7` maps the site payload to FSHO CRM `create_lead` and adds the honeypot. Awaiting verified CRM mapping (campaign, assignee, source). The create_lead token is not the blocker. Form stays disabled here. |
 | 21 | Lead routing: SMS alert via Twilio | Sentinel | Done by the CRM/serverless side after create_lead (A2P 10DLC registration applies); not in site code. |
 | 22 | TCPA/SMS consent text | Covered | `site.json consent`; legal sign-off required to change. |
 | 23 | Thank-you / redirect after submit | Covered | `/step-2/` then `/thank-you/` (both noindex). |
@@ -105,7 +105,7 @@ Done (preview stays on, form stays disabled):
 
 Still open:
 
-1. **Lead routing** (#20, #24): serverless function in `netlify/functions/lead`, `lead_form.endpoint`, honeypot. FSHO CRM `create_lead`; blocked only on the narrow token. Do not invent one.
+1. **Lead routing** (#20, #24): on `cursor/carrot-lead-routing-f5f7`, not this branch. Awaiting verified CRM mapping (campaign, assignee, source). Do not treat the create_lead token as missing, and do not invent mapping values here.
 10. **City pages** (#50), only with real local content.
 11. **Call-tracking number swap** (#42), only if approved.
 12. **Blog** (#12), only when the first post exists.

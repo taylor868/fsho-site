@@ -18,7 +18,7 @@
     "endpoint": "",
     "crm": "fsho-crm",
     "endpoint_planned": "/.netlify/functions/create-lead",
-    "_note": "Leads go to FSHO CRM create_lead (REsimpli dropped). Stays disabled until the narrow create_lead token exists; while off, the hero form and qualifier log payloads to the browser console and send nothing."
+    "_note": "Leads go to FSHO CRM create_lead (REsimpli dropped). The create-lead function and honeypot are on branch cursor/carrot-lead-routing-f5f7 and are awaiting verified CRM mapping (campaign, assignee, source). This branch keeps the form disabled; while off, the hero form and qualifier log payloads to the browser console and send nothing. Do not put a CRM token or mapping ids in this file."
   },
   "gtm_id": "GTM-WWPBQGDZ",
   "clickcease_id": "",
