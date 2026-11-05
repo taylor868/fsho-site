@@ -8,9 +8,10 @@
 # into dist/_headers while content/site.json "preview" is true.
 #
 # create-lead (draft only; lead_form.enabled stays false until Taylor approves).
+# create_lead is sent with explicit JSON p_assigned_to null. Do not set an assignee.
+# Do not default the campaign uuid or source key here. The form stays disabled until Taylor approves.
 # Set these in the Netlify UI. Never commit the values.
 #   FSHO_CRM_CREATE_LEAD_TOKEN
 #   FSHO_API_BASE
 #   FSHO_CRM_CAMPAIGN_ID
-#   FSHO_CRM_ASSIGNED_TO
 #   FSHO_CRM_SOURCE_KEY

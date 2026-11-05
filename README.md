@@ -9,5 +9,5 @@ python3 build/gen.py           # build dist/ (preview guards on while site.json 
 
 - Content schema for editors (Sentinel console Website tab): [docs/CONTENT_SCHEMA.md](docs/CONTENT_SCHEMA.md)
 - Deploys: Netlify site `fsho-site`, **draft deploys only** until Taylor approves cutover. No DNS changes away from Carrot.
-- Lead form stays off (`lead_form.enabled` false, `preview` true) until Taylor approves. `netlify/functions/create-lead` and the honeypot are in place for a later draft; the CRM token and campaign/assignee/source values are Netlify env vars, never committed. See [docs/CONTENT_SCHEMA.md](docs/CONTENT_SCHEMA.md).
+- Lead form stays off (`lead_form.enabled` false, `preview` true) until Taylor approves. `netlify/functions/create-lead` sends an explicit JSON null assignee when the Netlify campaign id and source key are set. Those values are not in git. See [docs/CONTENT_SCHEMA.md](docs/CONTENT_SCHEMA.md).
 - Phone: (910) 636-6669.

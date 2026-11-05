@@ -116,7 +116,7 @@ Fails on: missing required fields, bad template, bad slug characters, duplicate 
 
 This is the lead qualifier on `/step-2/` (shortcode `{{qualifier_form}}`). It is graded on Taylor's **EMOTA** framework: **E**quity, **M**otivation, **O**wnership, **T**imeframe, **A**bility. A lead is **Hot only if all 5 pass**. Hot is the only result that fires a Google Ads conversion (`qualified_lead`).
 
-1. The hero form on every landing page collects the address and name / phone / email. It sends a **partial lead** (`stage: "partial"`, `lead_id`) and goes to `/step-2/`.
+1. The hero form on every landing page collects the address and name / phone / email. It builds a **partial lead** (`stage: "partial"`, `lead_id`) and goes to `/step-2/`. That partial payload is not written to the CRM (there is no update call, so writing it would block the EMOTA answers). The CRM write, when routing is actually allowed, is the complete qualifier submit.
 2. A property gate comes first. Condo, townhouse, mobile/manufactured home and vacant land go to `not_fit`, the lead is saved and tagged, and no conversion fires. (Townhouse declined: confirmed by Taylor.)
 3. Then one one-tap question per letter, in the order O, T, M, E, A. Letters are internal and never shown to sellers.
 4. `@score` grades the letters. All pass gives Hot (`speed-to-lead`, `qualified_lead`). Any fail gives Nurture (`60day`, **no conversion**) with tags `emota-fail-<L>` for each failed letter, plus `emota-4of5` when exactly one letter failed (the old "Warm", now a tag only). Every outcome is still sent to the CRM.
@@ -170,7 +170,7 @@ Tags: `no-condo`, `no-townhouse`, `no-mobile`, `no-land`, `not-decision-maker`, 
 
 The hero form, the qualifier, and the optional step-2 form include a hidden honeypot, `company_website`. Leave it blank. The function rejects a filled honeypot and does not call the CRM. There is no captcha script.
 
-The address line has to include street, city, state, and ZIP (`123 Main St, Akron, OH 44308`) because the CRM requires `p_address`, `p_city`, `p_state`, and `p_postal` separately. A lead missing any of those is not sent.
+The address line should include street, city, state, and ZIP. Commas are optional (`123 Main St Akron OH 44308` is accepted). `p_address` is the seller's full line, not only the street. City, state, and ZIP are filled when they can be read. If one of those is still missing, the function returns 400 and the page shows an error instead of a success message.
 
 ```json
 {"form":"qualifier","form_version":3,"stage":"complete","lead_id":"t1","first":"Pat","phone":"3305551234",
@@ -192,21 +192,27 @@ CRM body (the function builds this; do not post it from the browser):
 
 | CRM arg | From the site payload |
 |---|---|
-| `p_address`, `p_city`, `p_state`, `p_postal` | Parsed from `address` (`street, city, ST ZIP`). `city` / `state` / `postal` or `zip` win when the payload already split them. |
+| `p_address` | The seller's full address line. City/state/ZIP are not stripped out of this field. |
+| `p_city`, `p_state`, `p_postal` | Parsed when present (commas optional; full state names accepted). Explicit `city` / `state` / `postal` or `zip` win. |
 | `p_seller_name` | `first` + `last` |
 | `p_phone`, `p_email` | Phone and email. The CRM keeps the last 10 digits of the phone. |
-| `p_source_key` | Env `FSHO_CRM_SOURCE_KEY` only |
-| `p_campaign_id` | Env `FSHO_CRM_CAMPAIGN_ID` only (uuid) |
-| `p_assigned_to` | Env `FSHO_CRM_ASSIGNED_TO` only (uuid) |
+| `p_campaign_id` | Env `FSHO_CRM_CAMPAIGN_ID` only. No default uuid in the repo. Sentinel has named the live In House PPC campaign; set that uuid in Netlify, not here. |
+| `p_source_key` | Env `FSHO_CRM_SOURCE_KEY` only. No default in the repo. |
+| `p_assigned_to` | Explicit JSON `null` on every `create_lead` call. The key is never omitted. `FSHO_CRM_ASSIGNED_TO`, if set to anything, is invalid and the CRM is not called. There is no default rep. |
 | `p_motivation` | Compact JSON: `lead_id`, `stage`, `form_version`, EMOTA (`emota`, `failed`, `tags`, `answers`), `tier`, `cadence`, `conversion`, `gclid`, UTM, `page`. The CRM has no columns for these, and this token cannot write activity notes. |
 | `p_consent_text` | `consent_text`, when present |
 | `p_consent_url` | `consent_url` when it is https, otherwise the canonical page when consent was given |
 
-Before create, the function calls `POST {base}/rpc/lead_for_phone` with `{"p":"<phone>"}` and, if that is not an id, `POST {base}/rpc/lead_for_email` with `{"p":"<email>"}`. An existing id is returned as `{ "ok": true, "existing": true, "data": "<uuid>" }` and `create_lead` is not called again. There is no update call, so the first accepted submit for that phone or email is the one stored.
+**This is not end-to-end routing.**
 
-Success from the CRM is `{ "ok": true, "data": ... }`. The function returns that `data` to the browser. CRM errors are `{ "error": "..." }` with HTTP 400, 401, 403, or 500; the function relays those statuses and replaces any error text that could carry a secret.
+- Unassigned create is the configured mode. Sentinel reported the contract from acq-command-center (those files are not in this repo): `db/006_functions.sql` `create_lead` argument `p_assigned_to uuid` has no DEFAULT and the function inserts that argument; `db/001_core.sql` `assigned_user_id uuid` is a nullable foreign key; `supabase/functions/fsho-api/index.ts` forwards the request args to `asAccount.rpc` with no null check; `supabase/functions/lead-intake/index.ts` sets `assignedTo` to `null` on purpose ("NOBODY") and calls `create_lead` with `p_assigned_to: assignedTo`. In that schema, "Required" means the argument has no DEFAULT, not that the column is NOT NULL. This function therefore sends `"p_assigned_to": null` and does not drop the key. A configured `FSHO_CRM_ASSIGNED_TO` is **503** `lead_routing_unconfigured` with `invalid: ["FSHO_CRM_ASSIGNED_TO"]`, which is a different failure from a missing campaign or source key.
+- `create_lead` cannot update a row. A `stage: "partial"` submit is not written. When unassigned create is allowed, that response is **409** `{ "ok": false, "routed": false, "error": "partial_deferred" }`. The browser may continue to the qualifier. It must not treat that as a saved lead.
+- The only CRM create is `stage: "complete"`, and it includes EMOTA in `p_motivation`. Before that, the function calls `lead_for_phone` and then `lead_for_email`. If either returns an id, the response is **409** `{ "ok": false, "routed": false, "error": "update_unavailable" }`. `create_lead` is not called, and the page shows an error instead of the success ending. There is no update API to attach EMOTA to an existing row.
+- A CRM error or a network failure is `ok: false`. The hero form stays put and shows "We couldn't save that." The qualifier shows "We couldn't save your answers." A Google Ads conversion fires only after `ok: true`.
 
-If `FSHO_CRM_CREATE_LEAD_TOKEN`, `FSHO_CRM_CAMPAIGN_ID`, `FSHO_CRM_ASSIGNED_TO`, or `FSHO_CRM_SOURCE_KEY` is missing or unusable, the function returns **503** `{ "ok": false, "error": "lead_routing_unconfigured", "missing": [...], "invalid": [...] }` and does not call the CRM. Names only; values are never included. An incomplete site payload (no ZIP, no email, and so on) is **400** `incomplete_lead` and also does not call the CRM.
+Success from the CRM is `{ "ok": true, "data": ... }`. The function returns that as `{ "ok": true, "routed": true, "data": ... }`. CRM errors are `{ "error": "..." }` with HTTP 400, 401, 403, or 500; the function relays those statuses and replaces any error text that could carry a secret.
+
+If `FSHO_CRM_CREATE_LEAD_TOKEN`, `FSHO_CRM_CAMPAIGN_ID`, or `FSHO_CRM_SOURCE_KEY` is missing or unusable, the function returns **503** `{ "ok": false, "routed": false, "error": "lead_routing_unconfigured", "missing": [...], "invalid": [...] }` and does not call the CRM. Names only; values are never included.
 
 Netlify env var names (set in the Netlify UI, never in git):
 
@@ -214,11 +220,11 @@ Netlify env var names (set in the Netlify UI, never in git):
 |---|---|---|
 | `FSHO_CRM_CREATE_LEAD_TOKEN` | yes | Bearer token. Never commit, log, or paste it. |
 | `FSHO_API_BASE` | no | Overrides the public default above. https, no userinfo, no query string. |
-| `FSHO_CRM_CAMPAIGN_ID` | yes | uuid. No default. |
-| `FSHO_CRM_ASSIGNED_TO` | yes | uuid. No default. |
-| `FSHO_CRM_SOURCE_KEY` | yes | text. No default. |
+| `FSHO_CRM_CAMPAIGN_ID` | yes | uuid. No default in git. |
+| `FSHO_CRM_SOURCE_KEY` | yes | text. No default in git. |
+| `FSHO_CRM_ASSIGNED_TO` | no | Do not set. Any value is invalid and blocks the CRM call. |
 
-`lead_form.enabled` stays **false** and `preview` stays **true** until Taylor explicitly approves turning the form on. Setting the three ids in Netlify does not by itself publish the form.
+`lead_form.enabled` stays **false** and `preview` stays **true** until Taylor explicitly approves turning the form on. Setting the campaign uuid and source key in Netlify does not by itself publish the form. While the form is off, the browser does not call this function.
 
 **Editor notes (Website tab):**
 - Questions are grouped under E / M / O / T / A headers, plus the property gate.

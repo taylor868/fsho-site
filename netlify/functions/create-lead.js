@@ -1,17 +1,30 @@
 "use strict";
 
 // Browser posts the site qualifier / Form 1 JSON here.
-// This function maps that payload to FSHO CRM create_lead.
-// The Bearer token and the three CRM ids come only from the environment.
-// Never log or return those values.
-//
-// create_lead cannot update a row and this token cannot write activity notes.
-// If lead_for_phone or lead_for_email already returns an id, we do not call
-// create_lead again. The first accepted submit for that phone or email wins;
-// a later "complete" post does not change p_motivation.
+// This maps that payload toward FSHO CRM create_lead. It does not claim
+// end-to-end routing works:
+// - Campaign name is "In House PPC". The uuid comes only from
+//   FSHO_CRM_CAMPAIGN_ID. There is no default uuid in this file.
+// - Leads are unassigned on purpose. create_lead is called with an explicit
+//   JSON null for p_assigned_to (the key is never omitted). Sentinel reported
+//   this from acq-command-center: db/006_functions.sql defines p_assigned_to
+//   uuid with no DEFAULT and inserts that argument; db/001_core.sql
+//   assigned_user_id is a nullable uuid FK; fsho-api/index.ts forwards the
+//   args with no null check; lead-intake/index.ts sets assignedTo to null
+//   ("NOBODY") and passes p_assigned_to: assignedTo. "Required" there means
+//   no DEFAULT, not NOT NULL. FSHO_CRM_ASSIGNED_TO is invalid if set: there
+//   is no default rep.
+// - Campaign id and source key come only from FSHO_CRM_CAMPAIGN_ID and
+//   FSHO_CRM_SOURCE_KEY. There is no default uuid or source key in this file.
+// - create_lead cannot update a row. A partial submit must not create one,
+//   or the later qualifier EMOTA payload could never be stored. Partial
+//   returns partial_deferred and does not call the CRM. If a complete submit
+//   finds an existing phone or email, the response is update_unavailable
+//   (not success). There is no update API to fall back on.
 
 const DEFAULT_API_BASE = "https://ruedjugpbuagyapunytd.supabase.co/functions/v1/fsho-api";
 const HONEYPOT = "company_website";
+const STREET_SUFFIX = /^(st|street|ave|avenue|rd|road|dr|drive|ln|lane|blvd|boulevard|ct|court|cir|circle|pl|place|way|ter|terrace|pkwy|parkway|hwy|highway)$/i;
 const MAX_BODY = 32 * 1024;
 const RPC_TIMEOUT_MS = 2500;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -89,41 +102,58 @@ function normalizeState(raw) {
   return STATES[s.toLowerCase()] || "";
 }
 
+function stripTrailingState(s) {
+  const lower = s.toLowerCase();
+  const names = Object.keys(STATES).sort((a, b) => b.length - a.length);
+  for (const name of names) {
+    if (lower === name) return { state: STATES[name], rest: "" };
+    const idx = lower.length - name.length;
+    if (idx > 0 && lower.endsWith(name) && /[\s,]/.test(lower.charAt(idx - 1))) {
+      return { state: STATES[name], rest: s.slice(0, idx).replace(/[,\s]+$/, "").trim() };
+    }
+  }
+  const sm = s.match(/^(.*?)[,\s]+([A-Za-z]{2})$/);
+  if (sm && ABBR.has(sm[2].toUpperCase())) {
+    return { state: sm[2].toUpperCase(), rest: sm[1].replace(/[,\s]+$/, "").trim() };
+  }
+  return { state: "", rest: s };
+}
+
 function parseAddress(raw) {
-  let s = pick(raw).replace(/\u00a0/g, " ").replace(/\s+/g, " ");
-  const empty = { street: "", city: "", state: "", postal: "" };
-  if (!s) return empty;
+  const original = pick(raw).replace(/\u00a0/g, " ").replace(/\s+/g, " ");
+  const empty = { raw: original, street: "", city: "", state: "", postal: "" };
+  if (!original) return empty;
+  let s = original;
   let postal = "";
-  const zm = s.match(/(\d{5}(?:-\d{4})?)\s*$/);
+  const zm = s.match(/\b(\d{5}(?:-\d{4})?)\s*$/);
   if (zm) {
     postal = zm[1];
     s = s.slice(0, zm.index).replace(/[,\s]+$/, "").trim();
   }
+  const stripped = stripTrailingState(s);
+  s = stripped.rest;
+  let city = "";
+  let street = s;
   const parts = s.split(",").map((p) => p.trim()).filter(Boolean);
-  if (!parts.length) return { street: "", city: "", state: "", postal };
-  if (parts.length >= 3) {
-    return {
-      street: parts.slice(0, -2).join(", "),
-      city: parts[parts.length - 2],
-      state: normalizeState(parts[parts.length - 1]),
-      postal,
-    };
-  }
-  if (parts.length === 2) {
-    const bits = parts[1].split(/\s+/);
-    const state = normalizeState(bits[bits.length - 1]);
-    if (state && bits.length > 1) {
-      return { street: parts[0], city: bits.slice(0, -1).join(" "), state, postal };
+  if (parts.length >= 2) {
+    city = parts[parts.length - 1];
+    street = parts.slice(0, -1).join(", ");
+  } else if (stripped.state && s) {
+    const bits = s.split(/\s+/);
+    const last = bits[bits.length - 1];
+    if (bits.length >= 3 && last && !STREET_SUFFIX.test(last.replace(/\./g, ""))) {
+      city = last;
+      street = bits.slice(0, -1).join(" ");
     }
-    return { street: parts[0], city: parts[1], state: "", postal };
   }
-  return { street: parts[0], city: "", state: "", postal };
+  return { raw: original, street, city, state: stripped.state, postal };
 }
 
 function locationOf(lead) {
   const parsed = parseAddress(lead.address || "");
   return {
-    street: parsed.street || pick(lead.address),
+    // Keep the seller's full line. A split city/state is extra, not a replacement.
+    address: parsed.raw || pick(lead.address),
     city: pick(lead.city) || parsed.city,
     state: normalizeState(lead.state) || parsed.state,
     postal: pick(lead.postal) || pick(lead.zip) || parsed.postal,
@@ -210,18 +240,18 @@ function mapLead(lead) {
   const phone = pick(lead.phone);
   const email = pick(lead.email);
   const missing = [];
-  if (!loc.street) missing.push("p_address");
+  if (!loc.address) missing.push("p_address");
   if (!loc.city) missing.push("p_city");
   if (!loc.state) missing.push("p_state");
   if (!loc.postal) missing.push("p_postal");
   if (!name) missing.push("p_seller_name");
   if (digits(phone).length < 10) missing.push("p_phone");
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) missing.push("p_email");
-  const tooLong = [loc.street, loc.city, name].some((v) => v.length > 500) || email.length > 320;
+  const tooLong = [loc.address, loc.city, name].some((v) => v.length > 500) || email.length > 320;
   if (tooLong) return { ok: false, error: "field_too_long", missing: [] };
   if (missing.length) return { ok: false, error: "incomplete_lead", missing };
   const body = {
-    p_address: loc.street,
+    p_address: loc.address,
     p_city: loc.city,
     p_state: loc.state,
     p_postal: loc.postal,
@@ -257,14 +287,16 @@ function loadConfig(env) {
   if (!token) missing.push("FSHO_CRM_CREATE_LEAD_TOKEN");
   else if (/[\r\n]/.test(token)) invalid.push("FSHO_CRM_CREATE_LEAD_TOKEN");
   const campaign = pick(env.FSHO_CRM_CAMPAIGN_ID);
-  const assigned = pick(env.FSHO_CRM_ASSIGNED_TO);
   const source = pick(env.FSHO_CRM_SOURCE_KEY);
+  // Any configured assignee is invalid. The only legal value is an explicit
+  // null, and only after the RPC contract is verified. Never send this env.
+  const assignedRaw = env.FSHO_CRM_ASSIGNED_TO;
+  const assignedSet = assignedRaw == null ? "" : String(assignedRaw).trim();
   if (!campaign) missing.push("FSHO_CRM_CAMPAIGN_ID");
   else if (!isUuid(campaign)) invalid.push("FSHO_CRM_CAMPAIGN_ID");
-  if (!assigned) missing.push("FSHO_CRM_ASSIGNED_TO");
-  else if (!isUuid(assigned)) invalid.push("FSHO_CRM_ASSIGNED_TO");
   if (!source) missing.push("FSHO_CRM_SOURCE_KEY");
   else if (source.length > 200 || /[\r\n]/.test(source)) invalid.push("FSHO_CRM_SOURCE_KEY");
+  if (assignedSet) invalid.push("FSHO_CRM_ASSIGNED_TO");
   const base = apiBase(env);
   if (!base.ok) invalid.push("FSHO_API_BASE");
   return {
@@ -274,7 +306,6 @@ function loadConfig(env) {
     token,
     base: base.base || "",
     campaign,
-    assigned,
     source,
   };
 }
@@ -345,65 +376,81 @@ async function handle(event, deps) {
   }
   if (honeypotFilled(payload)) {
     log({ fn: "create-lead", result: "rejected" });
-    return json(400, { ok: false, error: "rejected" });
+    return json(400, { ok: false, routed: false, error: "rejected" });
+  }
+
+  const stage = pick(payload.stage);
+  if (stage !== "partial" && stage !== "complete") {
+    return json(400, { ok: false, routed: false, error: "stage_required" });
+  }
+
+  const mapped = mapLead(payload);
+  if (!mapped.ok) {
+    const body = { ok: false, routed: false, error: mapped.error };
+    if (mapped.missing && mapped.missing.length) body.missing = mapped.missing;
+    log({ fn: "create-lead", result: mapped.error, missing: mapped.missing || [] });
+    return json(400, body);
   }
 
   const cfg = loadConfig(env);
   if (!cfg.ok) {
-    const body = { ok: false, error: "lead_routing_unconfigured" };
+    const body = { ok: false, routed: false, error: "lead_routing_unconfigured" };
     if (cfg.missing.length) body.missing = cfg.missing;
     if (cfg.invalid.length) body.invalid = cfg.invalid;
     log({ fn: "create-lead", result: "unconfigured", missing: cfg.missing, invalid: cfg.invalid }, cfg.token);
     return json(503, body);
   }
 
-  const mapped = mapLead(payload);
-  if (!mapped.ok) {
-    const body = { ok: false, error: mapped.error };
-    if (mapped.missing && mapped.missing.length) body.missing = mapped.missing;
-    log({ fn: "create-lead", result: mapped.error, missing: mapped.missing || [] }, cfg.token);
-    return json(400, body);
+  // A partial row cannot be updated with EMOTA later. Do not create one.
+  if (stage === "partial") {
+    log({ fn: "create-lead", result: "partial_deferred" }, cfg.token);
+    return json(409, { ok: false, routed: false, error: "partial_deferred" });
   }
 
+  // null must survive JSON.stringify. Do not omit this key and do not
+  // replace it with a person.
   const crmBody = Object.assign({}, mapped.body, {
     p_source_key: cfg.source,
     p_campaign_id: cfg.campaign,
-    p_assigned_to: cfg.assigned,
+    p_assigned_to: null,
   });
+  if (!Object.prototype.hasOwnProperty.call(crmBody, "p_assigned_to") || crmBody.p_assigned_to !== null) {
+    return json(500, { ok: false, routed: false, error: "server_error" });
+  }
 
   try {
     const byPhone = await rpc(fetchImpl, cfg.base, "lead_for_phone", { p: crmBody.p_phone }, cfg.token);
     const phoneHit = interpretLookup(byPhone.status, byPhone.parsed);
     if (phoneHit.error) {
       log({ fn: "create-lead", result: "crm_error", status: byPhone.status }, cfg.token);
-      return json(relayStatus(phoneHit.status), { ok: false, error: publicError(byPhone.parsed, cfg.token) });
+      return json(relayStatus(phoneHit.status), { ok: false, routed: false, error: publicError(byPhone.parsed, cfg.token) });
     }
     if (phoneHit.found) {
-      log({ fn: "create-lead", result: "existing" }, cfg.token);
-      return json(200, { ok: true, existing: true, data: phoneHit.id });
+      log({ fn: "create-lead", result: "update_unavailable" }, cfg.token);
+      return json(409, { ok: false, routed: false, error: "update_unavailable" });
     }
 
     const byEmail = await rpc(fetchImpl, cfg.base, "lead_for_email", { p: crmBody.p_email }, cfg.token);
     const emailHit = interpretLookup(byEmail.status, byEmail.parsed);
     if (emailHit.error) {
       log({ fn: "create-lead", result: "crm_error", status: byEmail.status }, cfg.token);
-      return json(relayStatus(emailHit.status), { ok: false, error: publicError(byEmail.parsed, cfg.token) });
+      return json(relayStatus(emailHit.status), { ok: false, routed: false, error: publicError(byEmail.parsed, cfg.token) });
     }
     if (emailHit.found) {
-      log({ fn: "create-lead", result: "existing" }, cfg.token);
-      return json(200, { ok: true, existing: true, data: emailHit.id });
+      log({ fn: "create-lead", result: "update_unavailable" }, cfg.token);
+      return json(409, { ok: false, routed: false, error: "update_unavailable" });
     }
 
     const created = await rpc(fetchImpl, cfg.base, "create_lead", crmBody, cfg.token);
     if (created.status >= 200 && created.status < 300 && created.parsed && created.parsed.ok === true) {
       log({ fn: "create-lead", result: "created", status: created.status }, cfg.token);
-      return json(200, { ok: true, data: created.parsed.data == null ? null : created.parsed.data });
+      return json(200, { ok: true, routed: true, data: created.parsed.data == null ? null : created.parsed.data });
     }
     log({ fn: "create-lead", result: "crm_error", status: created.status }, cfg.token);
-    return json(relayStatus(created.status), { ok: false, error: publicError(created.parsed, cfg.token) });
+    return json(relayStatus(created.status), { ok: false, routed: false, error: publicError(created.parsed, cfg.token) });
   } catch (e) {
     log({ fn: "create-lead", result: "unreachable" }, cfg.token);
-    return json(502, { ok: false, error: "crm_unreachable" });
+    return json(502, { ok: false, routed: false, error: "crm_unreachable" });
   }
 }
 

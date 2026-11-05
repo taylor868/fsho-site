@@ -55,15 +55,16 @@ The hero form, the step-2 qualifier, and the optional details form include a hid
 
 `content/site.json` keeps `lead_form.enabled` **false** and `preview` **true** until Taylor explicitly says to turn the form on. While it is false, the site does not call the function.
 
-The CRM token and the three id fields live in the Netlify UI only. Never put them in the repo, in a doc, in a commit, or in chat. Env names:
+The CRM token, campaign uuid, and source key live in the Netlify UI only. Never put them in the repo, in a doc, in a commit, or in chat. Do not invent them and do not assign a rep. Env names:
 
 - `FSHO_CRM_CREATE_LEAD_TOKEN`
 - `FSHO_API_BASE`
 - `FSHO_CRM_CAMPAIGN_ID`
-- `FSHO_CRM_ASSIGNED_TO`
 - `FSHO_CRM_SOURCE_KEY`
 
-If any of the token, campaign id, assignee id, or source key is missing, the function returns an error and does not call the CRM. Do not invent those values. Do not turn `lead_form.enabled` on.
+`FSHO_CRM_ASSIGNED_TO` must stay unset. Any value blocks the CRM call.
+
+The function sends an unassigned lead only when the token, campaign id, and source key are set. It puts an empty assignee in that request on purpose and will not fill in a person. There is no way to update a lead, so the first form step is not saved (saving it would block the qualifier answers). If a save fails, the page says so. It does not show a thank-you. Do not turn `lead_form.enabled` on.
 
 ## Refuse or escalate to Taylor (don't just do it)
 

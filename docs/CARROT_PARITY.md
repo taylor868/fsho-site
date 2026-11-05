@@ -29,7 +29,7 @@ Status key:
 | 17 | Other Gravity Forms (contact, etc.) | Drop | Inventory shows only Forms 1 and 6 in real use. |
 | 18 | Form field editing | Schema | Move Form 1 fields into `site.json` like Step 2 (labels, required) and validate. |
 | 19 | Form entries / lead inbox | Sentinel | Leads land in FSHO CRM; not stored in the site. |
-| 20 | Lead routing: CRM | Schema | `netlify/functions/create-lead.js` maps the site payload to FSHO CRM `POST {FSHO_API_BASE}/rpc/create_lead`. `lead_form.endpoint` is `/.netlify/functions/create-lead`, but **`enabled` stays false** until Taylor approves. Still blocked on Netlify env `FSHO_CRM_CAMPAIGN_ID`, `FSHO_CRM_ASSIGNED_TO`, and `FSHO_CRM_SOURCE_KEY` (names only; no values in the repo). |
+| 20 | Lead routing: CRM | Schema | `netlify/functions/create-lead.js` maps a **complete** qualifier payload to `create_lead` with explicit `"p_assigned_to": null` (key never omitted; no default rep). Campaign id and source key are env only. Sentinel's acq-command-center source shows the argument and `assigned_user_id` are nullable, and lead-intake already sends null. A set `FSHO_CRM_ASSIGNED_TO` is invalid. No update API: partial submits are not written, and an existing phone/email is `update_unavailable`, not success. `lead_form.enabled` stays false, so the live site still does not submit. |
 | 21 | Lead routing: SMS alert via Twilio | Sentinel | Done by the CRM/serverless side after create_lead (A2P 10DLC registration applies); not in site code. |
 | 22 | TCPA/SMS consent text | Covered | `site.json consent`; legal sign-off required to change. |
 | 23 | Thank-you / redirect after submit | Covered | `/step-2/` then `/thank-you/` (both noindex). |
@@ -92,7 +92,7 @@ Status key:
 
 ## Prioritized schema / gen.py changes
 
-1. **Lead routing** (#20): honeypot (#24) and `netlify/functions/create-lead.js` are in. `lead_form.enabled` stays false and `preview` stays true until Taylor approves turning the form on. Still blocked on Netlify env `FSHO_CRM_CAMPAIGN_ID`, `FSHO_CRM_ASSIGNED_TO`, and `FSHO_CRM_SOURCE_KEY`. Do not commit those values or `FSHO_CRM_CREATE_LEAD_TOKEN`. `create_lead` cannot update a row, so the first submit for a phone or email wins.
+1. **Lead routing** (#20): honeypot (#24) is in. Complete leads would be created unassigned (`p_assigned_to` JSON null, never omitted). `FSHO_CRM_CAMPAIGN_ID` and `FSHO_CRM_SOURCE_KEY` have no defaults in git. Do not set `FSHO_CRM_ASSIGNED_TO`. There is no update API, so partial submits are not written. `lead_form.enabled` stays false and `preview` stays true until Taylor approves. Do not commit `FSHO_CRM_CREATE_LEAD_TOKEN`.
 2. **Drafts** (#9): `draft: true` frontmatter, skipped in live builds; editor needs this first.
 3. **SEO length checks + OG tags** (#27, #28, #31): warnings for title > 60 / meta > 155, duplicate titles; `og_image`/`og_title`.
 4. **FAQPage JSON-LD** (#32) from each page's FAQ.
