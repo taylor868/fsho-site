@@ -1,0 +1,304 @@
+{
+  "id": "qualifier",
+  "version": 3,
+  "page": "/step-2/",
+  "start": "type",
+  "_how": "EMOTA qualifier. Contact + address come first from the hero form (partial lead saved). Order: property > O > T > M > E > A, one tap each (6 questions). next = question id, @score (grade EMOTA) or @end:<ending>. pass = true/false for the question's own letter, or {\"M\":false,...} for several letters. A letter passes only if every answer in it passed. Categories are internal; sellers never see them.",
+  "categories": {
+    "property": "Property gate (hard declines, not scored)",
+    "E": "Equity",
+    "M": "Motivation",
+    "O": "Ownership",
+    "T": "Timeframe",
+    "A": "Ability"
+  },
+  "result": {
+    "all_pass": {
+      "tier": "hot",
+      "ending": "hot",
+      "cadence": "speed-to-lead"
+    },
+    "any_fail": {
+      "tier": "nurture",
+      "ending": "nurture",
+      "cadence": "60day",
+      "fail_tag": "emota-fail-",
+      "near_miss_tag": "emota-4of5"
+    }
+  },
+  "questions": [
+    {
+      "id": "type",
+      "category": "property",
+      "label": "What kind of property is it?",
+      "options": [
+        {
+          "label": "Single-family house",
+          "value": "sfh",
+          "next": "ownership"
+        },
+        {
+          "label": "Townhouse",
+          "value": "townhouse",
+          "next": "@end:not_fit",
+          "tag": "no-townhouse"
+        },
+        {
+          "label": "Multi-family (2-4 units)",
+          "value": "multi_2_4",
+          "next": "ownership"
+        },
+        {
+          "label": "Condo",
+          "value": "condo",
+          "tag": "no-condo",
+          "next": "@end:not_fit"
+        },
+        {
+          "label": "Mobile or manufactured home",
+          "value": "mobile",
+          "tag": "no-mobile",
+          "next": "@end:not_fit"
+        },
+        {
+          "label": "Vacant land",
+          "value": "land",
+          "tag": "no-land",
+          "next": "@end:not_fit"
+        }
+      ]
+    },
+    {
+      "id": "ownership",
+      "category": "O",
+      "label": "Are you the owner, or can you make the decision to sell?",
+      "options": [
+        {
+          "label": "Yes, I'm the only owner",
+          "value": "sole_owner",
+          "pass": true,
+          "next": "timeline"
+        },
+        {
+          "label": "Yes, and all owners agree",
+          "value": "all_agree",
+          "pass": true,
+          "next": "timeline"
+        },
+        {
+          "label": "I'm an heir, executor, or POA",
+          "value": "decision_maker",
+          "pass": true,
+          "next": "timeline"
+        },
+        {
+          "label": "No, or not everyone agrees",
+          "value": "no",
+          "pass": false,
+          "tag": "not-decision-maker",
+          "next": "timeline"
+        }
+      ]
+    },
+    {
+      "id": "timeline",
+      "category": "T",
+      "label": "When do you need to sell?",
+      "options": [
+        {
+          "label": "As soon as possible",
+          "value": "asap",
+          "pass": true,
+          "next": "situation"
+        },
+        {
+          "label": "Within 30 days",
+          "value": "30d",
+          "pass": true,
+          "next": "situation"
+        },
+        {
+          "label": "In 30-90 days",
+          "value": "30_90d",
+          "pass": true,
+          "next": "situation"
+        },
+        {
+          "label": "More than 90 days out",
+          "value": "over_90d",
+          "pass": false,
+          "next": "situation"
+        },
+        {
+          "label": "No rush, just looking",
+          "value": "no_rush",
+          "pass": false,
+          "tag": "long-term",
+          "next": "situation"
+        }
+      ]
+    },
+    {
+      "id": "situation",
+      "category": "M",
+      "label": "What's the main reason you're selling?",
+      "options": [
+        {
+          "label": "Behind on payments",
+          "value": "behind",
+          "pass": true,
+          "next": "equity"
+        },
+        {
+          "label": "Inherited / probate",
+          "value": "probate",
+          "pass": true,
+          "next": "equity"
+        },
+        {
+          "label": "Needs repairs or has damage",
+          "value": "repairs",
+          "pass": true,
+          "next": "equity"
+        },
+        {
+          "label": "Tired of tenants",
+          "value": "tenants",
+          "pass": true,
+          "next": "equity"
+        },
+        {
+          "label": "Divorce, job move, or other life change",
+          "value": "life_change",
+          "pass": true,
+          "next": "equity"
+        },
+        {
+          "label": "It's been listed 90+ days, or the listing expired",
+          "value": "listed_over_90",
+          "pass": true,
+          "tag": "listed-over-90",
+          "next": "equity"
+        },
+        {
+          "label": "It's listed, but for less than 90 days",
+          "value": "listed_under_90",
+          "pass": false,
+          "tag": "listed-under-90",
+          "next": "equity"
+        },
+        {
+          "label": "Just curious what it's worth",
+          "value": "curious",
+          "pass": false,
+          "next": "equity"
+        }
+      ]
+    },
+    {
+      "id": "equity",
+      "category": "E",
+      "label": "Roughly how much is still owed on the house?",
+      "options": [
+        {
+          "label": "Nothing, it's paid off",
+          "value": "free_clear",
+          "pass": true,
+          "next": "ability"
+        },
+        {
+          "label": "Less than half of what it's worth",
+          "value": "under_half",
+          "pass": true,
+          "next": "ability"
+        },
+        {
+          "label": "More than half of what it's worth",
+          "value": "over_half",
+          "pass": true,
+          "next": "ability"
+        },
+        {
+          "label": "About what it's worth, or more",
+          "value": "underwater",
+          "pass": false,
+          "next": "ability"
+        }
+      ]
+    },
+    {
+      "id": "ability",
+      "category": "A",
+      "label": "Anything that could hold up a sale?",
+      "options": [
+        {
+          "label": "Nothing, ready to go",
+          "value": "ready",
+          "pass": true,
+          "next": "@score"
+        },
+        {
+          "label": "Some liens or back taxes, the sale should cover them",
+          "value": "liens_covered",
+          "pass": true,
+          "tag": "liens",
+          "next": "@score"
+        },
+        {
+          "label": "Probate is already open",
+          "value": "probate_open",
+          "pass": true,
+          "tag": "probate-open",
+          "next": "@score"
+        },
+        {
+          "label": "I need a little extra time to move",
+          "value": "need_time",
+          "pass": true,
+          "tag": "needs-extra-time",
+          "next": "@score"
+        },
+        {
+          "label": "Probate not started, or liens bigger than the value",
+          "value": "probate_or_liens",
+          "pass": false,
+          "tag": "probate-or-liens-over",
+          "next": "@score"
+        },
+        {
+          "label": "I can't move out by closing",
+          "value": "cant_move",
+          "pass": false,
+          "tag": "cant-move-out",
+          "next": "@score"
+        }
+      ]
+    }
+  ],
+  "endings": {
+    "hot": {
+      "headline": "You're a great fit. Expect a call in the next few minutes.",
+      "body": "Keep your phone close. Want to go faster? Call us now.",
+      "conversion": "qualified_lead"
+    },
+    "nurture": {
+      "headline": "Thanks! We've got your info.",
+      "body": "We'll check in with options that fit your timeline. No pressure.",
+      "conversion": "none"
+    },
+    "not_fit": {
+      "headline": "Thanks for the details.",
+      "body": "This one may not be a fit for us right now, but we saved your info and will reach out if anything changes.",
+      "tier": "disqualified",
+      "cadence": "none",
+      "conversion": "none"
+    }
+  },
+  "consent": {
+    "enabled": false,
+    "required": false,
+    "field": "sms_consent",
+    "text": "PLACEHOLDER: texting consent wording to be approved for compliance.",
+    "_note": "Off until the compliant wording is decided. When enabled, a non-prechecked checkbox shows on the contact screen and its value + text go in the payload."
+  }
+}
