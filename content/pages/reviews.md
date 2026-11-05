@@ -6,6 +6,6 @@ noindex: false
 ---
 <section class="hero sm"><div class="wrap"><p class="eyebrow">Reviews</p><h1>When we buy houses, we deliver.</h1>{{trust}}</div></section>
 
-<section class="wrap pad">{{videos}}{{testimonials}}<div class="ph">[PLACEHOLDER: embed live Google &amp; Facebook reviews widget, or paste verbatim reviews with permission. Not invented.]</div></section>
+<section class="wrap pad">{{videos}}{{testimonials}}{{reviews}}</section>
 
 {{cta}}
