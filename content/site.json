@@ -18,7 +18,7 @@
     "endpoint": "/.netlify/functions/create-lead",
     "crm": "fsho-crm",
     "endpoint_planned": "/.netlify/functions/create-lead",
-    "_note": "Endpoint is ignored while enabled is false: the hero form and qualifier log payloads in the browser and send nothing. Taylor must explicitly approve setting enabled to true. Leave preview true. Do not put a CRM token, campaign uuid, or source key in this file. Those are Netlify env FSHO_CRM_CREATE_LEAD_TOKEN, FSHO_API_BASE, FSHO_CRM_CAMPAIGN_ID, and FSHO_CRM_SOURCE_KEY only. Do not set FSHO_CRM_ASSIGNED_TO. When those required env vars are set, create_lead is called with explicit JSON p_assigned_to null (no default rep). Partial submits are not written, because create_lead cannot be updated with EMOTA."
+    "_note": "Endpoint is ignored while enabled is false: the hero form and qualifier log payloads in the browser and send nothing. Taylor must explicitly approve setting enabled to true. Leave preview true. Do not put a CRM token, campaign uuid, or source key in this file. Those are Netlify env FSHO_CRM_CREATE_LEAD_TOKEN, FSHO_API_BASE, FSHO_CRM_CAMPAIGN_ID, and FSHO_CRM_SOURCE_KEY only. Do not set FSHO_CRM_ASSIGNED_TO. When those env vars and FSHO_LEAD_CONTINUATION_SECRET are set, the hero step calls create_lead once with explicit JSON p_assigned_to null, and the qualifier updates that same lead. Do not set FSHO_CRM_ASSIGNED_TO. This file does not notify Slack."
   },
   "gtm_id": "GTM-WWPBQGDZ",
   "clickcease_id": "",

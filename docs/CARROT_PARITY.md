@@ -29,7 +29,7 @@ Status key:
 | 17 | Other Gravity Forms (contact, etc.) | Drop | Inventory shows only Forms 1 and 6 in real use. |
 | 18 | Form field editing | Covered | `form1_fields[]` in `site.json` (name, label, type, required, step) validated by `--check`. Form stays disabled until lead routing exists. |
 | 19 | Form entries / lead inbox | Sentinel | Leads land in FSHO CRM; not stored in the site. |
-| 20 | Lead routing: CRM | Schema | `netlify/functions/create-lead.js` maps a **complete** qualifier payload to `create_lead` with explicit `"p_assigned_to": null` (key never omitted; no default rep). Campaign id and source key are env only (`FSHO_CRM_CAMPAIGN_ID`, `FSHO_CRM_SOURCE_KEY`). A set `FSHO_CRM_ASSIGNED_TO` is invalid. No update API: partial submits are not written, and an existing phone/email is `update_unavailable`, not success. `lead_form.enabled` stays false. |
+| 20 | Lead routing: CRM | Schema | Hero partial calls `create_lead` once with explicit `"p_assigned_to": null`. Qualifier completion calls `update_lead_details` on that same lead only, replacing `seller_motivation` with full EMOTA plus attribution. Continuation is signed; a browser uuid is ignored. An already-existing phone/email is not edited. No Slack client here (`create_lead` may skip the intake chat notice). `lead_form.enabled` stays false. |
 | 21 | Lead routing: SMS alert via Twilio | Sentinel | Done by the CRM/serverless side after create_lead (A2P 10DLC registration applies); not in site code. |
 | 22 | TCPA/SMS consent text | Covered | `site.json consent`; legal sign-off required to change. |
 | 23 | Thank-you / redirect after submit | Covered | `/step-2/` then `/thank-you/` (both noindex). |
@@ -106,7 +106,7 @@ Done (preview stays on, form stays disabled):
 
 Still open:
 
-1. **Lead routing** (#20): function is in this branch and sends explicit `p_assigned_to: null` for a **complete** qualifier only. Campaign id and source key are Netlify env vars, not defaults in git. Do not set `FSHO_CRM_ASSIGNED_TO`. There is no update API, so a partial submit is not written and an existing phone/email returns `update_unavailable`. `lead_form.enabled` stays false and `preview` stays true until Taylor approves. Do not commit `FSHO_CRM_CREATE_LEAD_TOKEN`.
+1. **Lead routing** (#20): partial create is unassigned (`p_assigned_to` JSON null). Qualifier completion updates that lead's `seller_motivation` only, with a signed continuation. Do not set `FSHO_CRM_ASSIGNED_TO`. Set `FSHO_LEAD_CONTINUATION_SECRET` in Netlify and do not commit it. Slack stays on the existing CRM intake path; this repo does not post to Slack. `create_lead` may not fire that notice. `lead_form.enabled` stays false and `preview` stays true until Taylor approves.
 10. **City pages** (#50), only with real local content.
 11. **Call-tracking number swap** (#42), only if approved.
 12. **Blog** (#12), only when the first post exists.

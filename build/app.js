@@ -8,8 +8,12 @@ K.forEach(function(k){var v=q.get(k);if(v)A[k]=v});try{localStorage.setItem("fsh
 document.querySelectorAll("input[type=hidden]").forEach(function(i){if(A[i.name])i.value=A[i.name]});
 function send(d,next,f){d.page=location.pathname;d.ts=new Date().toISOString();
 var go=function(){location.href=next};if(!FSHO.endpoint){console.info("FSHO partial lead (preview, not sent):",d);return go()}
+try{var prev=JSON.parse(sessionStorage.getItem("fsho_lead")||"{}");if(prev.continuation&&prev.phone===d.phone&&prev.email===d.email)d.continuation=prev.continuation}catch(e){}
 function bad(){var n=f.querySelector(".senderr");if(!n){n=document.createElement("p");n.className="senderr";f.appendChild(n)}n.textContent="We couldn't save that. Please call or text us."}
-fetch(FSHO.endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)}).then(function(r){return r.json().then(function(b){if(b&&b.ok)return go();if(b&&b.error==="partial_deferred")return go();bad()},bad)},bad)}
+fetch(FSHO.endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)}).then(function(r){return r.json().then(function(b){
+if(!(b&&b.ok&&b.continuation))return bad();
+try{var s=JSON.parse(sessionStorage.getItem("fsho_lead")||"{}");s.continuation=b.continuation;if(d.lead_id)s.lead_id=d.lead_id;if(d.phone)s.phone=d.phone;if(d.email)s.email=d.email;sessionStorage.setItem("fsho_lead",JSON.stringify(s))}catch(e){}
+go()},bad)},bad)}
 function data(f){var o={};new FormData(f).forEach(function(v,k){o[k]=v});return o}
 function ok(f){var bad=[].find.call(f.querySelectorAll("fieldset:not([hidden]) [required]"),function(x){return!x.checkValidity()});if(bad){bad.classList.add("err");bad.focus();return false}return true}
 document.querySelectorAll("form.lead").forEach(function(f){var a=f.querySelector(".s1"),b=f.querySelector(".s2"),i=f.querySelectorAll(".steps-ind li");

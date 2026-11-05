@@ -1,5 +1,7 @@
 "use strict";
 
+const crypto = require("crypto");
+
 // Browser posts the site qualifier / Form 1 JSON here.
 // This maps that payload toward FSHO CRM create_lead. It does not claim
 // end-to-end routing works:
@@ -16,13 +18,21 @@
 //   is no default rep.
 // - Campaign id and source key come only from FSHO_CRM_CAMPAIGN_ID and
 //   FSHO_CRM_SOURCE_KEY. There is no default uuid or source key in this file.
-// - create_lead cannot update a row. A partial submit must not create one,
-//   or the later qualifier EMOTA payload could never be stored. Partial
-//   returns partial_deferred and does not call the CRM. If a complete submit
-//   finds an existing phone or email, the response is update_unavailable
-//   (not success). There is no update API to fall back on.
+// - Two steps: the hero partial calls create_lead once (explicit null
+//   assignee). The qualifier calls update_lead_details on that same lead.
+//   The browser gets a signed continuation, not a trusted lead uuid.
+//   A phone or email that already exists is not updated.
+// - update_lead_details replaces seller_motivation, so the patch is the full
+//   text (EMOTA plus attribution), not a delta. The patch has no owner or
+//   stage field. claim_lead is never called.
+// - Slack: this file does not notify. create_lead may skip the intake
+//   side effect that posts to the acquisitions chat. That hook is not
+//   reimplemented here. The partial create is the only new-lead event;
+//   the qualifier update must not send a second notification.
 
 const DEFAULT_API_BASE = "https://ruedjugpbuagyapunytd.supabase.co/functions/v1/fsho-api";
+const CONTINUATION_TTL_DEFAULT = 7200;
+const CONTINUATION_TTL_MAX = 86400;
 const HONEYPOT = "company_website";
 const STREET_SUFFIX = /^(st|street|ave|avenue|rd|road|dr|drive|ln|lane|blvd|boulevard|ct|court|cir|circle|pl|place|way|ter|terrace|pkwy|parkway|hwy|highway)$/i;
 const MAX_BODY = 32 * 1024;
@@ -44,14 +54,23 @@ const STATES = {
 };
 const ABBR = new Set(Object.keys(STATES).map((name) => STATES[name]));
 
+function hiddenValues(hidden) {
+  if (hidden && typeof hidden === "object") return [hidden.token, hidden.secret];
+  return [hidden];
+}
+
 function log(fields, token) {
   const safe = {};
   for (const key of Object.keys(fields)) {
-    if (/token|authorization|secret|phone|email|address|body/i.test(key)) continue;
+    if (/token|authorization|secret|phone|email|address|body|continuation/i.test(key)) continue;
     safe[key] = fields[key];
   }
   const line = JSON.stringify(safe);
-  if ((token && line.indexOf(token) !== -1) || /bearer\s+\S+/i.test(line)) return;
+  const hidden = hiddenValues(token);
+  for (const item of hidden) {
+    if (item && line.indexOf(item) !== -1) return;
+  }
+  if (/bearer\s+\S+/i.test(line)) return;
   console.log(line);
 }
 
@@ -198,6 +217,7 @@ function motivation(lead) {
     cadence: pick(lead.cadence),
     conversion: pick(lead.conversion),
     gclid: pick(lead.gclid),
+    consent_text: pick(lead.consent_text),
     utm,
     tags: Array.isArray(lead.tags) ? lead.tags.slice(0, 40) : "",
     answers: lead.answers && typeof lead.answers === "object" ? lead.answers : "",
@@ -297,6 +317,16 @@ function loadConfig(env) {
   if (!source) missing.push("FSHO_CRM_SOURCE_KEY");
   else if (source.length > 200 || /[\r\n]/.test(source)) invalid.push("FSHO_CRM_SOURCE_KEY");
   if (assignedSet) invalid.push("FSHO_CRM_ASSIGNED_TO");
+  const secret = typeof env.FSHO_LEAD_CONTINUATION_SECRET === "string" ? env.FSHO_LEAD_CONTINUATION_SECRET.trim() : "";
+  if (!secret) missing.push("FSHO_LEAD_CONTINUATION_SECRET");
+  else if (secret.length < 16 || /[\r\n]/.test(secret)) invalid.push("FSHO_LEAD_CONTINUATION_SECRET");
+  let ttl = CONTINUATION_TTL_DEFAULT;
+  const ttlRaw = env.FSHO_LEAD_CONTINUATION_TTL_SECONDS;
+  if (ttlRaw != null && String(ttlRaw).trim() !== "") {
+    const n = Number(ttlRaw);
+    if (!Number.isFinite(n) || n < 60 || n > CONTINUATION_TTL_MAX) invalid.push("FSHO_LEAD_CONTINUATION_TTL_SECONDS");
+    else ttl = Math.floor(n);
+  }
   const base = apiBase(env);
   if (!base.ok) invalid.push("FSHO_API_BASE");
   return {
@@ -304,10 +334,92 @@ function loadConfig(env) {
     missing,
     invalid,
     token,
+    secret,
+    ttl,
     base: base.base || "",
     campaign,
     source,
   };
+}
+
+function phoneKey(v) {
+  const d = digits(v);
+  return d.length >= 10 ? d.slice(-10) : "";
+}
+
+function emailKey(v) {
+  return pick(v).toLowerCase();
+}
+
+function b64url(buf) {
+  return Buffer.from(buf).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function fromB64url(s) {
+  const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
+  return Buffer.from(String(s).replace(/-/g, "+").replace(/_/g, "/") + pad, "base64");
+}
+
+function attrOf(lead) {
+  return {
+    gclid: pick(lead.gclid),
+    utm_source: pick(lead.utm_source),
+    utm_medium: pick(lead.utm_medium),
+    utm_campaign: pick(lead.utm_campaign),
+    utm_term: pick(lead.utm_term),
+    page: pick(lead.page),
+    lead_id: pick(lead.lead_id),
+  };
+}
+
+function signContinuation(secret, claims) {
+  const body = b64url(JSON.stringify(claims));
+  const sig = b64url(crypto.createHmac("sha256", secret).update(body).digest());
+  return body + "." + sig;
+}
+
+function verifyContinuation(secret, token, now) {
+  if (typeof token !== "string" || token.length < 20 || token.length > 4000) return { error: "continuation_invalid" };
+  const dot = token.indexOf(".");
+  if (dot <= 0 || token.indexOf(".", dot + 1) !== -1) return { error: "continuation_invalid" };
+  const body = token.slice(0, dot);
+  let given;
+  try { given = fromB64url(token.slice(dot + 1)); } catch (e) { return { error: "continuation_invalid" }; }
+  const expected = crypto.createHmac("sha256", secret).update(body).digest();
+  if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) return { error: "continuation_invalid" };
+  let claims;
+  try { claims = JSON.parse(fromB64url(body).toString("utf8")); } catch (e) { return { error: "continuation_invalid" }; }
+  if (!claims || claims.v !== 1 || !isUuid(claims.lead) || !claims.phone || !claims.email || typeof claims.exp !== "number") {
+    return { error: "continuation_invalid" };
+  }
+  if (claims.exp * 1000 <= now) return { error: "continuation_expired" };
+  return { claims };
+}
+
+function identityMatches(payload, claims) {
+  return phoneKey(payload.phone) === claims.phone && emailKey(payload.email) === claims.email;
+}
+
+function leadUuidFromCreate(data) {
+  if (typeof data === "string" && isUuid(data)) return data.trim();
+  if (!data || typeof data !== "object" || Array.isArray(data)) return "";
+  for (const key of ["id", "lead", "lead_id", "uuid", "p_lead"]) {
+    if (typeof data[key] === "string" && isUuid(data[key])) return data[key].trim();
+  }
+  return "";
+}
+
+function mergedForUpdate(payload, claims) {
+  const lead = Object.assign({}, payload);
+  const attr = claims && claims.attr || {};
+  for (const key of Object.keys(attr)) {
+    if (!pick(lead[key]) && attr[key]) lead[key] = attr[key];
+  }
+  delete lead.continuation;
+  delete lead.p_lead;
+  delete lead.lead;
+  lead.stage = "complete";
+  return lead;
 }
 
 function publicError(parsed, token) {
@@ -397,18 +509,46 @@ async function handle(event, deps) {
     const body = { ok: false, routed: false, error: "lead_routing_unconfigured" };
     if (cfg.missing.length) body.missing = cfg.missing;
     if (cfg.invalid.length) body.invalid = cfg.invalid;
-    log({ fn: "create-lead", result: "unconfigured", missing: cfg.missing, invalid: cfg.invalid }, cfg.token);
+    log({ fn: "create-lead", result: "unconfigured", missing: cfg.missing, invalid: cfg.invalid }, cfg);
     return json(503, body);
   }
 
-  // A partial row cannot be updated with EMOTA later. Do not create one.
-  if (stage === "partial") {
-    log({ fn: "create-lead", result: "partial_deferred" }, cfg.token);
-    return json(409, { ok: false, routed: false, error: "partial_deferred" });
+  const now = deps && typeof deps.now === "number" ? deps.now : Date.now();
+  const proof = typeof payload.continuation === "string" ? payload.continuation : "";
+  let checked = null;
+  if (proof) checked = verifyContinuation(cfg.secret, proof, now);
+
+  if (stage === "complete") {
+    if (!proof) return json(401, { ok: false, routed: false, error: "continuation_required" });
+    if (!checked.claims) {
+      const status = checked.error === "continuation_expired" ? 401 : 400;
+      return json(status, { ok: false, routed: false, error: checked.error });
+    }
+    if (!identityMatches(payload, checked.claims)) {
+      return json(403, { ok: false, routed: false, error: "continuation_mismatch" });
+    }
+    const text = motivation(mergedForUpdate(payload, checked.claims));
+    if (!text) return json(400, { ok: false, routed: false, error: "field_too_long" });
+    const updateBody = { p_lead: checked.claims.lead, p_patch: { seller_motivation: text } };
+    try {
+      const updated = await rpc(fetchImpl, cfg.base, "update_lead_details", updateBody, cfg.token);
+      if (updated.status >= 200 && updated.status < 300 && updated.parsed && updated.parsed.ok === true) {
+        log({ fn: "create-lead", result: "updated", status: updated.status }, cfg);
+        return json(200, { ok: true, routed: true, continuation: proof });
+      }
+      log({ fn: "create-lead", result: "crm_error", status: updated.status }, cfg);
+      return json(relayStatus(updated.status), { ok: false, routed: false, error: publicError(updated.parsed, cfg.token) });
+    } catch (e) {
+      log({ fn: "create-lead", result: "unreachable" }, cfg);
+      return json(502, { ok: false, routed: false, error: "crm_unreachable" });
+    }
   }
 
-  // null must survive JSON.stringify. Do not omit this key and do not
-  // replace it with a person.
+  if (checked && checked.claims && identityMatches(payload, checked.claims)) {
+    log({ fn: "create-lead", result: "partial_retry" }, cfg);
+    return json(200, { ok: true, routed: true, continuation: proof });
+  }
+
   const crmBody = Object.assign({}, mapped.body, {
     p_source_key: cfg.source,
     p_campaign_id: cfg.campaign,
@@ -419,39 +559,56 @@ async function handle(event, deps) {
   }
 
   try {
-    const byPhone = await rpc(fetchImpl, cfg.base, "lead_for_phone", { p: crmBody.p_phone }, cfg.token);
-    const phoneHit = interpretLookup(byPhone.status, byPhone.parsed);
-    if (phoneHit.error) {
-      log({ fn: "create-lead", result: "crm_error", status: byPhone.status }, cfg.token);
-      return json(relayStatus(phoneHit.status), { ok: false, routed: false, error: publicError(byPhone.parsed, cfg.token) });
+    const found = await findExisting(fetchImpl, cfg, crmBody);
+    if (found.error) return found.error;
+    if (found.id) {
+      log({ fn: "create-lead", result: "duplicate_existing" }, cfg);
+      return json(409, { ok: false, routed: false, error: "duplicate_existing" });
     }
-    if (phoneHit.found) {
-      log({ fn: "create-lead", result: "update_unavailable" }, cfg.token);
-      return json(409, { ok: false, routed: false, error: "update_unavailable" });
-    }
-
-    const byEmail = await rpc(fetchImpl, cfg.base, "lead_for_email", { p: crmBody.p_email }, cfg.token);
-    const emailHit = interpretLookup(byEmail.status, byEmail.parsed);
-    if (emailHit.error) {
-      log({ fn: "create-lead", result: "crm_error", status: byEmail.status }, cfg.token);
-      return json(relayStatus(emailHit.status), { ok: false, routed: false, error: publicError(byEmail.parsed, cfg.token) });
-    }
-    if (emailHit.found) {
-      log({ fn: "create-lead", result: "update_unavailable" }, cfg.token);
-      return json(409, { ok: false, routed: false, error: "update_unavailable" });
-    }
-
+    // One new-lead event. Do not also call claim_lead. A later qualifier
+    // update must not create a second row or send another notification.
     const created = await rpc(fetchImpl, cfg.base, "create_lead", crmBody, cfg.token);
-    if (created.status >= 200 && created.status < 300 && created.parsed && created.parsed.ok === true) {
-      log({ fn: "create-lead", result: "created", status: created.status }, cfg.token);
-      return json(200, { ok: true, routed: true, data: created.parsed.data == null ? null : created.parsed.data });
+    if (!(created.status >= 200 && created.status < 300 && created.parsed && created.parsed.ok === true)) {
+      log({ fn: "create-lead", result: "crm_error", status: created.status }, cfg);
+      return json(relayStatus(created.status), { ok: false, routed: false, error: publicError(created.parsed, cfg.token) });
     }
-    log({ fn: "create-lead", result: "crm_error", status: created.status }, cfg.token);
-    return json(relayStatus(created.status), { ok: false, routed: false, error: publicError(created.parsed, cfg.token) });
+    const leadId = leadUuidFromCreate(created.parsed.data);
+    if (!leadId) {
+      log({ fn: "create-lead", result: "created_without_id", status: created.status }, cfg);
+      return json(502, { ok: false, routed: false, error: "crm_rejected" });
+    }
+    const continuation = signContinuation(cfg.secret, {
+      v: 1,
+      lead: leadId,
+      phone: phoneKey(payload.phone),
+      email: emailKey(payload.email),
+      attr: attrOf(payload),
+      exp: Math.floor(now / 1000) + cfg.ttl,
+    });
+    log({ fn: "create-lead", result: "created", status: created.status }, cfg);
+    return json(200, { ok: true, routed: true, continuation });
   } catch (e) {
-    log({ fn: "create-lead", result: "unreachable" }, cfg.token);
+    log({ fn: "create-lead", result: "unreachable" }, cfg);
     return json(502, { ok: false, routed: false, error: "crm_unreachable" });
   }
+}
+
+async function findExisting(fetchImpl, cfg, crmBody) {
+  const byPhone = await rpc(fetchImpl, cfg.base, "lead_for_phone", { p: crmBody.p_phone }, cfg.token);
+  const phoneHit = interpretLookup(byPhone.status, byPhone.parsed);
+  if (phoneHit.error) {
+    log({ fn: "create-lead", result: "crm_error", status: byPhone.status }, cfg);
+    return { error: json(relayStatus(phoneHit.status), { ok: false, routed: false, error: publicError(byPhone.parsed, cfg.token) }) };
+  }
+  if (phoneHit.found) return { id: phoneHit.id };
+  const byEmail = await rpc(fetchImpl, cfg.base, "lead_for_email", { p: crmBody.p_email }, cfg.token);
+  const emailHit = interpretLookup(byEmail.status, byEmail.parsed);
+  if (emailHit.error) {
+    log({ fn: "create-lead", result: "crm_error", status: byEmail.status }, cfg);
+    return { error: json(relayStatus(emailHit.status), { ok: false, routed: false, error: publicError(byEmail.parsed, cfg.token) }) };
+  }
+  if (emailHit.found) return { id: emailHit.id };
+  return { id: "" };
 }
 
 exports.handler = async (event) => {
@@ -465,4 +622,5 @@ exports.handle = handle;
 exports.mapLead = mapLead;
 exports.parseAddress = parseAddress;
 exports.honeypotFilled = honeypotFilled;
+exports.signContinuation = signContinuation;
 exports.DEFAULT_API_BASE = DEFAULT_API_BASE;

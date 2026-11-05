@@ -61,10 +61,11 @@ The CRM token, campaign uuid, and source key live in the Netlify UI only. Never 
 - `FSHO_API_BASE`
 - `FSHO_CRM_CAMPAIGN_ID`
 - `FSHO_CRM_SOURCE_KEY`
+- `FSHO_LEAD_CONTINUATION_SECRET`
 
 `FSHO_CRM_ASSIGNED_TO` must stay unset. Any value blocks the CRM call.
 
-The function sends an unassigned lead only when the token, campaign id, and source key are set. It puts an empty assignee in that request on purpose and will not fill in a person. There is no way to update a lead, so the first form step is not saved (saving it would block the qualifier answers). If a save fails, the page says so. It does not show a thank-you. Do not turn `lead_form.enabled` on.
+The function saves the contact on the first step and the qualifier answers on the second, for that same lead only. It does not post to Slack and it does not add a Slack token. The existing acquisitions chat should be notified once, by the CRM, when the contact is created. The qualifier step must not notify again. If `create_lead` does not trigger that chat, wait for the CRM hook. Do not invent one here. A signing secret named `FSHO_LEAD_CONTINUATION_SECRET` has to be set in Netlify. Do not put the secret in the repo or in chat. If a save fails, the page says so. Do not turn `lead_form.enabled` on.
 
 ## Refuse or escalate to Taylor (don't just do it)
 

@@ -10,12 +10,15 @@ const CAMPAIGN = "11111111-1111-4111-8111-111111111111";
 const ASSIGNED = "22222222-2222-4222-8222-222222222222";
 const EXISTING = "33333333-3333-4333-8333-333333333333";
 const TOKEN = "unit-test-token";
+const SECRET = "unit-test-continuation-secret";
+const CREATED = "44444444-4444-4444-8444-444444444444";
 
 function env(extra) {
   return Object.assign({
     FSHO_CRM_CREATE_LEAD_TOKEN: TOKEN,
     FSHO_CRM_CAMPAIGN_ID: CAMPAIGN,
     FSHO_CRM_SOURCE_KEY: "google-ads",
+    FSHO_LEAD_CONTINUATION_SECRET: SECRET,
   }, extra || {});
 }
 
@@ -152,40 +155,45 @@ test("missing token is named and not echoed", async () => {
   assert.equal(calls.length, 0);
 });
 
-test("configured unassigned routing sends explicit null and no default assignee", async () => {
-  const fetchImpl = mockFetch({
+function openRoutes() {
+  return {
     lead_for_phone: { body: null },
     lead_for_email: { body: null },
-    create_lead: { body: { ok: true, data: { id: "new" } } },
-  });
-  const partialRes = await run(post(partial), fetchImpl);
-  assert.equal(partialRes.res.statusCode, 409);
-  assert.equal(partialRes.body.error, "partial_deferred");
-  assert.equal(partialRes.calls.length, 0);
-  const completeRes = await run(post(completeLead()), fetchImpl, {
-    FSHO_CRM_CAMPAIGN_ID: CAMPAIGN,
-    FSHO_CRM_SOURCE_KEY: "unit-source-key",
-  });
-  assert.equal(completeRes.body.ok, true);
-  assert.equal(completeRes.body.routed, true);
-  const raw = completeRes.calls[2].opts.body;
+    create_lead: { body: { ok: true, data: { id: CREATED } } },
+    update_lead_details: { body: { ok: true, data: null } },
+  };
+}
+
+test("partial create sends explicit null once and does not claim or notify", async () => {
+  const fetchImpl = mockFetch(openRoutes());
+  const first = await run(post(partial), fetchImpl, { FSHO_CRM_SOURCE_KEY: "unit-source-key" });
+  assert.equal(first.res.statusCode, 200);
+  assert.equal(first.body.ok, true);
+  assert.equal(typeof first.body.continuation, "string");
+  assert.equal(first.body.continuation.includes(SECRET), false);
+  assert.equal(first.body.data, undefined);
+  const raw = first.calls[2].opts.body;
   const crm = JSON.parse(raw);
-  assert.equal(Object.hasOwn(crm, "p_assigned_to"), true);
   assert.equal(crm.p_assigned_to, null);
   assert.match(raw, /"p_assigned_to":null/);
   assert.equal(crm.p_campaign_id, CAMPAIGN);
   assert.equal(crm.p_source_key, "unit-source-key");
-  assert.deepEqual(raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi), [CAMPAIGN]);
+  assert.equal(first.calls.some((c) => /claim_lead|slack/i.test(c.url)), false);
+  const n = fetchImpl.calls.length;
+  const retry = await run(post(Object.assign({}, partial, { continuation: first.body.continuation, p_lead: EXISTING })), fetchImpl);
+  assert.equal(retry.body.ok, true);
+  assert.equal(retry.body.continuation, first.body.continuation);
+  assert.equal(fetchImpl.calls.length, n);
 });
 
-test("partial does not create a row once unassigned create is allowed", async () => {
-  const fetchImpl = mockFetch({ create_lead: { body: { ok: true, data: { id: "nope" } } } });
-  const { res, body, calls } = await run(post(partial), fetchImpl, {}, OPEN);
-  assert.equal(res.statusCode, 409);
-  assert.equal(body.ok, false);
-  assert.equal(body.routed, false);
-  assert.equal(body.error, "partial_deferred");
-  assert.equal(calls.length, 0);
+test("partial retry does not create a second row", async () => {
+  const fetchImpl = mockFetch(openRoutes());
+  const first = await run(post(partial), fetchImpl);
+  const n = fetchImpl.calls.length;
+  const second = await run(post(Object.assign({}, partial, { continuation: first.body.continuation })), fetchImpl);
+  assert.equal(second.res.statusCode, 200);
+  assert.equal(second.body.continuation, first.body.continuation);
+  assert.equal(fetchImpl.calls.length, n);
 });
 
 test("create_lead maps a complete lead, stays unassigned, and keeps the full address", async () => {
@@ -194,7 +202,7 @@ test("create_lead maps a complete lead, stays unassigned, and keeps the full add
     lead_for_email: { body: { ok: true, data: null } },
     create_lead: { status: 200, body: { ok: true, data: { id: EXISTING } } },
   });
-  const { res, body, calls } = await run(post(completeLead()), fetchImpl, {
+  const { res, body, calls } = await run(post(partial), fetchImpl, {
     FSHO_CRM_CAMPAIGN_ID: CAMPAIGN,
     FSHO_CRM_SOURCE_KEY: "unit-source-key",
   }, OPEN);
@@ -231,20 +239,22 @@ test("create_lead maps a complete lead, stays unassigned, and keeps the full add
   const note = JSON.parse(crm.p_motivation);
   assert.equal(note.campaign_name, undefined);
   assert.equal(note.lead_id, "abc123");
-  assert.equal(note.stage, "complete");
-  assert.deepEqual(note.emota, { E: true, M: false, O: true, T: true, A: true });
+  assert.equal(note.stage, "partial");
+  assert.equal(note.emota, undefined);
   assert.equal(note.gclid, "g1");
   assert.deepEqual(note.utm, { source: "google", medium: "cpc", campaign: "hot", term: "sell house" });
-  assert.equal(note.page, "/step-2/");
+  assert.equal(note.page, "/");
   assert.equal(crm.p_consent_text, undefined);
-  assert.equal(body.data.id, EXISTING);
+  assert.equal(typeof body.continuation, "string");
+  assert.equal(body.data, undefined);
 });
 
 test("complete qualifier packs EMOTA and consent", async () => {
   const fetchImpl = mockFetch({
     lead_for_phone: { body: null },
     lead_for_email: { body: null },
-    create_lead: { body: { ok: true, data: { id: "new" } } },
+    create_lead: { body: { ok: true, data: { id: CREATED } } },
+    update_lead_details: { body: { ok: true, data: null } },
   });
   const complete = Object.assign({}, partial, {
     stage: "complete",
@@ -259,10 +269,24 @@ test("complete qualifier packs EMOTA and consent", async () => {
     tier: "nurture",
     cadence: "60day",
     conversion: "none",
+    gclid: "",
+    p_lead: EXISTING,
   });
-  const { calls } = await run(post(complete), fetchImpl, {}, OPEN);
-  const crm = JSON.parse(calls[2].opts.body);
-  const note = JSON.parse(crm.p_motivation);
+  const continuation = fn.signContinuation(SECRET, {
+    v: 1, lead: CREATED, phone: "3305551234", email: "pat@example.com",
+    attr: { gclid: "g1", utm_source: "google", utm_medium: "cpc", utm_campaign: "hot", utm_term: "sell house", page: "/", lead_id: "abc123" },
+    exp: Math.floor(Date.now() / 1000) + 600,
+  });
+  const { body, calls } = await run(post(Object.assign({}, complete, { continuation })), fetchImpl, {}, OPEN);
+  assert.equal(body.ok, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url.endsWith("/rpc/update_lead_details"), true);
+  assert.equal(calls.some((c) => /claim_lead|create_lead|slack/i.test(c.url)), false);
+  const crm = JSON.parse(calls[0].opts.body);
+  assert.deepEqual(Object.keys(crm).sort(), ["p_lead", "p_patch"]);
+  assert.deepEqual(Object.keys(crm.p_patch), ["seller_motivation"]);
+  assert.equal(crm.p_lead, CREATED);
+  const note = JSON.parse(crm.p_patch.seller_motivation);
   assert.equal(note.form_version, 3);
   assert.deepEqual(note.emota, complete.emota);
   assert.deepEqual(note.failed, ["M"]);
@@ -270,8 +294,9 @@ test("complete qualifier packs EMOTA and consent", async () => {
   assert.equal(note.tier, "nurture");
   assert.equal(note.cadence, "60day");
   assert.equal(note.conversion, "none");
-  assert.equal(crm.p_consent_text, "You agree to texts.");
-  assert.equal(crm.p_consent_url, "https://fairandsimplehomeoffer.com/step-2/");
+  assert.equal(note.gclid, "g1");
+  assert.equal(note.consent_text, "You agree to texts.");
+  assert.equal(JSON.stringify(crm).includes(EXISTING), false);
 });
 
 test("existing phone does not look like a saved EMOTA update", async () => {
@@ -279,13 +304,14 @@ test("existing phone does not look like a saved EMOTA update", async () => {
     lead_for_phone: { body: EXISTING },
     create_lead: { body: { ok: true, data: { id: "should-not" } } },
   });
-  const { res, body, calls } = await run(post(completeLead()), fetchImpl, {}, OPEN);
+  const { res, body, calls } = await run(post(partial), fetchImpl, {}, OPEN);
   assert.equal(res.statusCode, 409);
   assert.equal(body.ok, false);
   assert.equal(body.routed, false);
-  assert.equal(body.error, "update_unavailable");
-  assert.equal(body.data, undefined);
+  assert.equal(body.error, "duplicate_existing");
+  assert.equal(body.continuation, undefined);
   assert.equal(calls.length, 1);
+  assert.equal(calls.some((c) => c.url.includes("update_lead_details")), false);
 });
 
 test("existing email does not look like a saved EMOTA update", async () => {
@@ -293,19 +319,21 @@ test("existing email does not look like a saved EMOTA update", async () => {
     lead_for_phone: { body: { ok: true, data: null } },
     lead_for_email: { body: { ok: true, data: EXISTING } },
   });
-  const { body, calls } = await run(post(completeLead()), fetchImpl, {}, OPEN);
+  const { body, calls } = await run(post(partial), fetchImpl, {}, OPEN);
   assert.equal(body.ok, false);
-  assert.equal(body.error, "update_unavailable");
+  assert.equal(body.error, "duplicate_existing");
+  assert.equal(body.continuation, undefined);
   assert.equal(calls.length, 2);
+  assert.equal(calls.some((c) => c.url.includes("update_lead_details")), false);
 });
 
 test("lookup 404 still creates an unassigned complete lead", async () => {
   const fetchImpl = mockFetch({
     lead_for_phone: { status: 404, body: { error: "not_found" } },
     lead_for_email: { status: 404, body: { error: "not_found" } },
-    create_lead: { body: { ok: true, data: null } },
+    create_lead: { body: { ok: true, data: { id: CREATED } } },
   });
-  const { res, calls } = await run(post(completeLead()), fetchImpl, {}, OPEN);
+  const { res, calls } = await run(post(partial), fetchImpl, {}, OPEN);
   assert.equal(res.statusCode, 200);
   assert.equal(calls[2].url.endsWith("/rpc/create_lead"), true);
   assert.equal(JSON.parse(calls[2].opts.body).p_assigned_to, null);
@@ -316,7 +344,7 @@ test("CRM 401 is relayed without the token or upstream body dump", async () => {
   const fetchImpl = mockFetch({
     lead_for_phone: { status: 401, body: { error: "bad " + secret } },
   });
-  const { res, body, calls, logs } = await run(post(completeLead()), fetchImpl, { FSHO_CRM_CREATE_LEAD_TOKEN: secret }, OPEN);
+  const { res, body, calls, logs } = await run(post(partial), fetchImpl, { FSHO_CRM_CREATE_LEAD_TOKEN: secret }, OPEN);
   assert.equal(res.statusCode, 401);
   assert.equal(body.error, "crm_rejected");
   assert.equal(JSON.stringify(body).includes(secret), false);
@@ -341,7 +369,7 @@ test("custom API base is used when it is https and has no query", async () => {
     create_lead: { body: { ok: true, data: null } },
   });
   const base = "https://example.test/functions/v1/fsho-api";
-  const { calls } = await run(post(completeLead()), fetchImpl, { FSHO_API_BASE: base + "/" }, OPEN);
+  const { calls } = await run(post(partial), fetchImpl, { FSHO_API_BASE: base + "/" }, OPEN);
   assert.equal(calls[2].url, base + "/rpc/create_lead");
 });
 
@@ -356,7 +384,7 @@ test("bad API base is 503 and does not call CRM", async () => {
 
 test("network failure is 502 and does not include the URL", async () => {
   const fetchImpl = mockFetch({ lead_for_phone: { throw: true } });
-  const { res, body } = await run(post(completeLead()), fetchImpl, {}, OPEN);
+  const { res, body } = await run(post(partial), fetchImpl, {}, OPEN);
   assert.equal(res.statusCode, 502);
   assert.equal(body.error, "crm_unreachable");
   assert.equal(JSON.stringify(body).includes("supabase"), false);
@@ -377,10 +405,11 @@ test("a CRM rejection of a null assignee is not retried and is not success", asy
     lead_for_email: { body: null },
     create_lead: { status: 400, body: { error: "assigned_to required" } },
   });
-  const { res, body, calls } = await run(post(completeLead()), fetchImpl, {}, OPEN);
+  const { res, body, calls } = await run(post(partial), fetchImpl, {}, OPEN);
   assert.equal(res.statusCode, 400);
   assert.equal(body.ok, false);
   assert.equal(body.routed, false);
+  assert.equal(body.continuation, undefined);
   assert.equal(calls.length, 3);
   assert.match(calls[2].opts.body, /"p_assigned_to":null/);
   assert.equal(JSON.stringify(calls).includes(ASSIGNED), false);
@@ -431,11 +460,54 @@ test("no-comma address is still mappable and keeps the full line", () => {
   assert.equal(mapped.body.p_postal, "44308");
 });
 
+test("tampered or expired continuation cannot update any lead", async () => {
+  const fetchImpl = mockFetch({ update_lead_details: { body: { ok: true, data: null } } });
+  const continuation = fn.signContinuation(SECRET, {
+    v: 1, lead: CREATED, phone: "3305551234", email: "pat@example.com", attr: { gclid: "g1" },
+    exp: Math.floor(Date.now() / 1000) + 600,
+  });
+  const tampered = continuation.slice(0, -1) + (continuation.endsWith("a") ? "b" : "a");
+  const bad = await run(post(completeLead({ continuation: tampered, p_lead: EXISTING })), fetchImpl);
+  assert.equal(bad.body.error, "continuation_invalid");
+  assert.equal(bad.calls.length, 0);
+  const expired = fn.signContinuation(SECRET, {
+    v: 1, lead: CREATED, phone: "3305551234", email: "pat@example.com", attr: {},
+    exp: Math.floor(Date.now() / 1000) - 10,
+  });
+  const old = await run(post(completeLead({ continuation: expired })), fetchImpl);
+  assert.equal(old.res.statusCode, 401);
+  assert.equal(old.body.error, "continuation_expired");
+  assert.equal(old.calls.length, 0);
+  const mismatch = await run(post(completeLead({ continuation, email: "other@example.com" })), fetchImpl);
+  assert.equal(mismatch.res.statusCode, 403);
+  assert.equal(mismatch.body.error, "continuation_mismatch");
+  assert.equal(mismatch.calls.length, 0);
+});
+
+test("missing continuation secret does not call CRM or echo the secret", async () => {
+  const fetchImpl = mockFetch(openRoutes());
+  const { res, body, calls, logs } = await run(post(partial), fetchImpl, { FSHO_LEAD_CONTINUATION_SECRET: "" });
+  assert.equal(res.statusCode, 503);
+  assert.deepEqual(body.missing, ["FSHO_LEAD_CONTINUATION_SECRET"]);
+  assert.equal(calls.length, 0);
+  assert.equal(JSON.stringify(body).includes(SECRET), false);
+  assert.equal(logs.join("\n").includes(SECRET), false);
+});
+
+test("source does not add a Slack client or claim_lead", () => {
+  const src = fs.readFileSync(path.join(__dirname, "../netlify/functions/create-lead.js"), "utf8");
+  assert.equal(src.includes("/rpc/claim_lead"), false);
+  assert.equal(src.includes("hooks.slack"), false);
+  assert.equal(/SLACK_[A-Z0-9]/.test(src), false);
+});
+
 test("client does not treat a failed save as success", () => {
   const app = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
   const qualifier = fs.readFileSync(path.join(__dirname, "qualifier.js"), "utf8");
   assert.equal(app.includes(".then(go,go)"), false);
-  assert.equal(app.includes('b.error==="partial_deferred"'), true);
+  assert.equal(app.includes("b.continuation"), true);
+  assert.equal(app.includes("partial_deferred"), false);
+  assert.equal(qualifier.includes("d.continuation"), true);
   assert.equal(app.includes("b&&b.ok"), true);
   assert.equal(qualifier.includes("keepalive:true"), false);
   assert.ok(qualifier.indexOf("function saved") < qualifier.indexOf("fetch(u"));
