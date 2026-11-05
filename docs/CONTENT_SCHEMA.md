@@ -10,7 +10,9 @@ content/
   pages/<slug>.md      one file per page (home.md = "/")
   markets/<slug>.json  one file per state landing page
   redirects.json       301s
-  media/               images (.webp, each < 200 KB; favicon.png allowed)
+  media/media.json     alt text and pixel size for each WebP
+  media/*.webp         images, each < 200 KB
+  media/favicon.png    the only non-WebP file; not a media.json row
 ```
 
 ## content/site.json
@@ -46,9 +48,11 @@ content/
 | `steps[]` | `{n, title, text}` | 3-step process cards. |
 | `comparison` | `{headers[3], rows[[label, us, market, listing]], note}` | Comparison table. |
 | `testimonials[]` | `{quote, name}` | Default testimonials (quote without curly quotes). |
+| `reviews[]` | `{quote, name, source, date}` | Optional static reviews for `{{reviews}}`. Leave `[]` until a real review is pasted with permission. No third-party widget. |
 | `video_ids[]` | string | YouTube IDs; click-to-load thumbnails. |
 | `faq[]` | `{q, a}` | Site-wide FAQ. |
 | `cta` | `{heading, text, button}` | Bottom call-to-action band default. |
+| `form1_fields[]` | `{name, label, type, required, step, autocomplete?, placeholder?, pair?}` | Hero form (Carrot Form 1). `type` is `text`, `tel`, or `email`. `required` is a boolean. `step` is `1` (property) or `2` (contact). Two consecutive fields may share `pair` (the first/last name row). Must include `address` (step 1) and `first`, `phone`, `email` (step 2). gclid/UTM hidden fields stay in the generator. The form stays off while `lead_form.enabled` is false. |
 | `step2_fields[]` | `{name, label, type: select\|textarea, options[]}` | Step 2 form. Placeholder until the real Carrot Form 6 fields are confirmed. |
 
 ## content/pages/&lt;slug&gt;.md
@@ -57,16 +61,20 @@ YAML frontmatter, then the body.
 
 ```markdown
 ---
-title: "FAQ | Fair & Simple Home Offer"      # required, <title>
-meta_description: "Answers about ..."        # required (may be "")
+title: "FAQ | Fair & Simple Home Offer"      # required, <title>; warn if longer than 60
+meta_description: "Answers about ..."        # required (may be ""); warn if longer than 155
 template: basic                              # required: home | situation | basic
 slug: faq                                    # optional, defaults to filename; home.md -> ""
 hero_headline: "..."                         # required for home/situation
 hero_sub: "..."                              # required for home/situation (HTML ok)
-cta_label: "Ready to see your options?"      # optional, informational
+cta_label: "Ready to see your options?"      # optional; default heading for {{cta}} on this page
 noindex: false                               # true = always noindex + left out of sitemap
 sitemap: true                                # optional, false = left out of sitemap
-faq:                                         # optional; overrides site.json faq for {{faq}} on this page
+# draft: true                                # optional; omit the line when published (never write draft: false)
+# canonical: "https://fairandsimplehomeoffer.com/faq/"  # optional absolute https URL
+# og_title: "FAQ"                            # optional; defaults to title
+# og_image: "/logo.webp"                     # optional path or https URL; file must be in media.json
+faq:                                         # optional; overrides site.json faq for {{faq}} and FAQPage JSON-LD
   - q: "Question?"
     a: "Answer."
 ---
@@ -82,7 +90,23 @@ Templates:
 
 Body: blocks separated by blank lines. A block starting with `<` or `{{` is passed through as HTML. Otherwise it's minimal markdown: `#`/`##` headings, `- ` bullet lists, `**bold**`, `[link](/url/)`, and paragraphs.
 
-Shortcodes: `{{qualifier}}` `{{situations}}` `{{steps}}` `{{comparison}}` `{{videos}}` `{{testimonials}}` `{{trust}}` `{{faq}}` `{{faq:5}}` (first N) `{{cta}}` `{{cta:Custom heading}}` `{{states}}` (links to every market) `{{step2_form}}` `{{phone}}`. Unknown shortcodes fail the build.
+Shortcodes: `{{qualifier}}` `{{situations}}` `{{steps}}` `{{comparison}}` `{{videos}}` `{{testimonials}}` `{{reviews}}` `{{trust}}` `{{faq}}` `{{faq:5}}` (first N) `{{cta}}` `{{cta:Custom heading}}` `{{states}}` (links to every market that this build includes) `{{step2_form}}` `{{qualifier_form}}` `{{phone}}`. Unknown shortcodes fail the build.
+
+`{{cta}}` uses this page's `cta_label` when set, otherwise `site.json` `cta.heading`. `{{cta:Custom heading}}` still wins. Market pages pass `cta_label` the same way.
+
+`draft` (pages and markets):
+- The key is exactly `draft`. The only allowed value is boolean `true`.
+- Omit the key when the page is published. `--check` rejects `draft: false` and any other value.
+- Preview builds include drafts: a normal `gen.py` run while `site.json` `preview` is true, and Netlify `deploy-preview`, `branch-deploy`, and `netlify dev` (`CONTEXT`).
+- Live/prod builds skip drafts: `gen.py --live`, Netlify production (`CONTEXT=production`), and any run with `preview` false (Netlify preview contexts still include drafts so an editor can see them before publish).
+- Drafts are `noindex` and left out of the sitemap even when the preview build emits them.
+- The home page (empty slug, `content/pages/home.md`) cannot be `draft`. `--check` errors with `home page cannot be draft; the site would have no index`.
+
+`slug: 404` is special: that page is written to `dist/404.html` (not `dist/404/index.html`), forced `noindex`, and wired as the host 404 (`dist/_redirects` ends with `/* /404.html 404`, plus Apache `ErrorDocument` and nginx `error_page`).
+
+Open Graph / Twitter: every page emits `og:title`, `og:description`, `og:url`, `og:type`, `og:site_name`, `twitter:card`, `twitter:title`, and `twitter:description`. `og_title` defaults to `title`. `og_image` is emitted only when set (absolute URL, or a root path such as `/logo.webp`). `twitter:card` is `summary_large_image` when an image is set, otherwise `summary`.
+
+FAQPage JSON-LD is emitted next to the sitewide RealEstateAgent block when the page has its own `faq` items, or when the body renders `{{faq}}` / `{{faq:N}}` and falls back to `site.json` `faq`. A capped shortcode (`{{faq:5}}` with no unlimited `{{faq}}` on the same page) limits the schema to those items. Text is JSON-escaped.
 
 ## content/markets/&lt;slug&gt;.json
 
@@ -102,15 +126,34 @@ Shortcodes: `{{qualifier}}` `{{situations}}` `{{steps}}` `{{comparison}}` `{{vid
 }
 ```
 
-Required: `state, slug, title, meta_description, headline, hero_sub`. `cities` (strings) renders a "Cities we buy in" line when non-empty. `local_note` (HTML) replaces the placeholder box. `testimonials` (`{quote,name}`) replaces the site default when non-empty. Market order on /service-areas/ = filename order.
+Required: `state, slug, title, meta_description, headline, hero_sub`. `cities` (strings) renders a "Cities we buy in" line when non-empty. `local_note` (HTML) replaces the placeholder box. `testimonials` (`{quote,name}`) replaces the site default when non-empty. Market order on /service-areas/ = filename order. Optional `draft: true` follows the same rule as pages (omit the key when the state page is published; never write `draft: false`). Optional `canonical` (absolute https URL), `og_title`, and `og_image` work the same as page frontmatter.
 
 ## content/redirects.json
 
 `[{"from": "/old-path/", "to": "/new-path/", "code": 301}]`. Both paths start with `/`. Each produces a forced Netlify rule (with and without trailing slash), Apache/nginx copies, and a noindex meta-refresh stub. `--check` rejects a redirect whose `from` is a live page.
 
+## content/media/media.json
+
+Array of objects. One row per content image:
+
+```json
+[
+  { "file": "logo.webp", "alt": "Fair & Simple Home Offer", "width": 320, "height": 122 }
+]
+```
+
+- `file` is the basename under `content/media/`. WebP only, under 200 KB. No folders.
+- `width` and `height` are the image's pixel size (positive integers). The generator writes those attributes on `<img>` tags for that file. Header/footer CSS still controls how big the logo looks.
+- `alt` is required for a clean check. A missing or blank `alt` prints `WARN` and does not fail `--check`. The header logo uses this alt. A footer or other tag that already has `alt=""` keeps it.
+- A WebP referenced by `site.json` `logo`, an `<img src>`, or `og_image` with no row is an `ERROR`. `favicon.png` is the only image that is not a media.json row.
+- A WebP sitting in the folder with no row prints `WARN`.
+- `media.json` is editor data. It is not copied to `dist/`.
+
 ## Validation (`--check`)
 
-Fails on: missing required fields, bad template, bad slug characters, duplicate slugs across pages and markets, bad colors/phone, malformed FAQ/testimonials, bad redirects, images over 200 KB or not .webp.
+Fails (`ERROR`, exit 1) on: missing required fields, bad template, bad slug characters, duplicate slugs across pages and markets, bad colors/phone, malformed FAQ/testimonials/reviews/form1 fields, `draft` other than `true`, `draft` on the home page, a bad `canonical`, bad redirects, images over 200 KB or not .webp (except `favicon.png`), a media.json row that is not a real WebP, and a referenced image with no media.json row.
+
+Warns (`WARN`, exit 0) on: `title` longer than 60 characters, `meta_description` longer than 155, a duplicate `title`, a media.json row with no alt, and a WebP that is not listed in media.json.
 
 ## Qualifier form: `content/forms/qualifier.json` (EMOTA, version 3)
 
@@ -206,8 +249,12 @@ CRM body (the function builds this; do not post it from the browser):
 **This is not end-to-end routing.**
 
 - Unassigned create is the configured mode. Sentinel reported the contract from acq-command-center (those files are not in this repo): `db/006_functions.sql` `create_lead` argument `p_assigned_to uuid` has no DEFAULT and the function inserts that argument; `db/001_core.sql` `assigned_user_id uuid` is a nullable foreign key; `supabase/functions/fsho-api/index.ts` forwards the request args to `asAccount.rpc` with no null check; `supabase/functions/lead-intake/index.ts` sets `assignedTo` to `null` on purpose ("NOBODY") and calls `create_lead` with `p_assigned_to: assignedTo`. In that schema, "Required" means the argument has no DEFAULT, not that the column is NOT NULL. This function therefore sends `"p_assigned_to": null` and does not drop the key. A configured `FSHO_CRM_ASSIGNED_TO` is **503** `lead_routing_unconfigured` with `invalid: ["FSHO_CRM_ASSIGNED_TO"]`, which is a different failure from a missing campaign or source key.
-- `create_lead` cannot update a row. A `stage: "partial"` submit is not written. When unassigned create is allowed, that response is **409** `{ "ok": false, "routed": false, "error": "partial_deferred" }`. The browser may continue to the qualifier. It must not treat that as a saved lead.
-- The only CRM create is `stage: "complete"`, and it includes EMOTA in `p_motivation`. Before that, the function calls `lead_for_phone` and then `lead_for_email`. If either returns an id, the response is **409** `{ "ok": false, "routed": false, "error": "update_unavailable" }`. `create_lead` is not called, and the page shows an error instead of the success ending. There is no update API to attach EMOTA to an existing row.
+- `create_lead` cannot update a row. A `stage: "partial"` submit is not written. The response is **409** `{ "ok": false, "routed": false, "error": "partial_deferred" }`. The browser may continue to the qualifier. It must not treat that as a saved lead.
+- The only CRM create is `stage: "complete"`, and it includes EMOTA in `p_motivation`. Before that, the function calls `lead_for_phone` and then `lead_for_email`. If either returns an id, the response is **409** `{ "ok": false, "routed": false, "error": "update_unavailable" }`. `create_lead` is not called, and the page shows an error instead of the success ending.
+
+**Two-stage capture is fail-closed.** The documented calls this token may make are `create_lead`, `lead_for_phone`, and `lead_for_email`. `claim_lead` is the rep action and must not be called by the site. Nothing in that set can change `p_motivation` on an existing row.
+
+Missing operation, same narrow token, no new scope: an update RPC (for example `update_lead`) that takes the existing lead uuid plus a new `p_motivation` and does not change `assigned_user_id`. Safe sequence once that exists: create on the hero submit with contact, gclid, and UTM only; save the returned uuid; on qualifier completion call the update with the full EMOTA JSON. Until that RPC exists, the site creates only the complete payload, and a second submit for the same phone or email fails closed instead of looking saved.
 - A CRM error or a network failure is `ok: false`. The hero form stays put and shows "We couldn't save that." The qualifier shows "We couldn't save your answers." A Google Ads conversion fires only after `ok: true`.
 
 Success from the CRM is `{ "ok": true, "data": ... }`. The function returns that as `{ "ok": true, "routed": true, "data": ... }`. CRM errors are `{ "error": "..." }` with HTTP 400, 401, 403, or 500; the function relays those statuses and replaces any error text that could carry a secret.

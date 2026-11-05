@@ -6,10 +6,13 @@
 
 # Preview guards (noindex, robots Disallow, X-Robots-Tag) are written by gen.py
 # into dist/_headers while content/site.json "preview" is true.
+# Custom 404: gen.py writes dist/404.html and appends `/* /404.html 404` to dist/_redirects.
+# Draft pages (frontmatter draft: true) are included on Netlify deploy-preview,
+# branch-deploy, and netlify dev, and skipped when CONTEXT=production.
 #
 # create-lead (draft only; lead_form.enabled stays false until Taylor approves).
 # create_lead is sent with explicit JSON p_assigned_to null. Do not set an assignee.
-# Do not default the campaign uuid or source key here. The form stays disabled until Taylor approves.
+# Do not default the campaign uuid or source key here.
 # Set these in the Netlify UI. Never commit the values.
 #   FSHO_CRM_CREATE_LEAD_TOKEN
 #   FSHO_API_BASE

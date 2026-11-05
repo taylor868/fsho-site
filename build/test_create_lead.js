@@ -442,12 +442,49 @@ test("client does not treat a failed save as success", () => {
   assert.equal(qualifier.includes("b&&b.ok?saved():failed()"), true);
 });
 
-test("hard decline keeps null EMOTA in motivation", () => {
-  const mapped = fn.mapLead(Object.assign({}, partial, {
-    stage: "complete", emota: null, failed: null, tier: "disqualified",
-  }));
-  const note = JSON.parse(mapped.body.p_motivation);
-  assert.equal(note.emota, null);
-  assert.equal(note.failed, null);
-  assert.equal(note.tier, "disqualified");
+test("qualifier pass, fail, and hard-decline endings keep EMOTA, UTM, and gclid", () => {
+  const base = {
+    stage: "complete", form_version: 3, lead_id: "abc123", first: "Pat", last: "Seller",
+    phone: "(330) 555-1234", email: "pat@example.com", address: "123 Main St, Akron, OH 44308",
+    page: "/step-2/", gclid: "g1",
+    utm_source: "google", utm_medium: "cpc", utm_campaign: "hot", utm_term: "sell house",
+    answers: { type: "sfh", ownership: "sole_owner", timeline: "asap", situation: "repairs", equity: "free_clear", ability: "ready" },
+    tags: ["emota-fail-M"],
+  };
+  function noteOf(extra) {
+    const mapped = fn.mapLead(Object.assign({}, base, extra));
+    assert.equal(mapped.ok, true);
+    const raw = mapped.body.p_motivation;
+    const note = JSON.parse(raw);
+    assert.equal(note.gclid, "g1");
+    assert.deepEqual(note.utm, { source: "google", medium: "cpc", campaign: "hot", term: "sell house" });
+    assert.equal(note.form_version, 3);
+    assert.equal(typeof note.answers.type, "string");
+    return { raw, note };
+  }
+  const pass = noteOf({
+    emota: { E: true, M: true, O: true, T: true, A: true }, failed: [], tags: [],
+    tier: "hot", cadence: "speed-to-lead", conversion: "qualified_lead",
+  });
+  assert.match(pass.raw, /"emota":\{"E":true,"M":true,"O":true,"T":true,"A":true\}/);
+  assert.equal(pass.note.tier, "hot");
+  assert.equal(pass.note.cadence, "speed-to-lead");
+  assert.equal(pass.note.conversion, "qualified_lead");
+  const fail = noteOf({
+    emota: { E: true, M: false, O: true, T: true, A: true }, failed: ["M"],
+    tier: "nurture", cadence: "60day", conversion: "none",
+  });
+  assert.deepEqual(fail.note.failed, ["M"]);
+  assert.equal(fail.note.tier, "nurture");
+  assert.equal(fail.note.cadence, "60day");
+  assert.equal(fail.note.conversion, "none");
+  const stop = noteOf({
+    emota: null, failed: null, tags: ["no-condo"], answers: { type: "condo" },
+    tier: "disqualified", cadence: "none", conversion: "none",
+  });
+  assert.equal(stop.note.emota, null);
+  assert.equal(stop.note.failed, null);
+  assert.equal(stop.note.tier, "disqualified");
+  assert.equal(stop.note.cadence, "none");
+  assert.equal(stop.note.conversion, "none");
 });
