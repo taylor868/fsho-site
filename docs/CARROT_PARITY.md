@@ -29,11 +29,11 @@ Status key:
 | 17 | Other Gravity Forms (contact, etc.) | Drop | Inventory shows only Forms 1 and 6 in real use. |
 | 18 | Form field editing | Covered | `form1_fields[]` in `site.json` (name, label, type, required, step) validated by `--check`. Form stays disabled until lead routing exists. |
 | 19 | Form entries / lead inbox | Sentinel | Leads land in FSHO CRM; not stored in the site. |
-| 20 | Lead routing: CRM | Schema | Not in this branch. `cursor/carrot-lead-routing-f5f7` maps the site payload to FSHO CRM `create_lead` and adds the honeypot. Awaiting verified CRM mapping (campaign, assignee, source). The create_lead token is not the blocker. Form stays disabled here. |
+| 20 | Lead routing: CRM | Schema | Hero partial calls `create_lead` once with explicit `"p_assigned_to": null`. Qualifier completion calls `update_lead_details` on that same lead only, replacing `seller_motivation` with full EMOTA plus attribution. Continuation is signed; a browser uuid is ignored. An already-existing phone/email is not edited. No Slack client here (`create_lead` may skip the intake chat notice). `lead_form.enabled` stays false. |
 | 21 | Lead routing: SMS alert via Twilio | Sentinel | Done by the CRM/serverless side after create_lead (A2P 10DLC registration applies); not in site code. |
 | 22 | TCPA/SMS consent text | Covered | `site.json consent`; legal sign-off required to change. |
 | 23 | Thank-you / redirect after submit | Covered | `/step-2/` then `/thank-you/` (both noindex). |
-| 24 | Spam protection (honeypot/captcha) | Schema | Add honeypot field + server-side check in the function; no captcha script. |
+| 24 | Spam protection (honeypot/captcha) | Covered | Hidden `company_website` field on the hero form, qualifier, and step-2 form. `create-lead` returns 400 and does not call the CRM when it is filled. No captcha script. |
 | 25 | Media library: upload images | Sentinel | Upload converts to WebP < 200 KB into `content/media/`; `--check` enforces. |
 | 26 | Media: alt text, dimensions | Covered | `content/media/media.json` array of `{file, alt, width, height}`. `file` is a WebP basename under 200 KB. gen.py emits width/height. Missing alt warns. A referenced WebP with no row errors. `favicon.png` stays the one non-WebP exception and is not a row. |
 | 27 | SEO: title tag | Covered | `title` frontmatter. `--check` warns (exit 0) when a title is longer than 60 characters or duplicated. |
@@ -83,8 +83,8 @@ Status key:
 
 ## Counts
 
-- Covered by content/ now: 41 (incl. #57 sticky bar)
-- Needs schema + gen.py change: 6 (incl. #62, shared with Sentinel)
+- Covered by content/ now: 42 (incl. #57 sticky bar, #24 honeypot)
+- Needs schema + gen.py change: 5 (incl. #62, shared with Sentinel)
 - Sentinel-side: 12 (incl. #62)
 - Drop (unused fat): 13 (incl. #57 popups)
 
@@ -102,10 +102,11 @@ Done (preview stays on, form stays disabled):
 7. **Form 1 fields in schema** (#18). Real Form 6 fields (#16) still wait until confirmed.
 8. **Static reviews** (#45): `reviews[]` + `{{reviews}}`. No quotes invented.
 9. **Per-page CTA wiring** (#6) and optional `canonical` override (#29).
+24. **Honeypot** (#24): hidden `company_website` on the hero, qualifier, and step-2 forms. The function rejects it. No captcha.
 
 Still open:
 
-1. **Lead routing** (#20, #24): on `cursor/carrot-lead-routing-f5f7`, not this branch. Awaiting verified CRM mapping (campaign, assignee, source). Do not treat the create_lead token as missing, and do not invent mapping values here.
+1. **Lead routing** (#20): partial create is unassigned (`p_assigned_to` JSON null). Qualifier completion updates that lead's `seller_motivation` only, with a signed continuation. Do not set `FSHO_CRM_ASSIGNED_TO`. Set `FSHO_LEAD_CONTINUATION_SECRET` in Netlify and do not commit it. Slack stays on the existing CRM intake path; this repo does not post to Slack. `create_lead` may not fire that notice. `lead_form.enabled` stays false and `preview` stays true until Taylor approves.
 10. **City pages** (#50), only with real local content.
 11. **Call-tracking number swap** (#42), only if approved.
 12. **Blog** (#12), only when the first post exists.

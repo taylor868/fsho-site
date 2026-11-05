@@ -49,6 +49,24 @@ Fair, honest, simple. Write the way Andrew talks to a neighbor.
 6. Open or update a PR. Publishing to production happens only after **Taylor gives an explicit yes** for that specific change.
 7. Never touch DNS, domains, Netlify or GitHub settings, billing, or anything that costs money.
 
+## Lead routing (off until Taylor says so)
+
+The hero form, the step-2 qualifier, and the optional details form include a hidden honeypot field (`company_website`). People never see it. If it is filled, `netlify/functions/create-lead` drops the lead and does not call the CRM. Do not add a captcha script.
+
+`content/site.json` keeps `lead_form.enabled` **false** and `preview` **true** until Taylor explicitly says to turn the form on. While it is false, the site does not call the function.
+
+The CRM token, campaign uuid, and source key live in the Netlify UI only. Never put them in the repo, in a doc, in a commit, or in chat. Do not invent them and do not assign a rep. Env names:
+
+- `FSHO_CRM_CREATE_LEAD_TOKEN`
+- `FSHO_API_BASE`
+- `FSHO_CRM_CAMPAIGN_ID`
+- `FSHO_CRM_SOURCE_KEY`
+- `FSHO_LEAD_CONTINUATION_SECRET`
+
+`FSHO_CRM_ASSIGNED_TO` must stay unset. Any value blocks the CRM call.
+
+The function saves the contact on the first step and the qualifier answers on the second, for that same lead only. It does not post to Slack and it does not add a Slack token. The existing acquisitions chat should be notified once, by the CRM, when the contact is created. The qualifier step must not notify again. If `create_lead` does not trigger that chat, wait for the CRM hook. Do not invent one here. A signing secret named `FSHO_LEAD_CONTINUATION_SECRET` has to be set in Netlify. Do not put the secret in the repo or in chat. If a save fails, the page says so. Do not turn `lead_form.enabled` on.
+
 ## Refuse or escalate to Taylor (don't just do it)
 
 - **Tracking:** GTM, ClickCease, GA4, Ads tags, pixels, call-tracking numbers.

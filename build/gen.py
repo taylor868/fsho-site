@@ -377,6 +377,15 @@ def check(site, pages, markets, redirects, errs):
     for c in ('orange', 'navy'):
         if not re.fullmatch(r'#[0-9A-Fa-f]{6}', str(site.get('brand', {}).get(c, ''))): E.append(f'content/site.json: brand.{c} must be #RRGGBB')
     if not re.fullmatch(r'\+1\d{10}', str(site.get('tel', ''))): E.append('content/site.json: tel must be +1XXXXXXXXXX')
+    lf = site.get('lead_form') or {}
+    if isinstance(lf, dict):
+        for label in ('endpoint', 'endpoint_planned'):
+            val = str(lf.get(label) or '')
+            if not val: continue
+            if not (val.startswith('/.netlify/functions/') or val.startswith('https://')):
+                E.append(f'content/site.json: lead_form.{label} must be a /.netlify/functions/ path or https URL')
+            if re.search(r'token|secret|key=', val, re.I) or '@' in val:
+                E.append(f'content/site.json: lead_form.{label} must not include credentials')
     for f in site.get('faq', []):
         if not f.get('q') or not f.get('a'): E.append('content/site.json: faq item needs q and a')
     check_form1(site, E)
@@ -456,10 +465,12 @@ def build(site, pages, markets, redirects, live):
         cfg['consent'] = {k: QC['consent'][k] for k in ('enabled', 'field', 'text')}
         qjs = open(os.path.join(B, 'qualifier.js'), encoding='utf-8').read().strip()
         data = json.dumps(cfg, separators=(',', ':'), ensure_ascii=False).replace('</', '<\\/')
-        return (f'<div class="lead qf" id="qf"><div class="qbar" role="progressbar" aria-label="Progress"><i></i></div><div class="qbox" aria-live="polite">'
+        return (f'<div class="lead qf" id="qf">{honeypot()}<div class="qbar" role="progressbar" aria-label="Progress"><i></i></div><div class="qbox" aria-live="polite">'
                 f'<noscript><p>Please call or text <a href="tel:{TEL}">{PH}</a> and we\'ll finish this together.</p></noscript></div>'
                 f'<p class="fine">Prefer to talk? Call/text <a href="tel:{TEL}">{PH}</a></p></div>'
                 f'<script type="application/json" id="qcfg">{data}</script><script>{qjs}</script>')
+    def honeypot():
+        return '<div class="hp" aria-hidden="true"><label>Company website<input name="company_website" tabindex="-1" autocomplete="off"></label></div>'
     def field_html(x):
         attrs = [f'name="{x["name"]}"', f'type="{x["type"]}"']
         if x.get('autocomplete'): attrs.append(f'autocomplete="{esc(x["autocomplete"])}"')
@@ -482,7 +493,7 @@ def build(site, pages, markets, redirects, live):
         return f'''<form class="lead" id="f" action="/step-2/" method="post" novalidate>
 <div class="lead-h"><strong>Get your fair cash offer</strong><span>Takes about 60 seconds. No obligation.</span></div>
 <ol class="steps-ind"><li class="on">1. Property</li><li>2. Contact</li></ol>
-<input type="hidden" name="gclid"><input type="hidden" name="utm_campaign"><input type="hidden" name="utm_term"><input type="hidden" name="utm_source"><input type="hidden" name="utm_medium"><input type="hidden" name="form_id" value="1"><fieldset class="s1">{s1}
+<input type="hidden" name="gclid"><input type="hidden" name="utm_campaign"><input type="hidden" name="utm_term"><input type="hidden" name="utm_source"><input type="hidden" name="utm_medium"><input type="hidden" name="form_id" value="1">{honeypot()}<fieldset class="s1">{s1}
 <button type="button" class="btn btn-o nx">Get My Offer &rarr;</button></fieldset>
 <fieldset class="s2" hidden>{s2}
 {consent_box()}
@@ -493,7 +504,7 @@ def build(site, pages, markets, redirects, live):
         for x in S['step2_fields']:
             if x['type'] == 'select': f += f'<label>{x["label"]}<select name="{x["name"]}"><option value="">Choose…</option>' + ''.join(f'<option>{o}</option>' for o in x['options']) + '</select></label>\n'
             else: f += f'<label>{x["label"]}<textarea name="{x["name"]}" rows="3"></textarea></label>\n'
-        return ('<form class="lead step2" action="/thank-you/" method="post" novalidate><input type="hidden" name="form_id" value="6"><input type="hidden" name="address"><input type="hidden" name="phone"><input type="hidden" name="email">\n'
+        return ('<form class="lead step2" action="/thank-you/" method="post" novalidate><input type="hidden" name="form_id" value="6"><input type="hidden" name="address"><input type="hidden" name="phone"><input type="hidden" name="email">' + honeypot() + '\n'
                 '<div class="lead-h"><strong>Almost done: tell us about the house</strong><span>Optional details help us make a more accurate offer faster.</span></div>\n'
                 + f + f'<button class="btn btn-o">Submit Details</button><p class="fine">Prefer to talk? Call/text <a href="tel:{TEL}">{PH}</a></p></form>')
     def testis(lst): return ''.join(f'<blockquote class="testi">“{t["quote"]}”<cite>{t["name"]}</cite></blockquote>' for t in lst)

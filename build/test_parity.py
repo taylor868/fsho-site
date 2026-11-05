@@ -128,7 +128,8 @@ class ParityTests(unittest.TestCase):
         site = json.loads((ROOT / 'content' / 'site.json').read_text(encoding='utf-8'))
         self.assertTrue(site['preview'])
         self.assertFalse(site['lead_form']['enabled'])
-        self.assertEqual(site['lead_form']['endpoint'], '')
+        self.assertEqual(site['lead_form']['endpoint'], '/.netlify/functions/create-lead')
+        self.assertEqual(site['lead_form']['endpoint_planned'], '/.netlify/functions/create-lead')
         toml = (ROOT / 'netlify.toml').read_text(encoding='utf-8')
         self.assertNotIn('--live', toml)
         joined = '\n'.join([
@@ -137,11 +138,13 @@ class ParityTests(unittest.TestCase):
             (ROOT / 'README.md').read_text(encoding='utf-8'),
             site['lead_form']['_note'],
         ])
-        self.assertIn('cursor/carrot-lead-routing-f5f7', joined)
-        self.assertIn('verified CRM mapping', joined)
+        self.assertIn('p_assigned_to', joined)
+        self.assertIn('lead_form.enabled', joined)
         self.assertNotIn('until the narrow create_lead token exists', joined)
         self.assertNotIn('Blocked on the narrow', joined)
         self.assertNotIn('blocked only on the narrow token', joined)
+        self.assertNotIn('awaiting verified CRM mapping', joined)
+        self.assertNotIn('not in this branch', joined.lower())
 
     def test_drafts_preview_included_live_and_production_skipped(self):
         self.add_drafts()
@@ -387,7 +390,8 @@ cta_label: "Page specific heading"
 ''')
         self.build(live=False)
         home = (Path(gen.OUT) / 'index.html').read_text(encoding='utf-8')
-        self.assertIn('<label>House address<input name="address" type="text" autocomplete="street-address" placeholder="123 Main St, City, State" required></label>', home)
+        self.assertIn('<label>House address<input name="address" type="text" autocomplete="street-address" placeholder="123 Main St, City, ST 12345" required></label>', home)
+        self.assertIn('name="company_website"', home)
         self.assertIn('<div class="row"><label>First name<input name="first" type="text" autocomplete="given-name" required></label><label>Last name<input name="last" type="text" autocomplete="family-name"></label></div>', home)
         self.assertIn('<label>Phone<input name="phone" type="tel" autocomplete="tel" required></label>', home)
         self.assertIn('<label>Email<input name="email" type="email" autocomplete="email" required></label>', home)

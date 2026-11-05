@@ -20,8 +20,12 @@ var d={form:C.id,form_version:C.version,stage:"complete",lead_id:L.lead_id||"",f
 answers:A,emota:P,failed:F,tags:T,tier:res.tier,cadence:res.cadence,conversion:e.conversion,page:location.pathname,ts:new Date().toISOString()};
 ["gclid","utm_campaign","utm_term","utm_source","utm_medium"].forEach(function(k){d[k]=at[k]||""});
 if(C.consent.enabled){d[C.consent.field]=!!L.consent;d.consent_text=C.consent.text}
-bar.style.width="100%";box.innerHTML="";box.appendChild(el("h2","",e.headline));box.appendChild(el("p","lede",e.body));
-r.dataset.tier=d.tier;e.conversion!="none"&&window.dataLayer&&dataLayer.push({event:"fsho_qualifier",tier:d.tier,conversion:e.conversion});
-var u=window.FSHO&&FSHO.endpoint;if(!u){console.info("FSHO qualifier lead (preview, not sent):",d);return}
-fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d),keepalive:true})}
+if(L.continuation)d.continuation=L.continuation;
+function paint(h,p){bar.style.width="100%";box.innerHTML="";box.appendChild(el("h2","",h));if(p)box.appendChild(el("p","lede",p))}
+function saved(){paint(e.headline,e.body);r.dataset.tier=d.tier;e.conversion!="none"&&window.dataLayer&&dataLayer.push({event:"fsho_qualifier",tier:d.tier,conversion:e.conversion})}
+function failed(){paint("We couldn't save your answers.","Please call or text us and we'll finish this with you.")}
+var hp=r.querySelector("[name=company_website]");if(hp&&hp.value.trim())d.company_website=hp.value;
+var u=window.FSHO&&FSHO.endpoint;if(!u){console.info("FSHO qualifier lead (preview, not sent):",d);return saved()}
+if(!d.continuation)return failed();
+fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)}).then(function(res){return res.json().then(function(b){b&&b.ok?saved():failed()},failed)},failed)}
 show(C.start)})();
