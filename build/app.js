@@ -1,5 +1,5 @@
 /* ===== FSHO CONFIG: the only switches ===== */
-var FSHO={endpoint:"",/* e.g. Zapier/Make webhook -> Carrot CRM + Twilio SMS. Empty = local demo, nothing sent */
+var FSHO={endpoint:"",/* site.json lead_form.endpoint, and only when lead_form.enabled. Empty = preview, nothing sent */
 tracking:false,/* single flag: GTM + ClickCease load after window load */
 gtm:"GTM-WWPBQGDZ",clickcease:"" /* ClickCease site ID TBD */};
 (function(){var K=["gclid","utm_campaign","utm_term","utm_source","utm_medium"],q=new URLSearchParams(location.search),A={};

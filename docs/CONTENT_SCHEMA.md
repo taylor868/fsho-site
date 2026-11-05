@@ -27,8 +27,9 @@ content/
 | `brand.navy` | `#RRGGBB` | Primary text/heading color. |
 | `logo`, `favicon` | path | Files in `content/media/`, copied to site root. |
 | `preview` | bool | **true until cutover is approved.** Adds `noindex,nofollow` to every page, a red PREVIEW banner, `robots.txt Disallow: /`, and an `X-Robots-Tag` header. |
-| `lead_form.enabled` | bool | false = submit is blocked client-side, nothing is sent. Stays false until lead routing is decided. |
-| `lead_form.endpoint` | string | Serverless endpoint URL (only used when enabled). |
+| `lead_form.enabled` | bool | **Stays false until Taylor explicitly approves.** While false, `gen.py` leaves the browser endpoint empty: preview builds log the payload with `console.info` and send nothing. A non-preview build with enabled false also blocks submit. |
+| `lead_form.endpoint` | string | `/.netlify/functions/create-lead`. Used only when `enabled` is true. |
+| `lead_form.endpoint_planned` | string | Same path. Documented target; not read by the build. |
 | `gtm_id` | string | e.g. `GTM-WWPBQGDZ`. |
 | `clickcease_id` | string | Empty until supplied. |
 | `tracking` | bool | Loads GTM + ClickCease after window load. Default false. |
@@ -165,7 +166,11 @@ Tags: `no-condo`, `no-townhouse`, `no-mobile`, `no-land`, `not-decision-maker`, 
 - consent placeholder guard
 - JSON ≤ 20 KB, JS ≤ 3.5 KB
 
-**Payload.** It is POSTed to `site.json` `lead_form.endpoint` (FSHO CRM `create_lead`) when `lead_form.enabled`; until then it only goes to `console.info`. The CRM should upsert on `lead_id`.
+**Payload.** When `lead_form.enabled` is true it is POSTed to `lead_form.endpoint` (`/.netlify/functions/create-lead`). Until then it only goes to `console.info`. The browser posts this site payload, not the CRM body. The function maps it to `create_lead`.
+
+The hero form, the qualifier, and the optional step-2 form include a hidden honeypot, `company_website`. Leave it blank. The function rejects a filled honeypot and does not call the CRM. There is no captcha script.
+
+The address line has to include street, city, state, and ZIP (`123 Main St, Akron, OH 44308`) because the CRM requires `p_address`, `p_city`, `p_state`, and `p_postal` separately. A lead missing any of those is not sent.
 
 ```json
 {"form":"qualifier","form_version":3,"stage":"complete","lead_id":"t1","first":"Pat","phone":"3305551234",
@@ -176,6 +181,44 @@ Tags: `no-condo`, `no-townhouse`, `no-mobile`, `no-land`, `not-decision-maker`, 
 ```
 
 Hard declines send `emota: null`, `failed: null`, `tier: "disqualified"`, `cadence: "none"`, `conversion: "none"`.
+
+### Lead routing function
+
+`netlify/functions/create-lead.js` is the only place that talks to FSHO CRM. The browser never sees the token.
+
+`POST {FSHO_API_BASE}/rpc/create_lead` with `Authorization: Bearer <FSHO_CRM_CREATE_LEAD_TOKEN>` and `Content-Type: application/json`. The code default for `FSHO_API_BASE`, when the env var is unset, is the public base `https://ruedjugpbuagyapunytd.supabase.co/functions/v1/fsho-api`.
+
+CRM body (the function builds this; do not post it from the browser):
+
+| CRM arg | From the site payload |
+|---|---|
+| `p_address`, `p_city`, `p_state`, `p_postal` | Parsed from `address` (`street, city, ST ZIP`). `city` / `state` / `postal` or `zip` win when the payload already split them. |
+| `p_seller_name` | `first` + `last` |
+| `p_phone`, `p_email` | Phone and email. The CRM keeps the last 10 digits of the phone. |
+| `p_source_key` | Env `FSHO_CRM_SOURCE_KEY` only |
+| `p_campaign_id` | Env `FSHO_CRM_CAMPAIGN_ID` only (uuid) |
+| `p_assigned_to` | Env `FSHO_CRM_ASSIGNED_TO` only (uuid) |
+| `p_motivation` | Compact JSON: `lead_id`, `stage`, `form_version`, EMOTA (`emota`, `failed`, `tags`, `answers`), `tier`, `cadence`, `conversion`, `gclid`, UTM, `page`. The CRM has no columns for these, and this token cannot write activity notes. |
+| `p_consent_text` | `consent_text`, when present |
+| `p_consent_url` | `consent_url` when it is https, otherwise the canonical page when consent was given |
+
+Before create, the function calls `POST {base}/rpc/lead_for_phone` with `{"p":"<phone>"}` and, if that is not an id, `POST {base}/rpc/lead_for_email` with `{"p":"<email>"}`. An existing id is returned as `{ "ok": true, "existing": true, "data": "<uuid>" }` and `create_lead` is not called again. There is no update call, so the first accepted submit for that phone or email is the one stored.
+
+Success from the CRM is `{ "ok": true, "data": ... }`. The function returns that `data` to the browser. CRM errors are `{ "error": "..." }` with HTTP 400, 401, 403, or 500; the function relays those statuses and replaces any error text that could carry a secret.
+
+If `FSHO_CRM_CREATE_LEAD_TOKEN`, `FSHO_CRM_CAMPAIGN_ID`, `FSHO_CRM_ASSIGNED_TO`, or `FSHO_CRM_SOURCE_KEY` is missing or unusable, the function returns **503** `{ "ok": false, "error": "lead_routing_unconfigured", "missing": [...], "invalid": [...] }` and does not call the CRM. Names only; values are never included. An incomplete site payload (no ZIP, no email, and so on) is **400** `incomplete_lead` and also does not call the CRM.
+
+Netlify env var names (set in the Netlify UI, never in git):
+
+| Name | Required | Notes |
+|---|---|---|
+| `FSHO_CRM_CREATE_LEAD_TOKEN` | yes | Bearer token. Never commit, log, or paste it. |
+| `FSHO_API_BASE` | no | Overrides the public default above. https, no userinfo, no query string. |
+| `FSHO_CRM_CAMPAIGN_ID` | yes | uuid. No default. |
+| `FSHO_CRM_ASSIGNED_TO` | yes | uuid. No default. |
+| `FSHO_CRM_SOURCE_KEY` | yes | text. No default. |
+
+`lead_form.enabled` stays **false** and `preview` stays **true** until Taylor explicitly approves turning the form on. Setting the three ids in Netlify does not by itself publish the form.
 
 **Editor notes (Website tab):**
 - Questions are grouped under E / M / O / T / A headers, plus the property gate.

@@ -22,6 +22,7 @@ answers:A,emota:P,failed:F,tags:T,tier:res.tier,cadence:res.cadence,conversion:e
 if(C.consent.enabled){d[C.consent.field]=!!L.consent;d.consent_text=C.consent.text}
 bar.style.width="100%";box.innerHTML="";box.appendChild(el("h2","",e.headline));box.appendChild(el("p","lede",e.body));
 r.dataset.tier=d.tier;e.conversion!="none"&&window.dataLayer&&dataLayer.push({event:"fsho_qualifier",tier:d.tier,conversion:e.conversion});
+var hp=r.querySelector("[name=company_website]");if(hp&&hp.value.trim())d.company_website=hp.value;
 var u=window.FSHO&&FSHO.endpoint;if(!u){console.info("FSHO qualifier lead (preview, not sent):",d);return}
 fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d),keepalive:true})}
 show(C.start)})();

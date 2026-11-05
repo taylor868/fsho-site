@@ -49,6 +49,22 @@ Fair, honest, simple. Write the way Andrew talks to a neighbor.
 6. Open or update a PR. Publishing to production happens only after **Taylor gives an explicit yes** for that specific change.
 7. Never touch DNS, domains, Netlify or GitHub settings, billing, or anything that costs money.
 
+## Lead routing (off until Taylor says so)
+
+The hero form, the step-2 qualifier, and the optional details form include a hidden honeypot field (`company_website`). People never see it. If it is filled, `netlify/functions/create-lead` drops the lead and does not call the CRM. Do not add a captcha script.
+
+`content/site.json` keeps `lead_form.enabled` **false** and `preview` **true** until Taylor explicitly says to turn the form on. While it is false, the site does not call the function.
+
+The CRM token and the three id fields live in the Netlify UI only. Never put them in the repo, in a doc, in a commit, or in chat. Env names:
+
+- `FSHO_CRM_CREATE_LEAD_TOKEN`
+- `FSHO_API_BASE`
+- `FSHO_CRM_CAMPAIGN_ID`
+- `FSHO_CRM_ASSIGNED_TO`
+- `FSHO_CRM_SOURCE_KEY`
+
+If any of the token, campaign id, assignee id, or source key is missing, the function returns an error and does not call the CRM. Do not invent those values. Do not turn `lead_form.enabled` on.
+
 ## Refuse or escalate to Taylor (don't just do it)
 
 - **Tracking:** GTM, ClickCease, GA4, Ads tags, pixels, call-tracking numbers.

@@ -15,10 +15,10 @@
   "preview": true,
   "lead_form": {
     "enabled": false,
-    "endpoint": "",
+    "endpoint": "/.netlify/functions/create-lead",
     "crm": "fsho-crm",
     "endpoint_planned": "/.netlify/functions/create-lead",
-    "_note": "Leads go to FSHO CRM create_lead (REsimpli dropped). Stays disabled until the narrow create_lead token exists; while off, the hero form and qualifier log payloads to the browser console and send nothing."
+    "_note": "Endpoint is ignored while enabled is false: the hero form and qualifier log payloads in the browser and send nothing. Taylor must explicitly approve setting enabled to true. Leave preview true until cutover. Do not put a CRM token, campaign id, assignee id, or source key in this file. Those are Netlify env vars only: FSHO_CRM_CREATE_LEAD_TOKEN, FSHO_API_BASE, FSHO_CRM_CAMPAIGN_ID, FSHO_CRM_ASSIGNED_TO, FSHO_CRM_SOURCE_KEY. The function returns 503 until the last three are set."
   },
   "gtm_id": "GTM-WWPBQGDZ",
   "clickcease_id": "",
