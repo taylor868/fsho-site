@@ -425,6 +425,67 @@ cta_label: "Page specific heading"
         errors, _warns = self.check()
         self.assertTrue(any('pair "broken" must be exactly two consecutive fields' in e for e in errors), errors)
 
+    def test_trust_badges_link_to_approved_profiles(self):
+        self.build(live=False)
+        linked = [
+            ('⭐ 5-star rated on Google', 'https://share.google/wsbi2MtER7ixKlNvp', '5-star rated on Google (opens in a new tab)'),
+            ('⭐ 5-star rated on Facebook', 'https://www.facebook.com/profile.php?id=61581144807978', '5-star rated on Facebook (opens in a new tab)'),
+            ('🛡️ A+ BBB rating', 'https://www.bbb.org/us/mi/rockford/profile/real-estate-investing/fair-and-simple-home-offer-0372-38321834', 'A+ BBB rating (opens in a new tab)'),
+            ('💬 SoTellUs reviews', 'https://sotellus.com/reviews/fair-and-simple-home-offer/', 'SoTellUs reviews (opens in a new tab)'),
+            ('▶️ YouTube', 'https://www.youtube.com/channel/UCP37Qe6jPkIIaDJMYYtHrGA', 'YouTube channel (opens in a new tab)'),
+        ]
+        shown = [
+            Path(gen.OUT) / 'index.html',
+            Path(gen.OUT) / 'reviews' / 'index.html',
+            Path(gen.OUT) / 'how-it-works' / 'index.html',
+            Path(gen.OUT) / 'contact-us' / 'index.html',
+            Path(gen.OUT) / 'stop-foreclosure' / 'index.html',
+            Path(gen.OUT) / 'sell-your-house-fast-in-ohio' / 'index.html',
+        ]
+        for path in shown:
+            doc = path.read_text(encoding='utf-8')
+            for text, href, label in linked:
+                needle = f'<li class="ext"><a href="{href}" target="_blank" rel="noopener noreferrer" aria-label="{label}">{text}</a></li>'
+                self.assertIn(needle, doc, path)
+            self.assertIn('<li>👨‍👩‍👧 Family-owned since 2017</li>', doc)
+            self.assertIn('<li>💵 No fees or commissions</li>', doc)
+            self.assertNotRegex(doc, r'<a[^>]*>[^<]*Family-owned since 2017')
+            self.assertNotRegex(doc, r'<a[^>]*>[^<]*No fees or commissions')
+            self.assertIn('var FSHO={endpoint:""', doc)
+        home = (Path(gen.OUT) / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('data-yt="k3iyV-hwVSs"', home)
+        self.assertIn('youtube-nocookie.com/embed/', home)
+        self.assertNotIn('share.google/xhED38I3oGqYAQE21', home)
+        plain = [
+            Path(gen.OUT) / 'faq' / 'index.html',
+            Path(gen.OUT) / 'our-company' / 'index.html',
+            Path(gen.OUT) / 'service-areas' / 'index.html',
+            Path(gen.OUT) / 'step-2' / 'index.html',
+        ]
+        for path in plain:
+            doc = path.read_text(encoding='utf-8')
+            self.assertNotIn('share.google/wsbi2MtER7ixKlNvp', doc, path)
+            self.assertNotIn('sotellus.com', doc, path)
+            self.assertNotIn('bbb.org', doc, path)
+            self.assertNotIn('profile.php?id=61581144807978', doc, path)
+            self.assertNotIn('youtube.com/channel/UCP37Qe6jPkIIaDJMYYtHrGA', doc, path)
+        faq = (Path(gen.OUT) / 'faq' / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('holds an A+ BBB rating, and is 5-star rated on Google and Facebook.', faq)
+        self.assertNotRegex(faq, r'<a[^>]*>Google</a>')
+
+        data, path = self.site()
+        data['trust_badges'] = [{'text': 'BBB', 'href': 'javascript:alert(1)'}]
+        self.save_site(data, path)
+        errors, _warns = self.check()
+        self.assertTrue(any('href must be an https URL' in e for e in errors), errors)
+
+        data['trust_badges'] = ['', {'text': ''}, 'ok']
+        self.save_site(data, path)
+        errors, _warns = self.check()
+        joined = '\n'.join(errors)
+        self.assertIn('trust_badges[0] is empty', joined)
+        self.assertIn('trust_badges[1] needs text', joined)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2, warnings='ignore')

@@ -39,7 +39,7 @@ content/
 | `footer.company_extra[]` | `{label, href}` | Extra links after nav in footer. |
 | `footer.legal[]` | `{label, href}` | Legal column. |
 | `footer.copyright` | HTML | Bottom line. |
-| `trust_badges[]` | HTML string | Hero trust list. |
+| `trust_badges[]` | HTML string, or `{text, href?, label?}` | Hero trust list, also `{{trust}}`. A string is plain text (family-owned, no fees). An object with `href` (https only) is the whole badge as one link: `target="_blank"` and `rel="noopener noreferrer"`. `label` is the accessible name; the generator adds “opens in a new tab” when that phrase is not already there. `text` is HTML. |
 | `hero_eyebrow` | string | Small line above every hero H1. |
 | `consent` | HTML | TCPA/SMS consent text in the lead form. Legal copy: change only with sign-off. |
 | `qualifier` | HTML | "Quick check" box (what we don't buy). |
@@ -150,7 +150,7 @@ Array of objects. One row per content image:
 
 ## Validation (`--check`)
 
-Fails (`ERROR`, exit 1) on: missing required fields, bad template, bad slug characters, duplicate slugs across pages and markets, bad colors/phone, malformed FAQ/testimonials/reviews/form1 fields, `draft` other than `true`, `draft` on the home page, a bad `canonical`, bad redirects, images over 200 KB or not .webp (except `favicon.png`), a media.json row that is not a real WebP, and a referenced image with no media.json row.
+Fails (`ERROR`, exit 1) on: missing required fields, bad template, bad slug characters, duplicate slugs across pages and markets, bad colors/phone, malformed FAQ/testimonials/reviews/trust badges/form1 fields, a trust badge `href` that is not an https URL, `draft` other than `true`, `draft` on the home page, a bad `canonical`, bad redirects, images over 200 KB or not .webp (except `favicon.png`), a media.json row that is not a real WebP, and a referenced image with no media.json row.
 
 Warns (`WARN`, exit 0) on: `title` longer than 60 characters, `meta_description` longer than 155, a duplicate `title`, a media.json row with no alt, and a WebP that is not listed in media.json.
 
