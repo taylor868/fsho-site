@@ -309,6 +309,41 @@ def check_form1(site, E):
         if x.get('step') != nxt.get('step'): E.append(f'{src}: form1_fields pair "{pair}" must share a step')
         i += 2
 
+def check_trust_badges(site, E):
+    rows = site.get('trust_badges')
+    if not isinstance(rows, list):
+        E.append('content/site.json: trust_badges must be a list'); return
+    for i, t in enumerate(rows):
+        where = f'content/site.json: trust_badges[{i}]'
+        if isinstance(t, str):
+            if not t.strip(): E.append(f'{where} is empty')
+            continue
+        if not isinstance(t, dict):
+            E.append(f'{where} must be a string or an object with text'); continue
+        if not isinstance(t.get('text'), str) or not t.get('text', '').strip():
+            E.append(f'{where} needs text')
+        if 'href' in t and (not isinstance(t.get('href'), str) or not re.fullmatch(r'https://[^\s"\'<>]+', t['href'])):
+            E.append(f'{where} href must be an https URL')
+        if 'label' in t and (not isinstance(t.get('label'), str) or not t['label'].strip()):
+            E.append(f'{where} label must be a non-empty string')
+
+def trust_list(badges):
+    """Hero / {{trust}} list. Strings stay text. An href makes the whole badge one outbound link."""
+    def ext(href, text, label):
+        name = label.strip() if isinstance(label, str) and label.strip() else re.sub(r'<[^>]+>', '', text)
+        if 'opens in a new tab' not in name.lower():
+            name += ' (opens in a new tab)'
+        return f'<a href="{esc(href)}" target="_blank" rel="noopener noreferrer" aria-label="{esc(name)}">{text}</a>'
+    items = []
+    for t in badges:
+        if isinstance(t, str):
+            items.append(f'<li>{t}</li>')
+        elif t.get('href'):
+            items.append('<li class="ext">' + ext(t['href'], t['text'], t.get('label')) + '</li>')
+        else:
+            items.append(f'<li>{t.get("text", "")}</li>')
+    return '<ul class="trust">' + ''.join(items) + '</ul>'
+
 def check_reviews(site, E):
     rows = site.get('reviews', [])
     if rows is None: return
@@ -380,6 +415,7 @@ def check(site, pages, markets, redirects, errs):
     for f in site.get('faq', []):
         if not f.get('q') or not f.get('a'): E.append('content/site.json: faq item needs q and a')
     check_form1(site, E)
+    check_trust_badges(site, E)
     check_reviews(site, E)
     slugs, titles = {}, {}
     for p in pages:
@@ -444,7 +480,7 @@ def build(site, pages, markets, redirects, live):
     if not lead_on and not preview:
         JS = 'document.addEventListener("submit",function(e){e.preventDefault();e.stopImmediatePropagation();alert("Preview only, forms are off. Nothing was sent.")},true);' + JS
     navl = ''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S['nav'])
-    trust = '<ul class="trust">' + ''.join(f'<li>{t}</li>' for t in S['trust_badges']) + '</ul>'
+    trust = trust_list(S['trust_badges'])
     QC = S.get('_qualifier') or {}
     def consent_box():
         c = QC.get('consent', {})

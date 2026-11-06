@@ -74,11 +74,35 @@
     "copyright": "© 2026 Fair &amp; Simple Home Offer. Not a licensed real estate brokerage unless stated; we buy property as principals. Submitting a form does not obligate you to sell."
   },
   "trust_badges": [
-    "⭐ 5-star rated on Google &amp; Facebook",
-    "🛡️ A+ BBB rating",
+    {
+      "text": "⭐ 5-star rated on Google",
+      "href": "https://share.google/wsbi2MtER7ixKlNvp",
+      "label": "5-star rated on Google"
+    },
+    {
+      "text": "⭐ 5-star rated on Facebook",
+      "href": "https://www.facebook.com/profile.php?id=61581144807978",
+      "label": "5-star rated on Facebook"
+    },
+    {
+      "text": "🛡️ A+ BBB rating",
+      "href": "https://www.bbb.org/us/mi/rockford/profile/real-estate-investing/fair-and-simple-home-offer-0372-38321834",
+      "label": "A+ BBB rating"
+    },
+    {
+      "text": "💬 SoTellUs reviews",
+      "href": "https://sotellus.com/reviews/fair-and-simple-home-offer/",
+      "label": "SoTellUs reviews"
+    },
+    {
+      "text": "▶️ YouTube",
+      "href": "https://www.youtube.com/channel/UCP37Qe6jPkIIaDJMYYtHrGA",
+      "label": "YouTube channel"
+    },
     "👨‍👩‍👧 Family-owned since 2017",
     "💵 No fees or commissions"
   ],
+  "_trust_badges_note": "A string stays plain text. An object with href is the whole badge as one link (new tab, noopener). Use only the approved Google, Facebook, BBB, SoTellUs, and YouTube profile URLs. Do not embed review widgets.",
   "hero_eyebrow": "Sell your house as-is · No fees · No repairs",
   "consent": "I agree Fair and Simple Home Offer and its agents may call, text, and email me, including marketing by autodialer or artificial, prerecorded, or AI voice. Consent isn’t required to buy or sell. Msg freq varies; msg &amp; data rates may apply. Reply STOP to opt out, HELP for help.",
   "qualifier": "<strong>Quick check before you start:</strong> We buy single-family houses from the owner. We do <u>not</u> buy condos, townhouses, mobile/manufactured homes, apartments, vacant land, or homes currently listed with an agent. Listed with a Realtor, or owned less than 7 years? <a href=\"tel:+19106366669\">Call us first</a>. No wholesalers, investors, or agents, please.",

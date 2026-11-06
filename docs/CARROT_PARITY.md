@@ -56,7 +56,7 @@ Status key:
 | 44 | Video testimonials (YouTube) | Covered | `video_ids[]`, click-to-load thumbnails (no iframes on load). |
 | 45 | Reviews widget (Google/Facebook) | Covered | Optional `reviews[]` `{quote, name, source, date}` rendered by `{{reviews}}` as static HTML. No third-party script. The list stays empty until a real review is pasted with permission. |
 | 46 | FAQs | Covered | `site.json faq` + per-page `faq` override. |
-| 47 | Trust badges / "As Seen On" ribbon | Covered | `trust_badges[]` text. Logo ribbon dropped (unsubstantiated "#1" claim also dropped). |
+| 47 | Trust badges / "As Seen On" ribbon | Covered | `trust_badges[]` text, or `{text, href}` for an outbound badge. Google, Facebook, BBB, SoTellUs, and YouTube link out in a new tab. Family-owned and no-fees lines stay text. Logo ribbon dropped (unsubstantiated "#1" claim also dropped). No review-widget script. |
 | 48 | Market/state pages (39) | Covered | `content/markets/<slug>.json`. |
 | 49 | Duplicate "for-cash-in" + "-2" state pages | Covered | Consolidated; 301s in `redirects.json`. |
 | 50 | City pages | Schema | `cities[]` renders a line now; add `content/cities/<slug>.json` + `template: city` linked from its state, only with real local content. |
