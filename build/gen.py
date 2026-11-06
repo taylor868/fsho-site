@@ -506,8 +506,9 @@ def build(site, pages, markets, redirects, live):
             bits.append(f'<blockquote class="testi">“{t["quote"]}”<cite>{cite}</cite></blockquote>')
         return ''.join(bits)
     def faqh(items, n=99): return '<div class="faq">' + ''.join(f'<details><summary>{f["q"]}</summary><p>{f["a"]}</p></details>' for f in items[:n]) + '</div>'
+    offer_url = S.get('cta', {}).get('href') or '#offer'
     def cta(h=None):
-        c = S['cta']; return f'<section class="band"><div class="wrap"><h2>{h or c["heading"]}</h2><p>{c["text"]}</p><a class="btn btn-o" href="#offer">{c["button"]}</a> <a class="btn btn-w" href="tel:{TEL}">Call {PH}</a></div></section>'
+        c = S['cta']; return f'<section class="band"><div class="wrap"><h2>{h or c["heading"]}</h2><p>{c["text"]}</p><a class="btn btn-o" href="{esc(c.get("href") or offer_url)}">{c["button"]}</a> <a class="btn btn-w" href="tel:{TEL}">Call {PH}</a></div></section>'
     def hero(h, sub): return f'<section class="hero" id="offer"><div class="wrap hg"><div><p class="eyebrow">{S["hero_eyebrow"]}</p><h1>{h}</h1><p class="lede">{sub}</p>{trust}</div>{form()}</div></section>'
     sits = '<div class="grid3">' + ''.join(f'<div class="card"><div class="ic">{x["icon"]}</div><h3>{x["title"]}</h3><p>{x["text"]}</p></div>' for x in S['situations']) + '</div>'
     steps = '<div class="grid3 steps">' + ''.join(f'<div class="card"><b>{x["n"]}</b><h3>{x["title"]}</h3><p>{x["text"]}</p></div>' for x in S['steps']) + '</div>'
@@ -563,7 +564,7 @@ def build(site, pages, markets, redirects, live):
         if src.startswith('http://') or src.startswith('https://'): return src
         if not src.startswith('/'): src = '/' + src
         return S['domain'] + src
-    def page(path, title, desc, body, noindex, canonical=None, og_title=None, og_image=None, faq_ld=None, file_rel=None, offer_href='#offer'):
+    def page(path, title, desc, body, noindex, canonical=None, og_title=None, og_image=None, faq_ld=None, file_rel=None, offer_href=None):
         canon = canonical or (S['domain'] + path)
         robots = '<meta name="robots" content="noindex,nofollow">' if (preview or noindex) else ''
         banner = '<div style="background:#c00;color:#fff;text-align:center;font:700 13px system-ui;padding:4px">PREVIEW: not the live site. Form data is only logged, never sent.</div>' if preview else ''
@@ -581,6 +582,7 @@ def build(site, pages, markets, redirects, live):
         if faq_ld:
             scripts += ld_script({"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
                 {"@type": "Question", "name": html.unescape(f["q"]), "acceptedAnswer": {"@type": "Answer", "text": html.unescape(f["a"])}} for f in faq_ld]})
+        if not offer_href: offer_href = offer_url
         doc = f'''<!doctype html><html lang="en"><head>{robots}<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{esc(title)}</title><meta name="description" content="{esc(desc)}"><link rel="icon" href="/favicon.png"><link rel="canonical" href="{esc(canon)}">{''.join(og)}<style>{CSS}</style>
 {scripts}</head><body>{banner}
 <header class="top"><div class="wrap hd"><a href="/" class="logo"><img src="{S["logo"]}" alt="{logo_alt}" fetchpriority="high"></a><nav>{navl}</nav><a class="btn btn-call" href="tel:{TEL}">📞 {PH}</a></div></header>
@@ -588,7 +590,7 @@ def build(site, pages, markets, redirects, live):
 <footer class="ft"><div class="wrap fg"><div><img src="{S["logo"]}" alt="" class="inv" loading="lazy"><p>{S["footer"]["about"]}</p><p><a href="tel:{TEL}">{PH}</a> · call or text</p></div>
 <div><strong>Company</strong>{navl}{''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S["footer"]["company_extra"])}</div>
 <div><strong>Legal</strong>{''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S["footer"]["legal"])}</div></div><p class="wrap copy">{S["footer"]["copyright"]}</p></footer>
-<a class="sticky" href="tel:{TEL}">📞 Call Now</a><a class="sticky s2b" href="{offer_href}">Get Offer</a>
+<a class="sticky" href="tel:{TEL}">📞 Call Now</a><a class="sticky s2b" href="{esc(offer_href)}">Get Offer</a>
 <script>{JS}</script></body></html>'''
         rel = file_rel or ('index.html' if path == '/' else path.strip('/') + '/index.html')
         dest = os.path.join(OUT, rel)
@@ -601,15 +603,15 @@ def build(site, pages, markets, redirects, live):
             skipped += 1; continue
         if p.get('draft'): drafts_in += 1
         path = f'/{p["slug"]}/' if p['slug'] else '/'
-        file_rel, offer = None, '#offer'
+        file_rel = None
         if p['slug'] == '404':
-            path, file_rel, offer = '/404.html', '404.html', '/#offer'
+            path, file_rel = '/404.html', '404.html'
         faq_items = p.get('faq') or S['faq']
         body = md(shortcodes(p['body'], faq_items, p.get('cta_label')))
         if p['template'] in ('home', 'situation'): body = hero(p['hero_headline'], p['hero_sub']) + body
         page(path, p['title'], p.get('meta_description') or '', body, bool(p.get('noindex', False) or p.get('draft')),
              canonical=p.get('canonical') or None, og_title=p.get('og_title') or None, og_image=p.get('og_image') or None,
-             faq_ld=faq_ld_items(p.get('body'), p.get('faq'), S.get('faq')), file_rel=file_rel, offer_href=offer)
+             faq_ld=faq_ld_items(p.get('body'), p.get('faq'), S.get('faq')), file_rel=file_rel)
         built += 1
         if p.get('sitemap', True) and not p.get('noindex') and not p.get('draft') and p['slug'] != '404': urls.append('/' if not p['slug'] else f'/{p["slug"]}/')
     for m in markets:

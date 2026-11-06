@@ -50,7 +50,7 @@ content/
 | `reviews[]` | `{quote, name, source, date}` | Optional static reviews for `{{reviews}}`. Leave `[]` until a real review is pasted with permission. No third-party widget. |
 | `video_ids[]` | string | YouTube IDs; click-to-load thumbnails. |
 | `faq[]` | `{q, a}` | Site-wide FAQ. |
-| `cta` | `{heading, text, button}` | Bottom call-to-action band default. |
+| `cta` | `{heading, text, button, href}` | Bottom call-to-action band. `button` and the sticky Get Offer link both use `href`. Until this site's form is live, `href` is `https://fairandsimplehomeoffer.com/form`. |
 | `form1_fields[]` | `{name, label, type, required, step, autocomplete?, placeholder?, pair?}` | Hero form (Carrot Form 1). `type` is `text`, `tel`, or `email`. `required` is a boolean. `step` is `1` (property) or `2` (contact). Two consecutive fields may share `pair` (the first/last name row). Must include `address` (step 1) and `first`, `phone`, `email` (step 2). gclid/UTM hidden fields stay in the generator. The form stays off while `lead_form.enabled` is false. |
 | `step2_fields[]` | `{name, label, type: select\|textarea, options[]}` | Step 2 form. Placeholder until the real Carrot Form 6 fields are confirmed. |
 
@@ -91,7 +91,7 @@ Body: blocks separated by blank lines. A block starting with `<` or `{{` is pass
 
 Shortcodes: `{{qualifier}}` `{{situations}}` `{{steps}}` `{{comparison}}` `{{videos}}` `{{testimonials}}` `{{reviews}}` `{{trust}}` `{{faq}}` `{{faq:5}}` (first N) `{{cta}}` `{{cta:Custom heading}}` `{{states}}` (links to every market that this build includes) `{{step2_form}}` `{{qualifier_form}}` `{{phone}}`. Unknown shortcodes fail the build.
 
-`{{cta}}` uses this page's `cta_label` when set, otherwise `site.json` `cta.heading`. `{{cta:Custom heading}}` still wins. Market pages pass `cta_label` the same way.
+`{{cta}}` uses this page's `cta_label` when set, otherwise `site.json` `cta.heading`. `{{cta:Custom heading}}` still wins. Market pages pass `cta_label` the same way. The button's link is `cta.href` (same URL as the sticky Get Offer link).
 
 `draft` (pages and markets):
 - The key is exactly `draft`. The only allowed value is boolean `true`.
