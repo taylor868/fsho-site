@@ -110,3 +110,4 @@ Still open:
 11. **Call-tracking number swap** (#42), only if approved.
 12. **Blog** (#12), only when the first post exists.
 13. **Multi-site** (#62), only when Motivated House Sellers is requested.
+14. **WhatConverts profile 176490** is in the schema and left off (`whatconverts.enabled` false). It is a separate switch from `tracking` (GTM/ClickCease/Ads). Activation waits on attribution-only form-exclusion verification and Taylor's production yes. Carrot already runs this profile; this repo does not edit it. Redirect stubs and other external domains are excluded.

@@ -23,6 +23,12 @@
   "gtm_id": "GTM-WWPBQGDZ",
   "clickcease_id": "",
   "tracking": false,
+  "whatconverts": {
+    "enabled": false,
+    "profile_id": "176490",
+    "script_host": "https://s.ksrndkehqnwntyxlhgto.com",
+    "_note": "Standard tracking for this static site only. enabled stays false for production and ordinary preview until WhatConverts form capture is confirmed attribution-only and Taylor gives a production yes. Does not enable lead_form, GTM, ClickCease, Ads, or CRM. Redirect stubs are excluded. Carrot at fairandsimplehomeoffer.com already runs profile 176490 and is not modified here. No API credentials belong in this file."
+  },
   "nav": [
     {
       "label": "How It Works",

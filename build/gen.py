@@ -3,6 +3,10 @@
 Usage: python build/gen.py            build into dist/
        python build/gen.py --check    validate content only (non-zero exit on errors; WARN lines do not fail)
        python build/gen.py --live     build without preview guards (noindex/banner/form lock) -- cutover only
+       python build/gen.py --wc-review  blocked WhatConverts review into preview/whatconverts/ (not dist/, not published)
+
+WhatConverts profile script stays out of dist/ unless content/site.json whatconverts.enabled is true.
+--wc-review never points a script at the live profile host.
 
 Drafts: a page or market with `draft: true` is built in preview builds and skipped in
 live/prod builds. Preview builds are a normal gen.py run while site.json preview is true,
@@ -103,6 +107,78 @@ def faq_ld_items(body, own, site_faq):
 def ld_script(obj):
     raw = json.dumps(obj, ensure_ascii=False, separators=(',', ':')).replace('</', '<\\/')
     return '<script type="application/ld+json">' + raw + '</script>'
+
+# Official Standard HTML Code (WhatConverts Help: Add Your Tracking Script Manually).
+# Preferred placement is immediately before </body>; <head> is the other documented spot.
+# The initializer is first and the profile file is second. The published snippet and the
+# official WordPress plugin (wp_enqueue_script + inline script "before", footer by default)
+# do not set async or defer. Defer/delay/minify exclusions are called out in the caching
+# troubleshooting docs, so this generator does not add async or defer.
+# The dashboard snippet uses a protocol-relative src; https is the secure equivalent.
+WC_HOST = 's.ksrndkehqnwntyxlhgto.com'
+WC_ORIGIN = 'https://' + WC_HOST
+WC_INIT_JS = (
+    'var $wc_load=function(a){return JSON.parse(JSON.stringify(a))},'
+    '$wc_leads=$wc_leads||{doc:{url:$wc_load(document.URL),ref:$wc_load(document.referrer),'
+    'search:$wc_load(location.search),hash:$wc_load(location.hash)}};'
+)
+WC_INIT = '<script>' + WC_INIT_JS + '</script>'
+WC_BLOCKED_NAME = 'wc-blocked.js'
+WC_BLOCKED_JS = (
+    '/* Local stand-in for a WhatConverts profile script.\n'
+    ' * Review builds only. Does not read forms, set cookies, or contact any host.\n'
+    ' */\n'
+    'window.__FSHO_WC_REVIEW_BLOCKED = true;\n'
+)
+WC_REVIEW_CSP = (
+    '<meta http-equiv="Content-Security-Policy" content="'
+    "default-src 'none'; script-src 'unsafe-inline' 'self'; style-src 'unsafe-inline'; "
+    "img-src 'self' data:; connect-src 'none'; form-action 'none'; frame-src 'none'; "
+    "base-uri 'none'; object-src 'none'"
+    '">'
+)
+
+def normalize_wc_origin(host):
+    if not isinstance(host, str): return ''
+    h = host.strip().rstrip('/')
+    if h.startswith('//'): h = 'https:' + h
+    elif h.startswith('http://'): h = 'https://' + h[len('http://'):]
+    return h
+
+def check_whatconverts(site, E):
+    wc = site.get('whatconverts', None)
+    src = 'content/site.json'
+    if not isinstance(wc, dict):
+        E.append(f'{src}: missing "whatconverts" object'); return
+    if not isinstance(wc.get('enabled'), bool):
+        E.append(f'{src}: whatconverts.enabled must be true/false')
+    pid = wc.get('profile_id')
+    if not isinstance(pid, str) or not re.fullmatch(r'\d{5,6}', pid):
+        E.append(f'{src}: whatconverts.profile_id must be a 5 or 6 digit string')
+    if normalize_wc_origin(wc.get('script_host', WC_ORIGIN)) != WC_ORIGIN:
+        E.append(f'{src}: whatconverts.script_host must be {WC_ORIGIN}')
+
+def wc_profile_src(site):
+    """Live profile URL when explicitly enabled and the config matches the official host.
+    Returns None when off or misconfigured so a bad value cannot become a script src."""
+    wc = site.get('whatconverts')
+    if not isinstance(wc, dict) or wc.get('enabled') is not True: return None
+    pid = wc.get('profile_id')
+    if not isinstance(pid, str) or not re.fullmatch(r'\d{5,6}', pid): return None
+    if normalize_wc_origin(wc.get('script_host', WC_ORIGIN)) != WC_ORIGIN: return None
+    return WC_ORIGIN + '/' + pid + '.js'
+
+def wc_snippet(src):
+    """One initializer, then one classic profile script. No async, no defer."""
+    return WC_INIT + '<script src="%s"></script>' % esc(src)
+
+def wc_review_src(file_rel):
+    return ('../' * file_rel.count('/')) + WC_BLOCKED_NAME
+
+def wc_review_banner(profile_id):
+    return ('<div style="background:#1F3C56;color:#fff;text-align:center;font:700 13px system-ui;padding:4px">'
+            'WC REVIEW: WhatConverts profile %s is not loaded. Local stand-in only. Forms are not submitted and nothing is sent.'
+            '</div>' % esc(profile_id))
 
 def decorate_imgs(html_text, idx):
     """Add width/height (and alt, when the tag has none) for images listed in media.json."""
@@ -374,6 +450,7 @@ def check(site, pages, markets, redirects, errs):
     W = []
     for k in ['company', 'phone', 'tel', 'domain', 'brand', 'nav', 'footer', 'trust_badges', 'faq', 'situations', 'steps', 'comparison', 'testimonials', 'cta']:
         if k not in site: E.append(f'content/site.json: missing "{k}"')
+    check_whatconverts(site, E)
     for c in ('orange', 'navy'):
         if not re.fullmatch(r'#[0-9A-Fa-f]{6}', str(site.get('brand', {}).get(c, ''))): E.append(f'content/site.json: brand.{c} must be #RRGGBB')
     if not re.fullmatch(r'\+1\d{10}', str(site.get('tel', ''))): E.append('content/site.json: tel must be +1XXXXXXXXXX')
@@ -429,7 +506,7 @@ def check(site, pages, markets, redirects, errs):
     return E, W
 
 # ---------- rendering ----------
-def build(site, pages, markets, redirects, live):
+def build(site, pages, markets, redirects, live, review=False):
     S = site; PH, TEL = S['phone'], S['tel']; preview = S.get('preview', True) and not live
     include_drafts = show_drafts(S, live)
     media_idx = {it['file']: it for it in (S.get('_media') or []) if isinstance(it, dict) and it.get('file')}
@@ -567,6 +644,18 @@ def build(site, pages, markets, redirects, live):
         canon = canonical or (S['domain'] + path)
         robots = '<meta name="robots" content="noindex,nofollow">' if (preview or noindex) else ''
         banner = '<div style="background:#c00;color:#fff;text-align:center;font:700 13px system-ui;padding:4px">PREVIEW: not the live site. Form data is only logged, never sent.</div>' if preview else ''
+        rel = file_rel or ('index.html' if path == '/' else path.strip('/') + '/index.html')
+        # One insertion point for every generated page. Redirect stubs are written later and stay excluded.
+        # review=True forces the pair but swaps the profile file for a same-folder stand-in (never the live host).
+        csp = ''
+        if review:
+            pid = (S.get('whatconverts') or {}).get('profile_id', '')
+            wc_html = wc_snippet(wc_review_src(rel))
+            csp = WC_REVIEW_CSP
+            banner += wc_review_banner(pid if isinstance(pid, str) else '')
+        else:
+            src = wc_profile_src(S)
+            wc_html = wc_snippet(src) if src else ''
         ot = og_title or title
         og = [f'<meta property="og:title" content="{esc(ot)}">', f'<meta property="og:description" content="{esc(desc)}">',
               f'<meta property="og:url" content="{esc(canon)}">', '<meta property="og:type" content="website">',
@@ -581,7 +670,7 @@ def build(site, pages, markets, redirects, live):
         if faq_ld:
             scripts += ld_script({"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
                 {"@type": "Question", "name": html.unescape(f["q"]), "acceptedAnswer": {"@type": "Answer", "text": html.unescape(f["a"])}} for f in faq_ld]})
-        doc = f'''<!doctype html><html lang="en"><head>{robots}<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{esc(title)}</title><meta name="description" content="{esc(desc)}"><link rel="icon" href="/favicon.png"><link rel="canonical" href="{esc(canon)}">{''.join(og)}<style>{CSS}</style>
+        doc = f'''<!doctype html><html lang="en"><head>{csp}{robots}<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{esc(title)}</title><meta name="description" content="{esc(desc)}"><link rel="icon" href="/favicon.png"><link rel="canonical" href="{esc(canon)}">{''.join(og)}<style>{CSS}</style>
 {scripts}</head><body>{banner}
 <header class="top"><div class="wrap hd"><a href="/" class="logo"><img src="{S["logo"]}" alt="{logo_alt}" fetchpriority="high"></a><nav>{navl}</nav><a class="btn btn-call" href="tel:{TEL}">📞 {PH}</a></div></header>
 <main>{body}</main>
@@ -589,8 +678,7 @@ def build(site, pages, markets, redirects, live):
 <div><strong>Company</strong>{navl}{''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S["footer"]["company_extra"])}</div>
 <div><strong>Legal</strong>{''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S["footer"]["legal"])}</div></div><p class="wrap copy">{S["footer"]["copyright"]}</p></footer>
 <a class="sticky" href="tel:{TEL}">📞 Call Now</a><a class="sticky s2b" href="{offer_href}">Get Offer</a>
-<script>{JS}</script></body></html>'''
-        rel = file_rel or ('index.html' if path == '/' else path.strip('/') + '/index.html')
+<script>{JS}</script>{wc_html}</body></html>'''
         dest = os.path.join(OUT, rel)
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         open(dest, 'w', encoding='utf-8').write(decorate_imgs(doc, media_idx))
@@ -627,7 +715,10 @@ def build(site, pages, markets, redirects, live):
         built += 1
         if not m.get('noindex') and not m.get('draft'): urls.append(path)
 
-    # redirects: Netlify _redirects + Apache/nginx copies + meta-refresh stubs
+    # Redirect stubs are not pages. They do not get the WhatConverts snippet, so a hop
+    # cannot load the profile before the destination page (the single install).
+    # Targets are internal paths only. External domains, including Carrot at
+    # fairandsimplehomeoffer.com (already running this profile), are outside this build.
     R = [(r['from'], r['to'], r.get('code', 301)) for r in redirects]
     not_found = '/* /404.html 404\n' if os.path.isfile(os.path.join(OUT, '404.html')) else ''
     open(os.path.join(OUT, '_redirects'), 'w').write('# Netlify / Cloudflare Pages: permanent 301s\n' + ''.join(f'{a} {b} {c}!\n{a.rstrip("/")} {b} {c}!\n' for a, b, c in R) + ('# Unknown paths\n' + not_found if not_found else ''))
@@ -647,6 +738,8 @@ def build(site, pages, markets, redirects, live):
     for fp in glob.glob(os.path.join(C, 'media', '*')):
         if os.path.basename(fp) == 'media.json': continue
         shutil.copy(fp, OUT)
+    if review:
+        open(os.path.join(OUT, WC_BLOCKED_NAME), 'w', encoding='utf-8').write(WC_BLOCKED_JS)
     return built, skipped, drafts_in
 
 if __name__ == '__main__':
@@ -657,8 +750,22 @@ if __name__ == '__main__':
         print('\n'.join('ERROR ' + e for e in E)); sys.exit(1)
     if '--check' in sys.argv:
         print(f'OK: {len(pages)} pages, {len(markets)} markets, {len(redirects)} redirects'); sys.exit(0)
-    n, skipped, drafts_in = build(site, pages, markets, redirects, '--live' in sys.argv)
-    note = '' if '--live' in sys.argv or not site.get('preview', True) else ' (PREVIEW: noindex, banner on)'
+    review = '--wc-review' in sys.argv
+    live = '--live' in sys.argv
+    if review and live:
+        print('ERROR --wc-review cannot be combined with --live'); sys.exit(1)
+    saved_out = OUT
+    try:
+        if review:
+            OUT = os.path.join(ROOT, 'preview', 'whatconverts')
+        n, skipped, drafts_in = build(site, pages, markets, redirects, live, review)
+    finally:
+        if review:
+            OUT = saved_out
+    where = 'preview/whatconverts/' if review else 'dist/'
+    note = '' if live or not site.get('preview', True) else ' (PREVIEW: noindex, banner on)'
+    if review:
+        note += ' (WC REVIEW: profile script blocked; not dist/)'
     if skipped: note += f' (skipped {skipped} drafts)'
     elif drafts_in: note += f' ({drafts_in} drafts included)'
-    print(f'built {n} pages + {len(redirects)} redirects into dist/' + note)
+    print(f'built {n} pages + {len(redirects)} redirects into {where}' + note)

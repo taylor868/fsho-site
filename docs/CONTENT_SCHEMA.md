@@ -33,7 +33,10 @@ content/
 | `lead_form.endpoint` | string | Serverless endpoint URL (only used when enabled). |
 | `gtm_id` | string | e.g. `GTM-WWPBQGDZ`. |
 | `clickcease_id` | string | Empty until supplied. |
-| `tracking` | bool | Loads GTM + ClickCease after window load. Default false. |
+| `tracking` | bool | Loads GTM + ClickCease after window load. Default false. Independent of WhatConverts. |
+| `whatconverts.enabled` | bool | **false** for production and ordinary preview. When true, each generated page gets one standard WhatConverts snippet. Does not enable `tracking`, `lead_form`, Ads, or CRM. |
+| `whatconverts.profile_id` | string | `176490`. Five or six digits. |
+| `whatconverts.script_host` | string | Must be `https://s.ksrndkehqnwntyxlhgto.com`. |
 | `nav[]` | `{label, href}` | Header nav and footer "Company" column. |
 | `footer.about` | HTML | Footer blurb. |
 | `footer.company_extra[]` | `{label, href}` | Extra links after nav in footer. |
@@ -53,6 +56,44 @@ content/
 | `cta` | `{heading, text, button}` | Bottom call-to-action band default. |
 | `form1_fields[]` | `{name, label, type, required, step, autocomplete?, placeholder?, pair?}` | Hero form (Carrot Form 1). `type` is `text`, `tel`, or `email`. `required` is a boolean. `step` is `1` (property) or `2` (contact). Two consecutive fields may share `pair` (the first/last name row). Must include `address` (step 1) and `first`, `phone`, `email` (step 2). gclid/UTM hidden fields stay in the generator. The form stays off while `lead_form.enabled` is false. |
 | `step2_fields[]` | `{name, label, type: select\|textarea, options[]}` | Step 2 form. Placeholder until the real Carrot Form 6 fields are confirmed. |
+
+## WhatConverts profile 176490
+
+`whatconverts.enabled` is **false**. Production builds and ordinary previews (`python3 build/gen.py`, including Netlify) omit the snippet. That is not an install.
+
+Official loading (WhatConverts Help, "Add Your Tracking Script Manually"; the official WordPress plugin; caching troubleshooting): paste the Standard HTML Code immediately before `</body>` (preferred) or in `<head>`. The initializer comes first and the profile file second. Do not add `async` or `defer`, and do not delay or minify the profile file. The dashboard snippet uses a protocol-relative `//s.ksrndkehqnwntyxlhgto.com/...` URL. This generator emits the https equivalent.
+
+When `enabled` is true, `page()` inserts this pair once, immediately before `</body>`, after the site script:
+
+```html
+<script>var $wc_load=function(a){return JSON.parse(JSON.stringify(a))},$wc_leads=$wc_leads||{doc:{url:$wc_load(document.URL),ref:$wc_load(document.referrer),search:$wc_load(location.search),hash:$wc_load(location.hash)}};</script><script src="https://s.ksrndkehqnwntyxlhgto.com/176490.js"></script>
+```
+
+That covers every generated page: home, content pages, market pages, step 2, thank-you, 404, and any draft included in that build.
+
+Excluded (no snippet):
+
+- Redirect stubs from `content/redirects.json`. They are meta-refresh hops to an internal path. The destination page is the one copy. Redirect targets are site paths, not other domains.
+- The Carrot site at `fairandsimplehomeoffer.com`, which already runs profile 176490. This repository does not edit Carrot. Leave `enabled` false while Carrot still serves that profile on the domain.
+- Any other external property, including Motivated House Sellers.
+- The review directory below. It is not `dist/` and Netlify does not publish it.
+
+`whatconverts.enabled` does not turn on `tracking` (GTM, ClickCease, GA4, Ads), `lead_form.enabled`, or `lead_form.endpoint`.
+
+Safe review (mocked profile, no lead submit):
+
+```bash
+python3 build/gen.py --wc-review
+```
+
+Writes gitignored `preview/whatconverts/`. Pages include the initializer and a relative `wc-blocked.js` stand-in, plus a Content-Security-Policy of `connect-src 'none'` and `form-action 'none'`. The WhatConverts host is not referenced. The stand-in does not read forms or send requests. Do not submit a form there. `--wc-review` cannot be combined with `--live`.
+
+Activation stays closed until both of these are true:
+
+1. WhatConverts form capture for this profile is confirmed attribution-only (forms on these pages are not stored as leads). That confirmation is in the WhatConverts account, which this repo does not change. `data-wc-ignore` excludes individual fields and is not added here.
+2. Taylor gives an explicit production yes, and Carrot will not keep a second copy of profile 176490 on the same domain.
+
+The activation edit is `whatconverts.enabled: true` and a rebuild. Leave `preview`, `lead_form`, and `tracking` unchanged unless a separate approved change says otherwise. No API credentials go in the repo.
 
 ## content/pages/&lt;slug&gt;.md
 

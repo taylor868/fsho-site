@@ -129,8 +129,13 @@ class ParityTests(unittest.TestCase):
         self.assertTrue(site['preview'])
         self.assertFalse(site['lead_form']['enabled'])
         self.assertEqual(site['lead_form']['endpoint'], '')
+        self.assertFalse(site['tracking'])
+        self.assertFalse(site['whatconverts']['enabled'])
+        self.assertEqual(site['whatconverts']['profile_id'], '176490')
+        self.assertEqual(site['whatconverts']['script_host'], 'https://s.ksrndkehqnwntyxlhgto.com')
         toml = (ROOT / 'netlify.toml').read_text(encoding='utf-8')
         self.assertNotIn('--live', toml)
+        self.assertNotIn('--wc-review', toml)
         joined = '\n'.join([
             (ROOT / 'docs' / 'CARROT_PARITY.md').read_text(encoding='utf-8'),
             (ROOT / 'docs' / 'CONTENT_SCHEMA.md').read_text(encoding='utf-8'),
@@ -424,6 +429,174 @@ cta_label: "Page specific heading"
         self.save_site(data, path)
         errors, _warns = self.check()
         self.assertTrue(any('pair "broken" must be exactly two consecutive fields' in e for e in errors), errors)
+
+    def test_whatconverts_off_unless_explicit_and_review_blocks_profile(self):
+        # Official initializer, then the https profile URL. No async/defer.
+        init_js = (
+            'var $wc_load=function(a){return JSON.parse(JSON.stringify(a))},'
+            '$wc_leads=$wc_leads||{doc:{url:$wc_load(document.URL),ref:$wc_load(document.referrer),'
+            'search:$wc_load(location.search),hash:$wc_load(location.hash)}};'
+        )
+        live_src = 'https://s.ksrndkehqnwntyxlhgto.com/176490.js'
+        live_pair = '<script>' + init_js + '</script><script src="%s"></script>' % live_src
+        self.assertEqual(gen.WC_INIT_JS, init_js)
+        self.assertEqual(gen.WC_ORIGIN, 'https://s.ksrndkehqnwntyxlhgto.com')
+        self.assertNotIn('async', gen.wc_snippet(live_src))
+        self.assertNotIn('defer', gen.wc_snippet(live_src))
+        covered = (
+            'index.html',
+            'step-2/index.html',
+            'how-it-works/index.html',
+            'sell-your-house-fast-in-texas/index.html',
+            '404.html',
+        )
+
+        def pages_and_stubs(root):
+            real, stubs = [], []
+            for path in Path(root).rglob('*.html'):
+                text = path.read_text(encoding='utf-8')
+                if text.startswith('<!doctype html><meta charset=utf-8><title>Moved</title>'):
+                    stubs.append((path, text))
+                else:
+                    real.append((path, text))
+            return real, stubs
+
+        def assert_no_profile(text):
+            self.assertNotIn('$wc_load', text)
+            self.assertNotIn('ksrndkehqnwntyxlhgto', text)
+            self.assertNotIn('176490.js', text)
+            self.assertNotIn('wc-blocked.js', text)
+
+        self.build(live=False)
+        real, stubs = pages_and_stubs(gen.OUT)
+        self.assertEqual(len(real), 53)
+        self.assertEqual(len(stubs), 16)
+        for path, text in real + stubs:
+            assert_no_profile(text)
+        for rel in covered:
+            assert_no_profile((Path(gen.OUT) / rel).read_text(encoding='utf-8'))
+        stub = (Path(gen.OUT) / 'blog' / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('href="/"', stub)
+        self.assertNotIn('http://', stub)
+        self.assertNotIn('https://', stub)
+
+        self.build(live=True)
+        for path, text in pages_and_stubs(gen.OUT)[0] + pages_and_stubs(gen.OUT)[1]:
+            assert_no_profile(text)
+
+        data, path = self.site()
+        data['whatconverts']['enabled'] = True
+        self.save_site(data, path)
+        self.build(live=False)
+        on_disk = json.loads(path.read_text(encoding='utf-8'))
+        self.assertTrue(on_disk['whatconverts']['enabled'])
+        self.assertFalse(on_disk['tracking'])
+        self.assertFalse(on_disk['lead_form']['enabled'])
+        self.assertEqual(on_disk['lead_form']['endpoint'], '')
+        self.assertTrue(on_disk['preview'])
+        real, stubs = pages_and_stubs(gen.OUT)
+        self.assertEqual(len(real), 53)
+        self.assertEqual(len(stubs), 16)
+        for _path, text in stubs:
+            assert_no_profile(text)
+        seen = set()
+        for rel_path, text in real:
+            rel = rel_path.relative_to(gen.OUT).as_posix()
+            seen.add(rel)
+            self.assertEqual(text.count(live_pair), 1, rel)
+            self.assertEqual(text.count('var $wc_load=function'), 1, rel)
+            self.assertEqual(len(re.findall(r'<script\b[^>]*\bsrc=', text)), 1, rel)
+            tag = re.search(r'<script\b([^>]*)\bsrc="%s"([^>]*)>' % re.escape(live_src), text)
+            self.assertIsNotNone(tag, rel)
+            attrs = (tag.group(1) + ' ' + tag.group(2)).lower()
+            self.assertNotIn('async', attrs, rel)
+            self.assertNotIn('defer', attrs, rel)
+            self.assertNotIn('module', attrs, rel)
+            self.assertTrue(text.endswith(live_pair + '</body></html>'), rel)
+            self.assertLess(text.index('tracking:false'), text.index('$wc_load'))
+            self.assertIn('var FSHO={endpoint:""', text)
+            self.assertIn('noindex,nofollow', text)
+            self.assertNotIn('<script src="https://www.googletagmanager.com', text)
+            self.assertNotIn('async', text[text.rindex('<script src='):])
+        for rel in covered:
+            self.assertIn(rel, seen)
+        init_file = self.root / 'wc-init.js'
+        init_file.write_text(init_js, encoding='utf-8')
+        proc = subprocess.run(['node', '--check', str(init_file)], capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertNotIn(live_src, init_file.read_text(encoding='utf-8'))
+
+        # A bad host or profile id fails check and is not emitted, even if build() is called anyway.
+        data['whatconverts']['script_host'] = 'https://evil.example'
+        data['whatconverts']['profile_id'] = '176490"></script><script src="https://evil.example/x.js'
+        self.save_site(data, path)
+        errors, _warns = self.check()
+        self.assertTrue(any('script_host' in e for e in errors), errors)
+        self.assertTrue(any('profile_id' in e for e in errors), errors)
+        site, pages, markets, redirects, errs = self.load()
+        gen.build(site, pages, markets, redirects, False)
+        poisoned = (Path(gen.OUT) / 'index.html').read_text(encoding='utf-8')
+        self.assertNotIn('evil.example', poisoned)
+        self.assertNotIn('$wc_load', poisoned)
+
+        data, path = self.site()
+        data.pop('whatconverts')
+        self.save_site(data, path)
+        errors, _warns = self.check()
+        self.assertTrue(any('missing "whatconverts"' in e for e in errors), errors)
+
+        # Review artifact: snippet order is visible, profile host is not requested.
+        original = json.loads((ROOT / 'content' / 'site.json').read_text(encoding='utf-8'))
+        self.save_site(original, path)
+        data, path = self.site()
+        self.assertFalse(data['whatconverts']['enabled'])
+        review_out = self.root / 'preview' / 'whatconverts'
+        gen.OUT = str(review_out)
+        site, pages, markets, redirects, errs = self.load()
+        gen.build(site, pages, markets, redirects, False, True)
+        self.assertFalse(json.loads(path.read_text(encoding='utf-8'))['whatconverts']['enabled'])
+        review_src = {
+            'index.html': 'wc-blocked.js',
+            'step-2/index.html': '../wc-blocked.js',
+            'how-it-works/index.html': '../wc-blocked.js',
+            'sell-your-house-fast-in-texas/index.html': '../wc-blocked.js',
+            '404.html': 'wc-blocked.js',
+        }
+        real, stubs = pages_and_stubs(review_out)
+        self.assertEqual(len(real), 53)
+        self.assertEqual(len(stubs), 16)
+        for _path, text in stubs:
+            self.assertNotIn('$wc_load', text)
+            self.assertNotIn('wc-blocked.js', text)
+            self.assertNotIn('ksrndkehqnwntyxlhgto', text)
+            self.assertNotIn('Content-Security-Policy', text)
+        for rel_path, text in real:
+            rel = rel_path.relative_to(review_out).as_posix()
+            depth = rel.count('/')
+            src = ('../' * depth) + 'wc-blocked.js'
+            pair = '<script>' + init_js + '</script><script src="%s"></script>' % src
+            self.assertEqual(text.count(pair), 1, rel)
+            self.assertEqual(text.count('var $wc_load=function'), 1, rel)
+            self.assertTrue(text.endswith(pair + '</body></html>'), rel)
+            self.assertNotIn('ksrndkehqnwntyxlhgto', text, rel)
+            self.assertNotIn('176490.js', text, rel)
+            self.assertIn("connect-src 'none'", text, rel)
+            self.assertIn("form-action 'none'", text, rel)
+            self.assertIn('WC REVIEW: WhatConverts profile 176490 is not loaded', text, rel)
+            self.assertIn('noindex,nofollow', text, rel)
+            self.assertIn('var FSHO={endpoint:""', text, rel)
+            self.assertIn('tracking:false', text, rel)
+            self.assertLess(text.index(init_js), text.index('src="%s"' % src))
+        for rel, src in review_src.items():
+            doc = (review_out / rel).read_text(encoding='utf-8')
+            self.assertIn('<script src="%s"></script>' % src, doc)
+        blocked = (review_out / 'wc-blocked.js').read_text(encoding='utf-8')
+        for banned in ('fetch(', 'XMLHttpRequest', 'sendBeacon', 'document.cookie', 'FormData', 'document.forms', 'ksrndkehqnwntyxlhgto', '176490'):
+            self.assertNotIn(banned, blocked)
+        self.assertIn('__FSHO_WC_REVIEW_BLOCKED', blocked)
+        proc = subprocess.run(['node', '--check', str(review_out / 'wc-blocked.js')], capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertFalse((review_out / 'dist').exists())
 
 
 if __name__ == '__main__':
