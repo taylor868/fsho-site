@@ -50,7 +50,7 @@ content/
 | `reviews[]` | `{quote, name, source, date}` | Optional static reviews for `{{reviews}}`. Leave `[]` until a real review is pasted with permission. No third-party widget. |
 | `video_ids[]` | string | YouTube IDs; click-to-load thumbnails. |
 | `faq[]` | `{q, a}` | Site-wide FAQ. |
-| `cta` | `{heading, text, button, href}` | Bottom call-to-action band. `button` and the sticky Get Offer link both use `href`. Until this site's form is live, `href` is `https://fairandsimplehomeoffer.com/form`. |
+| `cta` | `{heading, text, button, href}` | Bottom call-to-action band. `button` and the sticky Get Offer link both use `href`. Until this site's form is live, `href` is the live homepage `https://fairandsimplehomeoffer.com/`. |
 | `form1_fields[]` | `{name, label, type, required, step, autocomplete?, placeholder?, pair?}` | Hero form (Carrot Form 1). `type` is `text`, `tel`, or `email`. `required` is a boolean. `step` is `1` (property) or `2` (contact). Two consecutive fields may share `pair` (the first/last name row). Must include `address` (step 1) and `first`, `phone`, `email` (step 2). gclid/UTM hidden fields stay in the generator. The form stays off while `lead_form.enabled` is false. |
 | `step2_fields[]` | `{name, label, type: select\|textarea, options[]}` | Step 2 form. Placeholder until the real Carrot Form 6 fields are confirmed. |
 
