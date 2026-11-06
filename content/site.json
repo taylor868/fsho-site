@@ -128,7 +128,7 @@
     {
       "n": 3,
       "title": "Close on your timeline",
-      "text": "Pick the date. We coordinate with a reputable title company. Cash in as little as 10–14 business days in most cases."
+      "text": "Pick the date. We coordinate with a reputable title company and close on your timeline."
     }
   ],
   "comparison": {
@@ -164,7 +164,7 @@
       ],
       [
         "Typical timeline",
-        "10–14 business days",
+        "On your timeline",
         "45–90 days",
         "Often months"
       ],
@@ -197,11 +197,11 @@
     },
     {
       "q": "How much will you offer?",
-      "a": "Every property is reviewed by a person, not an algorithm. A cash offer is typically below full retail value because we take on repairs, closing costs, and risk. If a cash offer isn't your best option, we'll also show you a market-sale option that may net you more."
+      "a": "A cash offer is typically below full retail value because we take on repairs, closing costs, and risk. If a cash offer isn't your best option, we'll also show you a market-sale option that may net you more."
     },
     {
       "q": "How fast can you close?",
-      "a": "Usually 10–14 business days in most scenarios. If you need more time, we close on the date you choose."
+      "a": "You choose the date. We close on your timeline."
     },
     {
       "q": "Are there fees or commissions?",
@@ -227,7 +227,8 @@
   "cta": {
     "heading": "Ready to see your options?",
     "text": "Get a no-obligation offer. Talk to a real person, not a call center.",
-    "button": "Get My Fair Cash Offer"
+    "button": "Get My Fair Cash Offer",
+    "href": "https://fairandsimplehomeoffer.com/"
   },
   "form1_fields": [
     {
