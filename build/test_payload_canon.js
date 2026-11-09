@@ -52,3 +52,40 @@ test("non-integer numbers are rejected and the producer stringifies them", () =>
   assert.equal(canonicalJson(lead), pythonCanon(lead));
   assert.equal(payloadSha256(lead), crypto.createHash("sha256").update(pythonCanon(lead), "utf8").digest("hex"));
 });
+
+function nest(n, leaf) {
+  let value = leaf;
+  for (let i = 0; i < n; i++) value = { a: value };
+  return value;
+}
+
+test("payload-bind v5 rejects negative zero, unsafe integers, lone surrogates, and depth over 32", () => {
+  assert.throws(() => canonicalJson({ n: -0 }), /negative_zero/);
+  assert.throws(() => leadPayload({ n: -0 }), /negative_zero/);
+  assert.equal(canonicalJson({ n: 0 }), '{"n":0}');
+  assert.throws(() => canonicalJson({ n: Number.MAX_SAFE_INTEGER + 2 }), /integer_unsafe/);
+  assert.throws(() => canonicalJson({ n: "\uD800" }), /lone_surrogate/);
+  assert.throws(() => canonicalJson({ "\uD800": 1 }), /lone_surrogate/);
+  assert.throws(() => leadPayload({ first: "\uD800" }), /lone_surrogate/);
+  assert.equal(typeof canonicalJson(nest(32, 1)), "string");
+  assert.throws(() => canonicalJson(nest(33, 1)), /depth_rejected/);
+  assert.throws(() => leadPayload(nest(33, 1)), /depth_rejected/);
+  const arrays = JSON.parse("[".repeat(33) + "1" + "]".repeat(33));
+  assert.throws(() => canonicalJson(arrays), /depth_rejected/);
+});
+
+test("object keys sort by Unicode code point, not UTF-16 code units", () => {
+  const emoji = "\u{10000}";
+  const bmp = "\uE000";
+  const utf16 = [emoji, bmp].sort();
+  const point = [emoji, bmp].sort((a, b) => {
+    const left = Array.from(a);
+    const right = Array.from(b);
+    return left[0].codePointAt(0) - right[0].codePointAt(0);
+  });
+  assert.deepEqual(utf16, [emoji, bmp]);
+  assert.deepEqual(point, [bmp, emoji]);
+  const body = { [emoji]: 1, [bmp]: 2 };
+  assert.equal(canonicalJson(body), pythonCanon(body));
+  assert.ok(canonicalJson(body).indexOf(bmp) < canonicalJson(body).indexOf(emoji));
+});

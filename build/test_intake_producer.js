@@ -100,7 +100,8 @@ test("a missing or default kid does not call the edge", async () => {
   const { fetchImpl, calls } = mock([]);
   const missing = await run(post(lead()), { INTAKE_HMAC_KEY_V1: "", INTAKE_HMAC_KID: "" }, { fetch: fetchImpl });
   assert.equal(missing.statusCode, 503);
-  assert.equal(JSON.parse(missing.body).block, "BLOCKED_NETLIFY_ENV");
+  assert.equal(JSON.parse(missing.body).netlify_env, "all-scopes, not marked secret (Free plan)");
+  assert.equal(JSON.stringify(missing.body).includes("BLOCKED_NETLIFY_ENV"), false);
   const rejected = await run(post(lead()), { INTAKE_HMAC_KID: "sk_prod_website_v1" }, { fetch: fetchImpl });
   assert.equal(rejected.statusCode, 503);
   assert.equal(JSON.parse(rejected.body).error, "intake_key_rejected");
@@ -158,6 +159,7 @@ test("partial reserves a server id and complete reuses it", async () => {
   assert.equal(JSON.stringify(calls[2].body).includes(KEY), false);
   assert.equal(calls[2].body.route_binding.campaign_id, "1f149598-c1f7-4bf9-a0c2-6687428e09c7");
   assert.equal(calls[2].body.route_binding.lead_source_key, "ppc");
+  assert.equal(calls[2].body.route_binding.verification, "VERIFIED-Taylor-2026-11-09");
   assert.equal(calls.some((call) => call.url.endsWith("/sign")), false);
   const again = await run(post(lead({ stage: "complete" }), cookie), {}, { fetch: fetchImpl });
   assert.equal(JSON.parse(again.body).intake_id, INTAKE);
@@ -195,6 +197,20 @@ test("an unbound route does not call the edge or the hook", async () => {
   const res = await run(post(lead()), { FSHO_INTAKE_ROUTE: "seo" }, { fetch: fetchImpl });
   assert.equal(res.statusCode, 409);
   assert.equal(JSON.parse(res.body).error, "unknown_vendor");
+  assert.equal(JSON.parse(res.body).wc_action, "none");
+  assert.equal(calls.length, 0);
+});
+
+test("a lone surrogate and depth over 32 are a 400 with no edge call", async () => {
+  const { fetchImpl, calls } = mock([]);
+  const lone = await run({ httpMethod: "POST", body: JSON.stringify(lead({ first: "A\uD800" })), headers: {} }, {}, { fetch: fetchImpl });
+  assert.equal(lone.statusCode, 400);
+  assert.equal(JSON.parse(lone.body).reason, "lone_surrogate");
+  let deep = { stage: "partial" };
+  for (let i = 0; i < 32; i++) deep = { nest: deep };
+  const tooDeep = await run({ httpMethod: "POST", body: JSON.stringify(deep), headers: {} }, {}, { fetch: fetchImpl });
+  assert.equal(tooDeep.statusCode, 400);
+  assert.equal(JSON.parse(tooDeep.body).reason, "depth_rejected");
   assert.equal(calls.length, 0);
 });
 

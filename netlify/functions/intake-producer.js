@@ -116,17 +116,17 @@ async function handle(event, deps) {
     return json(503, {
       ok: false,
       error: "intake_unconfigured",
-      block: contract.NETLIFY_ENV_STATUS,
+      netlify_env: contract.NETLIFY_ENV_STATUS,
       missing: ["INTAKE_HMAC_KEY_V1", "INTAKE_HMAC_KID"].filter((name) => !env[name]),
       form_state: "kept",
     });
   }
   if (!contract.keyIsUtf8Hex(key) || kid !== contract.REQUIRED_KID) {
-    return json(503, { ok: false, error: "intake_key_rejected", block: contract.NETLIFY_ENV_STATUS, form_state: "kept" });
+    return json(503, { ok: false, error: "intake_key_rejected", netlify_env: contract.NETLIFY_ENV_STATUS, form_state: "kept" });
   }
   let lead;
   try { lead = contract.leadPayload(payload); } catch (e) {
-    return json(400, { ok: false, error: "payload_rejected", form_state: "kept" });
+    return json(400, { ok: false, error: "payload_rejected", reason: e.code || "payload_rejected", form_state: "kept" });
   }
   const bound = routeFromEnv(env.FSHO_INTAKE_ROUTE);
   if (bound.blocked) {

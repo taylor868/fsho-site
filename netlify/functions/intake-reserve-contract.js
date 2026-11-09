@@ -2,13 +2,15 @@
 
 const crypto = require("crypto");
 
-// Frozen target is deployed intake-reserve v3. /sign returns 410 and is never called.
+// Live edge is payload-bind v5. /sign returns 410 and is never called.
 // KID is the literal v1. The HMAC key is the UTF-8 bytes of a 64-char lowercase hex
-// string, not the decoded hex. Netlify cannot scope that secret to functions yet.
+// string, not the decoded hex. Netlify has the env names set; the Free plan exposes
+// them to all scopes and does not mark them secret.
 
 const RESERVE_BASE = "https://ruedjugpbuagyapunytd.supabase.co/functions/v1/intake-reserve";
 const REQUIRED_KID = "v1";
-const NETLIFY_ENV_STATUS = "BLOCKED_NETLIFY_ENV";
+const NETLIFY_ENV_STATUS = "all-scopes, not marked secret (Free plan)";
+const MAX_DEPTH = 32;
 const CANONICAL_ORDER = ["v", "kid", "route", "channel", "intake_id", "event_id", "stage", "ts", "exp", "payload_sha256"];
 const OPS = ["mint", "reserve", "complete", "recover", "reconcile"];
 const TTL_SECONDS = 900;
@@ -21,7 +23,8 @@ const DRAFT = {
   signature_location: "body.sig",
   payload_location: "body.payload",
   digest: "sha256_hex_utf8_python_canonical_json",
-  payload_bind: "pending_not_approved",
+  payload_bind: "v5",
+  max_depth: MAX_DEPTH,
   stage_map: { partial: "first", complete: "final", first: "first", final: "final" },
   authorize_statuses: ["dispatch_intended_committed", "idempotent_replay", "recovered"],
   max_rate_limit_retries: 1,
@@ -29,10 +32,7 @@ const DRAFT = {
 };
 
 const PENDING = [
-  "BLOCKED_NETLIFY_ENV: INTAKE_HMAC_KEY_V1 and INTAKE_HMAC_KID stay the env names, and the key is not set on Netlify Free",
-  "index.payload-bind.ts is not approved; body.payload and the canonical digest are already what that patch would recompute",
   "reservation lookup mode is PENDING_DEPLOY",
-  "hesel_fb and ppc_inhouse bindings are UNVERIFIED-pending-Taylor",
 ];
 
 const STRIP = {
@@ -53,15 +53,17 @@ function hmacHex(key, canonical) {
   return crypto.createHmac("sha256", Buffer.from(key, "utf8")).update(canonical, "utf8").digest("hex");
 }
 
+function reject(code) {
+  const error = new Error(code);
+  error.code = code;
+  throw error;
+}
+
 function quote(value) {
   let out = "\"";
   for (const ch of value) {
     const cp = ch.codePointAt(0);
-    if (cp >= 0xd800 && cp <= 0xdfff) {
-      const error = new Error("lone_surrogate");
-      error.code = "lone_surrogate";
-      throw error;
-    }
+    if (cp >= 0xd800 && cp <= 0xdfff) reject("lone_surrogate");
     if (ch === "\"") out += "\\\"";
     else if (ch === "\\") out += "\\\\";
     else if (ch === "\b") out += "\\b";
@@ -86,57 +88,56 @@ function compareKeys(a, b) {
   return left.length - right.length;
 }
 
-function canonicalJson(value) {
+function canonicalJson(value, depth) {
+  const level = depth == null ? 1 : depth;
   if (value === null) return "null";
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "number") {
-    if (!Number.isFinite(value) || !Number.isInteger(value)) {
-      const error = new Error("decimal_rejected");
-      error.code = "decimal_rejected";
-      throw error;
-    }
-    if (!Number.isSafeInteger(value)) {
-      const error = new Error("integer_unsafe");
-      error.code = "integer_unsafe";
-      throw error;
-    }
+    if (Object.is(value, -0)) reject("negative_zero");
+    if (!Number.isFinite(value) || !Number.isInteger(value)) reject("decimal_rejected");
+    if (!Number.isSafeInteger(value)) reject("integer_unsafe");
     return String(value);
   }
   if (typeof value === "string") return quote(value);
-  if (Array.isArray(value)) return "[" + value.map(canonicalJson).join(",") + "]";
-  if (typeof value === "object") {
+  if (Array.isArray(value) || typeof value === "object") {
+    if (level > MAX_DEPTH) reject("depth_rejected");
+    const next = level + 1;
+    if (Array.isArray(value)) return "[" + value.map((item) => canonicalJson(item, next)).join(",") + "]";
     const keys = Object.keys(value).sort(compareKeys);
-    return "{" + keys.map((key) => quote(key) + ":" + canonicalJson(value[key])).join(",") + "}";
+    return "{" + keys.map((key) => quote(key) + ":" + canonicalJson(value[key], next)).join(",") + "}";
   }
-  const error = new Error("unsupported_type");
-  error.code = "unsupported_type";
-  throw error;
+  reject("unsupported_type");
 }
 
-function sanitizeValue(value) {
+function sanitizeValue(value, depth) {
   if (value == null) return undefined;
-  if (typeof value === "string") return value;
+  if (typeof value === "string") {
+    quote(value);
+    return value;
+  }
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "number") {
+    if (Object.is(value, -0)) reject("negative_zero");
     if (Number.isSafeInteger(value)) return value;
-    if (Number.isFinite(value)) return String(value);
-    const error = new Error("number_rejected");
-    error.code = "number_rejected";
-    throw error;
+    if (Number.isFinite(value) && !Number.isInteger(value)) return String(value);
+    reject("number_rejected");
   }
-  if (Array.isArray(value)) {
-    const items = [];
-    for (const item of value) {
-      const next = sanitizeValue(item);
-      if (next !== undefined) items.push(next);
+  if (Array.isArray(value) || typeof value === "object") {
+    if (depth > MAX_DEPTH) reject("depth_rejected");
+    const next = depth + 1;
+    if (Array.isArray(value)) {
+      const items = [];
+      for (const item of value) {
+        const child = sanitizeValue(item, next);
+        if (child !== undefined) items.push(child);
+      }
+      return items;
     }
-    return items;
-  }
-  if (typeof value === "object") {
     const out = {};
     for (const key of Object.keys(value)) {
-      const next = sanitizeValue(value[key]);
-      if (next !== undefined) out[key] = next;
+      quote(key);
+      const child = sanitizeValue(value[key], next);
+      if (child !== undefined) out[key] = child;
     }
     return out;
   }
@@ -147,7 +148,8 @@ function leadPayload(input) {
   const out = {};
   for (const key of Object.keys(input || {})) {
     if (STRIP[key]) continue;
-    const value = sanitizeValue(input[key]);
+    quote(key);
+    const value = sanitizeValue(input[key], 2);
     if (value !== undefined) out[key] = value;
   }
   return out;
