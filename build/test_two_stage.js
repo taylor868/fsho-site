@@ -24,7 +24,7 @@ test("test mode cannot be enabled for production", () => {
 });
 
 test("hot single-family and multi-family owners fire the tag only after owner=yes", () => {
-  for (const property of ["sfh", "multi"]) {
+  for (const property of ["sfh", "multi_2_4"]) {
     for (const owner of ["sole_owner", "all_agree", "decision_maker"]) {
       const { tag, adapter, session } = run();
       assert.equal(session.submitContact(contact).ok, true);
@@ -48,7 +48,7 @@ test("hot single-family and multi-family owners fire the tag only after owner=ye
 });
 
 test("quiet property types stay parked for the sweep and never load the tag", () => {
-  for (const property of ["condo", "mobile", "land", "other"]) {
+  for (const property of ["condo", "mobile", "land"]) {
     const { tag, session } = run();
     session.submitContact(contact);
     const done = session.answer("type", property);
@@ -65,7 +65,7 @@ test("a non-owner is logged with no conversion", () => {
   session.submitContact(contact);
   session.answer("type", "sfh");
   assert.equal(tag.loaded, false);
-  const done = session.answer("ownership", "not_owner");
+  const done = session.answer("ownership", "no");
   assert.equal(done.view.branch, "quiet_non_owner");
   assert.equal(done.view.downstream, "crm_follow_up");
   assert.equal(done.view.googleTagFired, false);
@@ -83,6 +83,28 @@ test("abandoning after stage 1 stays parked and does not load the tag", () => {
   assert.equal(session.answer("type", "sfh").error, "unexpected_answer");
   assert.equal(adapter.log.some((row) => row.op === "park"), true);
   assert.equal(adapter.log.some((row) => row.op === "downstream" && row.path === "staying_parked"), true);
+});
+
+test("a townhouse owner is hot until townhouse_route is flipped to quiet", () => {
+  assert.equal(flow.CONFIG.townhouse_route, "hot");
+  assert.deepEqual(flow.QUESTIONS.type[1].map(function (opt) { return opt[0]; }), ["sfh", "townhouse", "multi_2_4", "condo", "mobile", "land"]);
+  assert.deepEqual(flow.QUESTIONS.ownership[1].map(function (opt) { return opt[0]; }), ["sole_owner", "all_agree", "decision_maker", "no"]);
+  const hot = run();
+  hot.session.submitContact(contact);
+  hot.session.answer("type", "townhouse");
+  assert.equal(hot.tag.loaded, false);
+  const done = hot.session.answer("ownership", "sole_owner");
+  assert.equal(done.view.branch, "hot");
+  assert.equal(done.view.googleTagFired, true);
+  assert.equal(done.view.downstream, "zap_hot");
+  assert.equal(hot.tag.loaded, true);
+  const quiet = run();
+  quiet.session = flow.createFlow(quiet.adapter, quiet.tag, { townhouse_route: "quiet" });
+  quiet.session.submitContact(contact);
+  const parked = quiet.session.answer("type", "townhouse");
+  assert.equal(parked.view.branch, "quiet_property");
+  assert.equal(parked.view.downstream, "pg_cron_sweep");
+  assert.equal(quiet.tag.loaded, false);
 });
 
 test("the dry-run source does not call fetch or name a Google host", () => {

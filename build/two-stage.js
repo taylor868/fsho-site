@@ -5,13 +5,14 @@
   if (root) root.FSHOTwoStage = api;
   if (typeof document !== "undefined") boot(api);
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
-  var HOT = { sfh: 1, multi: 1 };
-  var QUIET = { condo: 1, mobile: 1, land: 1, other: 1 };
+  var HOT = { sfh: 1, multi_2_4: 1 };
+  var QUIET = { condo: 1, mobile: 1, land: 1 };
   var OWNERS = { sole_owner: 1, all_agree: 1, decision_maker: 1 };
   var ENRICH = { timeline: 1, situation: 1, equity: 1, ability: 1 };
+  var CONFIG = { townhouse_route: "hot" };
   var QUESTIONS = {
-    type: ["What kind of property is it?", [["sfh", "Single-family"], ["multi", "Multi-family"], ["condo", "Condo"], ["mobile", "Mobile"], ["land", "Land"], ["other", "Other"]]],
-    ownership: ["Are you an owner?", [["sole_owner", "Yes, I'm the only owner"], ["all_agree", "Yes, all owners agree"], ["decision_maker", "I'm an heir, executor, or POA"], ["not_owner", "No, I'm not an owner"]]],
+    type: ["What kind of property is it?", [["sfh", "Single-family house"], ["townhouse", "Townhouse"], ["multi_2_4", "Multi-family (2-4 units)"], ["condo", "Condo"], ["mobile", "Mobile or manufactured home"], ["land", "Vacant land"]]],
+    ownership: ["Are you the owner, or can you make the decision to sell?", [["sole_owner", "Yes, I'm the only owner"], ["all_agree", "Yes, and all owners agree"], ["decision_maker", "I'm an heir, executor, or POA"], ["no", "No, or not everyone agrees"]]],
     timeline: ["When do you need to sell?", [["asap", "As soon as possible"], ["30d", "Within 30 days"], ["over_90d", "More than 90 days"], ["no_rush", "No rush"]]],
     situation: ["What's the main reason you're selling?", [["behind", "Behind on payments"], ["repairs", "Needs repairs"], ["curious", "Just curious"]]],
     equity: ["Roughly how much is still owed?", [["free_clear", "Paid off"], ["under_half", "Less than half"], ["underwater", "About what it's worth, or more"]]],
@@ -55,8 +56,9 @@
     };
   }
 
-  function createFlow(adapter, tag) {
+  function createFlow(adapter, tag, config) {
     var gate = tag || { loaded: false, load: function () { this.loaded = true; } };
+    var townhouseRoute = (config && config.townhouse_route) || CONFIG.townhouse_route;
     var state = { stage: "contact", parked: false, branch: null, googleTagFired: false, downstream: null, answers: {}, trace: [], contact: null };
     function finish(branch, path, googleText) {
       state.branch = branch;
@@ -103,10 +105,12 @@
       },
       answer: function (id, value) {
         if (state.stage === "q_type" && id === "type") {
-          if (!HOT[value] && !QUIET[value]) return { ok: false, error: "unknown_property" };
+          var quiet = !!QUIET[value] || (value === "townhouse" && townhouseRoute === "quiet");
+          var hot = !!HOT[value] || (value === "townhouse" && townhouseRoute !== "quiet");
+          if (!quiet && !hot) return { ok: false, error: "unknown_property" };
           state.answers.type = value;
           note(state, "q1", "Q1 property type: " + value + ".");
-          if (QUIET[value]) {
+          if (quiet) {
             finish("quiet_property", "pg_cron_sweep", "Google tag not loaded.");
             return { ok: true, view: snapshot(state) };
           }
@@ -116,7 +120,7 @@
         }
         if (state.stage === "q_ownership" && id === "ownership") {
           var owner = !!OWNERS[value];
-          if (!owner && value !== "not_owner" && value !== "no") return { ok: false, error: "unknown_ownership" };
+          if (!owner && value !== "no") return { ok: false, error: "unknown_ownership" };
           state.answers.ownership = value;
           note(state, "q2", "Q2 ownership: " + value + ".");
           if (!owner) {
@@ -142,6 +146,7 @@
     testModeAllowed: testModeAllowed,
     createMockAdapter: createMockAdapter,
     createFlow: createFlow,
+    CONFIG: CONFIG,
     QUESTIONS: QUESTIONS,
     PATHS: PATHS
   };
