@@ -117,3 +117,274 @@ test("the dry-run source does not call fetch or name a Google host", () => {
   session.answer("ownership", "sole_owner");
   session.answer("situation", "repairs");
 });
+
+function memory() {
+  return flow.memoryStorage();
+}
+
+function payloads(adapter) {
+  const rows = [];
+  adapter.log.forEach((row) => {
+    if (row.op === "park") rows.push(row.row);
+    if (row.op === "stage") rows.push(row.payload);
+  });
+  return rows;
+}
+
+const CLICK = "?test=1&gclid=G-FIRST&gbraid=GB1&wbraid=WB1&fbclid=FB1&utm_source=google&utm_medium=cpc&utm_campaign=sell&utm_term=cash-offer&utm_content=ad1";
+
+test("click ids and UTMs stick on first touch and ride every stage payload", () => {
+  assert.equal(flow.TRACKING.gtm_id, "GTM-PLACEHOLDER");
+  assert.equal(flow.TRACKING.ga4, false);
+  assert.equal(flow.TRACKING.meta_pixel, false);
+  assert.equal(flow.TRACKING.lazy, true);
+  assert.deepEqual(flow.PAYLOAD_FIELDS, ["lead_id", "stage", "gclid", "gbraid", "wbraid", "fbclid", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"]);
+  const local = memory();
+  const sessionStore = memory();
+  const first = flow.captureAttribution(CLICK, local);
+  assert.equal(first.gclid, "G-FIRST");
+  assert.equal(first.gbraid, "GB1");
+  assert.equal(first.wbraid, "WB1");
+  assert.equal(first.fbclid, "FB1");
+  assert.equal(first.utm_source, "google");
+  assert.equal(first.utm_medium, "cpc");
+  assert.equal(first.utm_campaign, "sell");
+  assert.equal(first.utm_term, "cash-offer");
+  assert.equal(first.utm_content, "ad1");
+  const again = flow.captureAttribution("?gclid=LATER&utm_source=facebook&fbclid=NEW", local);
+  assert.equal(again.gclid, "G-FIRST");
+  assert.equal(again.fbclid, "FB1");
+  assert.equal(again.utm_source, "google");
+  const ids = [];
+  const orig = crypto.randomUUID;
+  crypto.randomUUID = () => { const id = orig.call(crypto); ids.push(id); return id; };
+  try {
+    const tag = { loaded: false, load() { this.loaded = true; } };
+    const adapter = flow.createMockAdapter();
+    const session = flow.createFlow(adapter, tag, { search: "?gclid=LATER", localStorage: local, sessionStorage: sessionStore, dataLayer: [] });
+    session.submitContact(contact);
+    session.answer("type", "sfh");
+    session.answer("ownership", "sole_owner");
+    const same = flow.createFlow(flow.createMockAdapter(), tag, { search: "", localStorage: local, sessionStorage: sessionStore, dataLayer: [] });
+    assert.equal(ids.length, 1);
+    assert.match(session.state.leadId, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    assert.equal(same.state.leadId, session.state.leadId);
+    const other = flow.createFlow(flow.createMockAdapter(), tag, { localStorage: memory(), sessionStorage: memory(), dataLayer: [] });
+    assert.notEqual(other.state.leadId, session.state.leadId);
+    assert.equal(ids.length, 2);
+    for (const row of payloads(adapter)) {
+      for (const key of flow.PAYLOAD_FIELDS) assert.equal(typeof row[key], "string", key);
+      assert.equal(row.lead_id, session.state.leadId);
+      assert.equal(row.gclid, "G-FIRST");
+      assert.equal(row.gbraid, "GB1");
+      assert.equal(row.wbraid, "WB1");
+      assert.equal(row.fbclid, "FB1");
+      assert.equal(row.utm_campaign, "sell");
+    }
+    assert.equal(payloads(adapter).some((row) => row.stage === "contact" && row.name === contact.name), true);
+    assert.equal(adapter.log[0].crm, false);
+  } finally {
+    crypto.randomUUID = orig;
+  }
+});
+
+test("the hot path records one seller_form_completed and dedupes on lead id", () => {
+  const dataLayer = [];
+  const local = memory();
+  const sessionStore = memory();
+  const { tag, adapter, session } = run();
+  const hot = flow.createFlow(adapter, tag, { search: CLICK, localStorage: local, sessionStorage: sessionStore, dataLayer });
+  hot.submitContact(contact);
+  hot.answer("type", "sfh");
+  assert.equal(dataLayer.length, 0);
+  assert.equal(tag.loaded, false);
+  hot.answer("ownership", "sole_owner");
+  assert.equal(tag.loaded, true);
+  assert.deepEqual(dataLayer.map((e) => e.event), ["seller_form_completed"]);
+  assert.equal(dataLayer[0].transaction_id, hot.state.leadId);
+  assert.equal(JSON.stringify(dataLayer).includes(contact.email), false);
+  assert.equal(JSON.stringify(dataLayer).includes(contact.phone), false);
+  assert.equal(JSON.stringify(dataLayer).includes(contact.name), false);
+  assert.equal(JSON.stringify(dataLayer).includes("Example"), false);
+  hot.answer("occupancy", "owner");
+  hot.answer("condition", "wear");
+  hot.answer("price_vs_value", "band_80_100");
+  hot.answer("listed", "yes");
+  hot.answer("timeline", "asap");
+  assert.equal(dataLayer.filter((e) => e.event === "seller_form_completed").length, 1);
+  const second = flow.createFlow(flow.createMockAdapter(), { loaded: false, load() { this.loaded = true; } }, {
+    search: CLICK, localStorage: local, sessionStorage: sessionStore, dataLayer
+  });
+  second.submitContact(contact);
+  second.answer("type", "multi_2_4");
+  second.answer("ownership", "all_agree");
+  assert.equal(dataLayer.filter((e) => e.event === "seller_form_completed").length, 1);
+  assert.equal(second.state.leadId, hot.state.leadId);
+});
+
+test("non-hot paths never convert and exits carry a reason code", () => {
+  assert.equal(flow.conversionName({ type: "sfh", ownership: "sole_owner" }), "seller_form_completed");
+  assert.equal(flow.conversionName({ type: "multi_2_4", ownership: "decision_maker" }), "seller_form_completed");
+  for (const property of ["townhouse", "condo", "mobile", "land"]) {
+    assert.equal(flow.conversionName({ type: property, ownership: "sole_owner" }), "");
+  }
+  assert.equal(flow.conversionName({ type: "sfh", ownership: "no" }), "");
+  assert.equal(flow.exitEvent("quiet_property", { type: "condo" }).reason, "quiet_property");
+  assert.equal(flow.exitEvent("quiet_non_owner", {}).reason, "not_owner");
+  assert.equal(flow.exitEvent("nurture", {}).reason, "nurture");
+  assert.equal(flow.exitEvent("dq", {}).reason, "dq");
+  assert.equal(flow.exitEvent("abandoned", {}), null);
+  assert.equal(flow.exitEvent("hot", {}), null);
+  const quiet = ["townhouse", "condo", "mobile", "land"];
+  for (const property of quiet) {
+    const dataLayer = [];
+    const { tag, session } = run();
+    const routed = flow.createFlow(session.adapter, tag, { dataLayer });
+    routed.submitContact(contact);
+    routed.answer("type", property);
+    assert.equal(tag.loaded, false);
+    assert.deepEqual(dataLayer.map((e) => e.event), ["seller_form_disqualified"]);
+    assert.equal(dataLayer[0].reason, "quiet_property");
+    assert.equal(dataLayer[0].property_type, property);
+    assert.equal(dataLayer[0].transaction_id, routed.state.leadId);
+    assert.equal(JSON.stringify(dataLayer).includes(contact.email), false);
+  }
+  const dataLayer = [];
+  const { tag, session } = run();
+  const owner = flow.createFlow(session.adapter, tag, { dataLayer });
+  owner.submitContact(contact);
+  assert.equal(dataLayer.length, 0);
+  owner.answer("type", "sfh");
+  owner.answer("ownership", "no");
+  assert.equal(tag.loaded, false);
+  assert.equal(owner.state.downstream, "crm_follow_up");
+  assert.deepEqual(dataLayer.map((e) => e.reason), ["not_owner"]);
+  const leftLayer = [];
+  const left = flow.createFlow(flow.createMockAdapter(), { loaded: false, load() { this.loaded = true; } }, { dataLayer: leftLayer });
+  left.submitContact(contact);
+  left.abandon();
+  assert.equal(leftLayer.length, 0);
+  assert.equal(left.state.downstream, "staying_parked");
+});
+
+test("enrichment is skippable, stays on the hot lead, and does not move the conversion", () => {
+  const dataLayer = [];
+  const { tag, adapter, session } = run();
+  const hot = flow.createFlow(adapter, tag, { dataLayer });
+  hot.submitContact(contact);
+  hot.answer("type", "multi_2_4");
+  hot.answer("ownership", "all_agree");
+  assert.equal(dataLayer.length, 1);
+  assert.equal(hot.state.stage, "enrich");
+  assert.equal(hot.skip().view.screen, "condition");
+  assert.equal(hot.skip().view.screen, "price_vs_value");
+  assert.equal(hot.skip().view.screen, "listed");
+  assert.equal(hot.skip().view.screen, "timeline");
+  const done = hot.skip();
+  assert.equal(done.view.stage, "thanks");
+  assert.equal(done.view.branch, "hot");
+  assert.equal(done.view.downstream, "zap_hot");
+  assert.equal(done.view.googleTagFired, true);
+  assert.equal(done.view.priority, "standard");
+  assert.equal(dataLayer.filter((e) => e.event === "seller_form_completed").length, 1);
+  assert.equal(adapter.log.filter((row) => row.op === "google" && row.fired).length, 1);
+  assert.equal(payloads(adapter).filter((row) => row.stage === "enrich" && row.skipped === true).length, 5);
+  assert.equal(payloads(adapter).every((row) => row.lead_id === hot.state.leadId), true);
+  const answered = flow.createFlow(flow.createMockAdapter(), { loaded: false, load() { this.loaded = true; } }, { dataLayer: [] });
+  answered.submitContact(contact);
+  answered.answer("type", "sfh");
+  answered.answer("ownership", "sole_owner");
+  const before = answered.state.dataLayer.length;
+  answered.answer("occupancy", "tenant");
+  answered.answer("condition", "repairs");
+  answered.answer("price_vs_value", "over_100");
+  const listed = answered.answer("listed", "yes");
+  assert.equal(listed.view.branch, "hot");
+  assert.equal(listed.view.downstream, "zap_hot");
+  assert.equal(listed.view.screen, "timeline");
+  answered.answer("timeline", "30d");
+  assert.equal(answered.state.stage, "thanks");
+  assert.equal(answered.state.dataLayer.length, before);
+  assert.equal(answered.state.answers.listed, "yes");
+  const thanks = payloads(answered.adapter).find((row) => row.stage === "thanks");
+  assert.equal(thanks.lead_id, answered.state.leadId);
+  assert.equal(thanks.listed, "yes");
+  assert.equal(thanks.occupancy, "tenant");
+});
+
+test("priority is high only for a vacant home or an asking price under 80 percent", () => {
+  assert.equal(flow.priorityTier({}), "standard");
+  assert.equal(flow.priorityTier({ occupancy: "owner", price_vs_value: "band_80_100", listed: "yes" }), "standard");
+  assert.equal(flow.priorityTier({ occupancy: "tenant", price_vs_value: "over_100" }), "standard");
+  assert.equal(flow.priorityTier({ occupancy: "vacant" }), "high");
+  assert.equal(flow.priorityTier({ price_vs_value: "under_80" }), "high");
+  assert.equal(flow.priorityTier({ occupancy: "vacant", price_vs_value: "not_sure", listed: "yes" }), "high");
+  const { session } = run();
+  session.submitContact(contact);
+  session.answer("type", "sfh");
+  session.answer("ownership", "decision_maker");
+  session.answer("occupancy", "vacant");
+  assert.equal(session.state.priority, "high");
+  assert.equal(session.state.branch, "hot");
+  assert.equal(session.state.downstream, "zap_hot");
+  const priced = flow.createFlow(flow.createMockAdapter(), { loaded: false, load() { this.loaded = true; } });
+  priced.submitContact(contact);
+  priced.answer("type", "multi_2_4");
+  priced.answer("ownership", "sole_owner");
+  priced.skip();
+  priced.skip();
+  priced.answer("price_vs_value", "under_80");
+  assert.equal(priced.state.priority, "high");
+  assert.equal(priced.state.branch, "hot");
+  priced.answer("listed", "yes");
+  priced.answer("timeline", "no_rush");
+  assert.equal(priced.state.stage, "thanks");
+  assert.equal(priced.state.priority, "high");
+  assert.equal(priced.state.downstream, "zap_hot");
+  const quiet = flow.createFlow(flow.createMockAdapter(), { loaded: false, load() { this.loaded = true; } });
+  quiet.submitContact(contact);
+  quiet.answer("type", "land");
+  assert.equal(quiet.answer("occupancy", "vacant").error, "unexpected_answer");
+  assert.equal(quiet.state.branch, "quiet_property");
+});
+
+test("banned phrases fail the test-form check", () => {
+  const { execFileSync } = require("node:child_process");
+  const root = path.join(__dirname, "..");
+  const samples = {
+    close: "We can close in 7 days.",
+    days: "A 7 days to close promise.",
+    closing: "Closing in 14 days is not allowed.",
+    hand: "Every file is reviewed by hand.",
+    person: "These are person-reviewed offers.",
+    person2: "Each one is personally reviewed.",
+    stars: "5-star rated on Facebook.",
+    stars2: "Facebook star rating.",
+    ok: "Within 30 days is a timeline answer, not a promise."
+  };
+  const report = JSON.parse(execFileSync("python3", ["-c", `
+import json, sys
+sys.path.insert(0, "build")
+import gen
+samples = json.loads(sys.stdin.read())
+out = {name: gen.banned_test_form_hits(text) for name, text in samples.items()}
+errors = []
+gen.check_test_form(errors)
+out["check"] = errors
+print(json.dumps(out))
+`], { cwd: root, input: JSON.stringify(samples), encoding: "utf8" }));
+  assert.ok(report.close.includes("close_in_days"));
+  assert.ok(report.days.includes("days_to_close"));
+  assert.ok(report.closing.includes("closing_in_days"));
+  assert.ok(report.hand.includes("by_hand"));
+  assert.ok(report.person.includes("person_reviewed"));
+  assert.ok(report.person2.includes("person_reviewed"));
+  assert.ok(report.stars.includes("facebook_stars"));
+  assert.ok(report.stars2.includes("facebook_stars"));
+  assert.deepEqual(report.ok, []);
+  assert.deepEqual(report.check, []);
+  const src = fs.readFileSync(path.join(__dirname, "two-stage.js"), "utf8");
+  for (const needle of ["fetch(", "googletagmanager", "maps.googleapis", "places.googleapis", "google-analytics", "facebook.net", "gtag("]) {
+    assert.equal(src.includes(needle), false, needle);
+  }
+});

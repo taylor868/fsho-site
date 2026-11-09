@@ -1,0 +1,10 @@
+{
+  "patterns": [
+    {"id": "close_in_days", "re": "close in \\d+ days"},
+    {"id": "days_to_close", "re": "\\b\\d+\\s+days?\\s+to\\s+close\\b"},
+    {"id": "closing_in_days", "re": "\\bclos(?:e|ing)\\s+in\\s+\\d+\\s+days\\b"},
+    {"id": "by_hand", "re": "\\bby hand\\b"},
+    {"id": "person_reviewed", "re": "person-reviewed|personally reviewed|reviewed by a person|\\bperson reviewed\\b"},
+    {"id": "facebook_stars", "re": "facebook.{0,48}stars?|stars?.{0,48}facebook"}
+  ]
+}
