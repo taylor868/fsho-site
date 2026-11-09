@@ -9,6 +9,7 @@
   var OWNERS = { sole_owner: 1, all_agree: 1, decision_maker: 1 };
   var LEGACY = { situation: 1, equity: 1, ability: 1 };
   var ENRICH_STEPS = ["occupancy", "condition", "listed", "timeline"];
+  var ENRICH_VIA_PARK = true;
   var PAYLOAD_FIELDS = ["lead_id", "stage", "gclid", "gbraid", "wbraid", "fbclid", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
   var PUBLIC_EVENT_KEYS = { event: 1, transaction_id: 1, reason: 1, property_type: 1 };
   var TRACKING = {
@@ -59,9 +60,10 @@
   };
   var PATHS = {
     zap_hot: "Zap Hot path: WhatConverts + CRM + Slack",
-    pg_cron_sweep: "pg_cron self-serve sweep after timeout",
+    pg_cron_sweep: "Self-serve sweep after 10 minutes, tagged q1_decline",
     crm_follow_up: "CRM follow-up, logged, no conversion",
-    staying_parked: "Stays parked"
+    staying_parked: "Parked until the next answer, or if they leave",
+    self_serve_timeout: "Self-serve sweep after 10 minutes, tagged timeout"
   };
 
   function testModeAllowed(context, search) {
@@ -79,6 +81,10 @@
       if (fast || e.timeline === "30_90d") return "p2";
       return "p3";
     }
+    function tierOrNull(e) {
+      if (!e || !Object.keys(e).length) return null;
+      return tierFrom(e);
+    }
     return {
       log: log,
       park: function (row) { log.push({ op: "park", crm: false, google: false, row: row }); },
@@ -89,13 +95,18 @@
       answer: function (req) { log.push({ op: "answer", req: req }); return { ok: true, status: "saved" }; },
       claim: function (req) {
         var tier = req && req.by === "non_owner" ? "follow_up" : "hot";
-        var res = { ok: true, claimed: true, tier: tier, priority_tier: tierFrom(req && req.enrichment), status: "claimed" };
+        var res = { ok: true, claimed: true, tier: tier, priority_tier: tierOrNull(req && req.enrichment), status: "claimed" };
         log.push({ op: "claim", req: req, res: res });
         return res;
       },
       complete: function (req) {
-        var res = { ok: true, status: "delivered", priority_tier: tierFrom(req && req.enrichment) };
+        var res = { ok: true, status: "delivered", priority_tier: tierOrNull(req && req.enrichment) };
         log.push({ op: "complete", req: req, res: res });
+        return res;
+      },
+      enrich: function (req) {
+        var res = { ok: true, status: "saved", priority_tier: tierOrNull(req && req.enrichment) };
+        log.push({ op: "enrich", req: req, res: res });
         return res;
       }
     };
@@ -265,6 +276,7 @@
       leadId: state.leadId,
       priority: state.priority,
       serverTier: state.serverTier,
+      tierPending: state.tierPending,
       conversionFired: state.conversionFired
     };
   }
@@ -332,6 +344,10 @@
       trackKeys(tracking).forEach(function (k) { if (state.attr[k]) row[k] = state.attr[k]; });
       return row;
     }
+    function chain(value, fn) {
+      if (value && typeof value.then === "function") return value.then(fn);
+      return fn(value);
+    }
     function recordAnswer(question, value) {
       if (typeof adapter.answer !== "function") return { ok: true };
       return adapter.answer(Object.assign(trackingFields(), { question: question, answer: value })) || { ok: true };
@@ -341,9 +357,11 @@
     }
     function decideClaim(hint, by) {
       if (typeof adapter.claim !== "function") return hint;
-      var res = adapter.claim(Object.assign(trackingFields(), { by: by })) || {};
+      return chain(adapter.claim(Object.assign(trackingFields(), { by: by })), function (res) {
+      res = res || {};
       state.claimStatus = res.status || "";
-      if (res.priority_tier) state.serverTier = res.priority_tier;
+      if (res.priority_tier) { state.serverTier = res.priority_tier; state.tierPending = false; }
+      else if (res.priority_tier === null) { state.serverTier = ""; state.tierPending = true; }
       if (res.status === "already_claimed") {
         note(state, "server", "Server already claimed this lead. Stop. No reserve and no Zap.");
         return "stopped";
@@ -361,22 +379,36 @@
       if (serverBranch !== hint) note(state, "server", "Server tier " + res.tier + " overrides the client screen hint " + hint + ".");
       else note(state, "server", "Claim returned tier " + res.tier + ".");
       return serverBranch;
+      });
     }
     function sendReserve() {
       if (typeof adapter.reserve !== "function") return;
-      var res = adapter.reserve(Object.assign(trackingFields(), { destination: "crm_create", stage: "final" })) || {};
-      note(state, "reserve", res.ok === false ? "Reserve returned " + (res.status || "held") + "." : "Reserve committed. Owner token stays off this trace.");
+      return chain(adapter.reserve(Object.assign(trackingFields(), { destination: "crm_create", stage: "final" })), function (res) {
+        res = res || {};
+        note(state, "reserve", res.ok === false ? "Reserve returned " + (res.status || "held") + "." : "Reserve committed. Owner token stays off this trace.");
+      });
     }
-    function sendComplete() {
-      if (typeof adapter.complete !== "function") return;
-      var enrichment = {};
-      ENRICH_STEPS.forEach(function (key) { if (state.answers[key]) enrichment[key] = state.answers[key]; });
-      var res = adapter.complete(Object.assign(trackingFields(), { enrichment: enrichment, mode: "hmac" })) || {};
+    function applyTier(res, label) {
+      res = res || {};
       if (res.priority_tier) {
         state.serverTier = res.priority_tier;
+        state.tierPending = false;
         note(state, "tier", "Server priority_tier " + res.priority_tier + ".");
+      } else if (res.priority_tier === null) {
+        state.serverTier = "";
+        state.tierPending = true;
       }
-      if (rejected(res)) note(state, "fields", "Complete rejected: " + (res.fields || []).join(", ") + ".");
+      if (rejected(res)) note(state, "fields", label + " rejected: " + (res.fields || []).join(", ") + ".");
+    }
+    function sendEnrichment() {
+      var enrichment = {};
+      ENRICH_STEPS.forEach(function (key) { if (state.answers[key]) enrichment[key] = state.answers[key]; });
+      if (!Object.keys(enrichment).length) return;
+      var op = ENRICH_VIA_PARK ? "enrich" : "complete";
+      if (typeof adapter[op] !== "function") return;
+      return chain(adapter[op](Object.assign(trackingFields(), { enrichment: enrichment, mode: "hmac" })), function (res) {
+        applyTier(res, op === "enrich" ? "Enrich" : "Complete");
+      });
     }
     function finish(branch, path, googleText) {
       state.branch = branch;
@@ -391,7 +423,7 @@
       adapter.branch(branch);
       adapter.google(state.googleTagFired);
       adapter.downstream(path);
-      note(state, "branch", branch === "hot" ? "Hot. This is the form fill." : (branch === "quiet_property" ? "Quiet property branch. Stays parked." : "Quiet non-owner branch. Logged, no conversion."));
+      note(state, "branch", branch === "hot" ? "Hot. This is the form fill." : (branch === "quiet_property" ? "Quiet property branch. The sweep moves this to self-serve after 10 minutes, tagged q1_decline." : "Quiet non-owner branch. Logged, no conversion."));
       note(state, "google", googleText);
       note(state, "downstream", "Expected path: " + PATHS[path]);
     }
@@ -406,8 +438,9 @@
         listed: state.answers.listed || "",
         timeline: state.answers.timeline || ""
       });
-      sendComplete();
-      note(state, "thanks", "Optional questions finished. Conversion already counted.");
+      return chain(sendEnrichment(), function () {
+        note(state, "thanks", "Optional questions finished. Conversion already counted.");
+      });
     }
     return {
       state: state,
@@ -420,32 +453,33 @@
         var email = contact && String(contact.email || "").trim();
         if (!name || !address || !phone || !email) return { ok: false, error: "contact_required" };
         state.contact = { name: name, address: address, phone: phone, email: email };
-        state.parked = true;
-        state.stage = "q_type";
-        state.downstream = "staying_parked";
-        var parked = adapter.park(Object.assign(basePayload("contact"), { name: name, address: address, phone: phone, email: email, status: "parked" }));
-        if (rejected(parked)) {
-          state.parked = false;
-          state.stage = "contact";
-          note(state, "fields", "Park rejected: " + (parked.fields || []).join(", ") + ".");
-          return { ok: false, error: "bad_input", fields: parked.fields, view: snapshot(state) };
-        }
-        note(state, "park", "Parked in the staged table. No CRM lead. No Google tag.");
-        note(state, "downstream", "Expected path: " + PATHS.staying_parked + " until the next answer, or if they leave.");
-        return { ok: true, view: snapshot(state) };
+        return chain(adapter.park(Object.assign(basePayload("contact"), { name: name, address: address, phone: phone, email: email, status: "parked" })), function (parked) {
+          if (rejected(parked)) {
+            state.parked = false;
+            state.stage = "contact";
+            note(state, "fields", "Park rejected: " + (parked.fields || []).join(", ") + ".");
+            return { ok: false, error: "bad_input", fields: parked.fields, view: snapshot(state) };
+          }
+          state.parked = true;
+          state.stage = "q_type";
+          state.downstream = "staying_parked";
+          note(state, "park", "Parked in the staged table. No CRM lead. No Google tag.");
+          note(state, "downstream", "Expected path: " + PATHS.staying_parked + ".");
+          return { ok: true, view: snapshot(state) };
+        });
       },
       abandon: function () {
         if (state.stage !== "q_type") return { ok: false, error: "abandon_only_after_stage_1" };
         state.stage = "abandoned";
         state.branch = "abandoned";
-        state.downstream = "staying_parked";
+        state.downstream = "self_serve_timeout";
         emit("abandoned", {});
         adapter.branch("abandoned");
         adapter.google(false);
-        adapter.downstream("staying_parked");
-        note(state, "abandon", "Left after stage 1. Stays parked. No sweep, no CRM, no Google tag.");
+        adapter.downstream("self_serve_timeout");
+        note(state, "abandon", "Left after stage 1. The sweep moves this to self-serve after 10 minutes, tagged timeout. No CRM lead and no Google tag.");
         note(state, "google", "Google tag not loaded.");
-        note(state, "downstream", "Expected path: " + PATHS.staying_parked);
+        note(state, "downstream", "Expected path: " + PATHS.self_serve_timeout);
         return { ok: true, view: snapshot(state) };
       },
       skip: function () {
@@ -455,8 +489,7 @@
         delete state.answers[id];
         emit("enrich", { question: id, answer: "", skipped: true });
         note(state, "skip", "Skipped " + id + ". Conversion unchanged.");
-        advance();
-        return { ok: true, view: snapshot(state) };
+        return chain(advance(), function () { return { ok: true, view: snapshot(state) }; });
       },
       answer: function (id, value) {
         if (state.stage === "q_type" && id === "type") {
@@ -464,56 +497,58 @@
           if (quiet === null) return { ok: false, error: "unknown_property" };
           state.answers.type = value;
           note(state, "q1", "Q1 property type: " + value + ".");
-          var typed = recordAnswer("type", value);
-          if (rejected(typed)) {
-            note(state, "fields", "Answer rejected: " + (typed.fields || []).join(", ") + ".");
-            return { ok: false, error: "bad_input", fields: typed.fields, view: snapshot(state) };
-          }
-          if (quiet) {
-            emit("property_type", { property_type: value, signal: "seller_form_disqualified", reason: "quiet_property" });
-            finish("quiet_property", "pg_cron_sweep", "Google tag not loaded.");
+          return chain(recordAnswer("type", value), function (typed) {
+            if (rejected(typed)) {
+              note(state, "fields", "Answer rejected: " + (typed.fields || []).join(", ") + ".");
+              return { ok: false, error: "bad_input", fields: typed.fields, view: snapshot(state) };
+            }
+            if (quiet) {
+              emit("property_type", { property_type: value, signal: "seller_form_disqualified", reason: "quiet_property" });
+              finish("quiet_property", "pg_cron_sweep", "Google tag not loaded.");
+              return { ok: true, view: snapshot(state) };
+            }
+            emit("property_type", { property_type: value, signal: "" });
+            state.stage = "q_ownership";
+            note(state, "google", "Google tag not loaded. Waiting for an owner answer.");
             return { ok: true, view: snapshot(state) };
-          }
-          emit("property_type", { property_type: value, signal: "" });
-          state.stage = "q_ownership";
-          note(state, "google", "Google tag not loaded. Waiting for an owner answer.");
-          return { ok: true, view: snapshot(state) };
+          });
         }
         if (state.stage === "q_ownership" && id === "ownership") {
           var owner = !!OWNERS[value];
           if (!owner && value !== "no") return { ok: false, error: "unknown_ownership" };
           state.answers.ownership = value;
           note(state, "q2", "Q2 ownership: " + value + ".");
-          var owned = recordAnswer("ownership", value);
-          if (rejected(owned)) {
-            note(state, "fields", "Answer rejected: " + (owned.fields || []).join(", ") + ".");
-            return { ok: false, error: "bad_input", fields: owned.fields, view: snapshot(state) };
-          }
-          var hint = owner ? "hot" : "quiet_non_owner";
-          var decided = decideClaim(hint, owner ? "promote" : "non_owner");
-          if (decided === "hot") {
-            state.googleTagFired = true;
-            gate.load();
-            emit("ownership", { ownership: value, signal: conversionName(state.answers) });
-            finish("hot", "zap_hot", "Google tag fired after owner=yes. Dry-run did not request the tag script.");
-            sendReserve();
-            return { ok: true, view: snapshot(state) };
-          }
-          if (decided === "quiet_non_owner") {
-            emit("ownership", { ownership: value, signal: "seller_form_disqualified", reason: "not_owner" });
-            finish("quiet_non_owner", "crm_follow_up", "Google tag not loaded.");
-            return { ok: true, view: snapshot(state) };
-          }
-          state.branch = decided;
-          state.downstream = "staying_parked";
-          state.stage = "done";
-          state.googleTagFired = false;
-          adapter.branch(decided);
-          adapter.google(false);
-          adapter.downstream("staying_parked");
-          note(state, "google", "Google tag not loaded.");
-          note(state, "downstream", "Expected path: " + PATHS.staying_parked);
-          return { ok: true, view: snapshot(state) };
+          return chain(recordAnswer("ownership", value), function (owned) {
+            if (rejected(owned)) {
+              note(state, "fields", "Answer rejected: " + (owned.fields || []).join(", ") + ".");
+              return { ok: false, error: "bad_input", fields: owned.fields, view: snapshot(state) };
+            }
+            var hint = owner ? "hot" : "quiet_non_owner";
+            return chain(decideClaim(hint, owner ? "promote" : "non_owner"), function (decided) {
+              if (decided === "hot") {
+                state.googleTagFired = true;
+                gate.load();
+                emit("ownership", { ownership: value, signal: conversionName(state.answers) });
+                finish("hot", "zap_hot", "Google tag fired after owner=yes. Dry-run did not request the tag script.");
+                return chain(sendReserve(), function () { return { ok: true, view: snapshot(state) }; });
+              }
+              if (decided === "quiet_non_owner") {
+                emit("ownership", { ownership: value, signal: "seller_form_disqualified", reason: "not_owner" });
+                finish("quiet_non_owner", "crm_follow_up", "Google tag not loaded.");
+                return { ok: true, view: snapshot(state) };
+              }
+              state.branch = decided;
+              state.downstream = "staying_parked";
+              state.stage = "done";
+              state.googleTagFired = false;
+              adapter.branch(decided);
+              adapter.google(false);
+              adapter.downstream("staying_parked");
+              note(state, "google", "Google tag not loaded.");
+              note(state, "downstream", "Expected path: " + PATHS.staying_parked);
+              return { ok: true, view: snapshot(state) };
+            });
+          });
         }
         if (state.stage === "enrich" && (ENRICH_STEPS.indexOf(id) >= 0 || LEGACY[id])) {
           if (ENRICH_STEPS.indexOf(id) >= 0 && !knownOption(id, value)) return { ok: false, error: "unknown_option" };
@@ -522,7 +557,7 @@
           var listed = id === "listed" ? " Listed homes stay on the hot path." : "";
           emit("enrich", { question: id, answer: value, skipped: false });
           note(state, "enrich", "Optional " + id + "=" + value + ". Conversion unchanged." + listed);
-          if (id === ENRICH_STEPS[state.enrichIndex]) advance();
+          if (id === ENRICH_STEPS[state.enrichIndex]) return chain(advance(), function () { return { ok: true, view: snapshot(state) }; });
           return { ok: true, view: snapshot(state) };
         }
         return { ok: false, error: "unexpected_answer" };
@@ -552,12 +587,13 @@
       return typeof options.now === "function" ? options.now() : Math.floor(Date.now() / 1000);
     }
     function ensureMint() {
-      if (mintedOnce) return;
+      if (mintedOnce) return Promise.resolve();
       mintedOnce = true;
-      var minted = normalize(send(base + "/intake-reserve/mint", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }));
-      ids.intake = minted.intake_id || "";
-      ids.binding = minted.session_binding || "";
-      if (minted.kid) ids.kid = minted.kid;
+      return Promise.resolve(send(base + "/intake-reserve/mint", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).then(normalize).then(function (minted) {
+        ids.intake = minted.intake_id || "";
+        ids.binding = minted.session_binding || "";
+        if (minted.kid) ids.kid = minted.kid;
+      });
     }
     function remember(row) {
       WIRE_KEYS.forEach(function (key) {
@@ -571,13 +607,14 @@
       return out;
     }
     function envelope(stage, payload, intake) {
-      ensureMint();
-      var ts = nowSec();
-      return {
-        v: "1", kid: ids.kid, route: REAL_ADAPTER.route, channel: REAL_ADAPTER.channel,
-        intake_id: intake || ids.intake, event_id: eventId(), stage: stage, ts: ts, exp: ts + 900,
-        payload_sha256: sha256Hex(canonicalJson(payload)), sig: ""
-      };
+      return ensureMint().then(function () {
+        var ts = nowSec();
+        return {
+          v: "1", kid: ids.kid, route: REAL_ADAPTER.route, channel: REAL_ADAPTER.channel,
+          intake_id: intake || ids.intake, event_id: eventId(), stage: stage, ts: ts, exp: ts + 900,
+          payload_sha256: sha256Hex(canonicalJson(payload)), sig: ""
+        };
+      });
     }
     function signedIp(payload) {
       if (signer.client_ip) payload.client_ip = signer.client_ip;
@@ -592,17 +629,26 @@
       ENRICH_STEPS.forEach(function (key) { if (source && source[key]) out[key] = source[key]; });
       return out;
     }
+    function headerValue(res, name) {
+      var headers = res && res.headers;
+      if (!headers) return "";
+      if (typeof headers.get === "function") return headers.get(name) || "";
+      return headers[name] || headers[name.toLowerCase()] || "";
+    }
     function readBody(res) {
+      if (res && typeof res.json === "function") {
+        return Promise.resolve(res.json()).then(function (body) { return body || {}; }, function () { return { status: "bad_json" }; });
+      }
       var body = res && res.body;
       if (typeof body === "string") {
         try { body = JSON.parse(body); } catch (e) { body = { status: "bad_json" }; }
       }
-      return body || {};
+      return Promise.resolve(body || {});
     }
     function normalize(res) {
+      return readBody(res).then(function (body) {
       var status = res && typeof res.status === "number" ? res.status : 0;
-      var body = readBody(res);
-      var retry = res && res.headers ? (res.headers["retry-after"] || res.headers["Retry-After"] || "") : "";
+      var retry = headerValue(res, "retry-after");
       if (body.reservation_id) reservationId = body.reservation_id;
       if (body.reservation_generation) reservationGeneration = body.reservation_generation;
       if (body.owner_token && !ownerToken) ownerToken = body.owner_token;
@@ -620,11 +666,12 @@
         return copy;
       }
       return { ok: false, http: status, status: body.status || "bad_response", fields: body.fields || [] };
+      });
     }
     function post(path, body, extraHeaders) {
       var headers = { "content-type": "application/json" };
       if (extraHeaders) Object.keys(extraHeaders).forEach(function (key) { if (extraHeaders[key]) headers[key] = extraHeaders[key]; });
-      return normalize(send(base + path, { method: "POST", headers: headers, body: JSON.stringify(body) }));
+      return Promise.resolve(send(base + path, { method: "POST", headers: headers, body: JSON.stringify(body == null ? {} : body) })).then(normalize);
     }
     function tokenHeader(req) {
       if (!req || !req.token) return null;
@@ -644,32 +691,43 @@
         if (phone) payload.phone = phone;
         if (row.email) payload.email = row.email;
         signedIp(payload);
-        var env = envelope("partial", payload);
-        return post("/intake-park/park", { envelope: env, session_binding: ids.binding, payload: payload });
+        return envelope("partial", payload).then(function (env) {
+          return post("/intake-park/park", { envelope: env, session_binding: ids.binding, payload: payload });
+        });
       },
       answer: function (req) {
         req = req || {};
         var payload = signedIp(Object.assign({ question: req.question, answer: req.answer }, tracking(req)));
-        var env = envelope("partial", payload);
-        return post("/intake-park/answer", { envelope: env, payload: payload });
+        return envelope("partial", payload).then(function (env) {
+          return post("/intake-park/answer", { envelope: env, payload: payload });
+        });
       },
       claim: function (req) {
         req = req || {};
         var payload = signedIp(Object.assign({ by: req.by }, tracking(req)));
-        var env = envelope("partial", payload);
-        return post("/intake-park/claim", { envelope: env, payload: payload });
+        return envelope("partial", payload).then(function (env) {
+          return post("/intake-park/claim", { envelope: env, payload: payload });
+        });
+      },
+      enrich: function (req) {
+        req = req || {};
+        var payload = signedIp(Object.assign(tracking(req), { enrichment: mapEnrichment(req.enrichment) }));
+        return envelope("partial", payload).then(function (env) {
+          return post("/intake-park/enrich", { envelope: env, session_binding: ids.binding, payload: payload });
+        });
       },
       reserve: function (req) {
         req = req || {};
         if (!ownerToken) ownerToken = req.owner_token || eventId();
         var payload = tracking(req);
         var stage = req.stage === "first" ? "first" : "final";
-        var env = envelope(stage, payload);
-        reservation.stage = stage;
-        reservation.intake = ids.intake;
-        return post("/intake-reserve/reserve", {
-          envelope: env, payload: payload, session_binding: ids.binding,
-          destination: req.destination || "crm_create", owner_token: ownerToken, lease_seconds: req.lease_seconds || 120
+        return envelope(stage, payload).then(function (env) {
+          reservation.stage = stage;
+          reservation.intake = ids.intake;
+          return post("/intake-reserve/reserve", {
+            envelope: env, payload: payload, session_binding: ids.binding,
+            destination: req.destination || "crm_create", owner_token: ownerToken, lease_seconds: req.lease_seconds || 120
+          });
         });
       },
       verify: function (req) {
@@ -702,7 +760,7 @@
         if (!ownerToken) ownerToken = req.owner_token || eventId();
         var payload = tracking(req);
         if (Object.keys(enrichment).length) payload.enrichment = enrichment;
-        var env = envelope("final", payload);
+        return envelope("final", payload).then(function (env) {
         var hmacBody = {
           envelope: env, payload: payload, session_binding: ids.binding,
           owner_token: ownerToken, reservation_id: req.reservation_id || reservationId,
@@ -710,6 +768,7 @@
         };
         if (req.remote_id) hmacBody.remote_id = req.remote_id;
         return post("/intake-reserve/complete", hmacBody);
+        });
       },
       reconcile: function (req) {
         req = req || {};
@@ -717,8 +776,9 @@
         if (req.mode === "hmac") {
           var payload = reason ? { reason: reason } : {};
           var stage = reservation.stage === "first" || reservation.stage === "final" ? reservation.stage : (req.stage === "first" ? "first" : req.stage);
-          var env = envelope(stage, payload, reservation.intake);
-          return post("/intake-reserve/reconcile", { envelope: env, payload: payload, reservation_id: req.reservation_id || reservationId });
+          return envelope(stage, payload, reservation.intake).then(function (env) {
+            return post("/intake-reserve/reconcile", { envelope: env, payload: payload, reservation_id: req.reservation_id || reservationId });
+          });
         }
         var header = tokenHeader(req);
         if (!header) return { ok: false, http: 401, status: "auth_failed", fields: [] };
@@ -758,6 +818,7 @@
     TRACKING: TRACKING,
     PAYLOAD_FIELDS: PAYLOAD_FIELDS,
     ENRICH_STEPS: ENRICH_STEPS,
+    ENRICH_VIA_PARK: ENRICH_VIA_PARK,
     NOT_FIT: NOT_FIT,
     FOLLOW_UP: FOLLOW_UP,
     THANKS: THANKS,
@@ -781,6 +842,8 @@ function boot(api) {
   var sorry = document.getElementById("ts-sorry");
   var follow = document.getElementById("ts-followup");
   var thanks = document.getElementById("ts-thanks");
+  var error = document.getElementById("ts-error");
+  var pending = false;
   var tag = { loaded: false, load: function () { this.loaded = true; var n = document.createElement("script"); n.id = "fsho-google-gate"; n.type = "application/json"; n.textContent = "{\"event\":\"form_fill\",\"dry_run\":true}"; document.body.appendChild(n); } };
   var dl = globalThis.dataLayer = globalThis.dataLayer || [];
   var flow = api.createFlow(api.createMockAdapter(), tag, {
@@ -811,10 +874,11 @@ function boot(api) {
     summary.dataset.downstream = path;
     summary.dataset.google = flow.state.googleTagFired ? "fired" : "not-loaded";
     summary.dataset.branch = flow.state.branch || "";
-    summary.dataset.priority = flow.state.serverTier || "";
+    summary.dataset.priority = flow.state.serverTier || (flow.state.tierPending ? "none" : "");
     summary.dataset.lead = flow.state.leadId || "";
     var line = "Branch: " + (flow.state.branch || "not chosen") + ". Google tag: " + (flow.state.googleTagFired ? "fired" : "not loaded") + ". Path: " + (api.PATHS[path] || "not chosen") + ".";
     if (flow.state.serverTier) line += " Server tier: " + flow.state.serverTier + ".";
+    else if (flow.state.tierPending) line += " Server tier: none.";
     summary.textContent = line;
     var names = (flow.state.dataLayer || []).map(function (e) {
       if (!e || !e.event) return "";
@@ -833,7 +897,7 @@ function boot(api) {
       leave.className = "bk";
       leave.id = "ts-abandon";
       leave.textContent = "Leave it parked";
-      leave.onclick = function () { flow.abandon(); paint(); };
+      leave.onclick = function () { runStep(function () { return flow.abandon(); }); };
       ask.appendChild(leave);
     }
     function options(id) {
@@ -852,7 +916,7 @@ function boot(api) {
         b.dataset.q = id;
         b.dataset.v = opt[0];
         b.textContent = opt[1];
-        b.onclick = function () { flow.answer(id, opt[0]); paint(); };
+        b.onclick = function () { runStep(function () { return flow.answer(id, opt[0]); }); };
         row.appendChild(b);
       });
       wrap.appendChild(row);
@@ -871,17 +935,44 @@ function boot(api) {
       skip.id = "ts-skip";
       skip.textContent = "Skip";
       skip.setAttribute("aria-label", "Skip this question");
-      skip.onclick = function () { flow.skip(); paint(); };
+      skip.onclick = function () { runStep(function () { return flow.skip(); }); };
       ask.appendChild(skip);
     }
+  }
+  function setBusy(on) {
+    pending = on;
+    var nodes = app.querySelectorAll("button,input");
+    for (var i = 0; i < nodes.length; i++) nodes[i].disabled = on;
+  }
+  function showError(message) {
+    if (!error) return;
+    error.hidden = !message;
+    error.textContent = message || "";
+  }
+  function runStep(work) {
+    if (pending) return;
+    showError("");
+    setBusy(true);
+    Promise.resolve().then(work).then(function (result) {
+      setBusy(false);
+      if (result && result.ok) form.hidden = true;
+      paint();
+      if (result && result.ok === false) {
+        if (result.error === "contact_required") summary.textContent = "Name, address, phone, and email are required.";
+        else showError("That step did not save. You can try again.");
+      }
+    }, function () {
+      setBusy(false);
+      showError("That step did not save. You can try again.");
+      paint();
+    });
   }
   form.onsubmit = function (e) {
     e.preventDefault();
     var data = new FormData(form);
-    var result = flow.submitContact({ name: data.get("name"), address: data.get("address"), phone: data.get("phone"), email: data.get("email") });
-    if (!result.ok) { summary.textContent = "Name, address, phone, and email are required."; return; }
-    form.hidden = true;
-    paint();
+    runStep(function () {
+      return flow.submitContact({ name: data.get("name"), address: data.get("address"), phone: data.get("phone"), email: data.get("email") });
+    });
   };
   function safeStore(store) {
     try {

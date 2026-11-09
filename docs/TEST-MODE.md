@@ -8,11 +8,11 @@ The test page does not call Supabase, Zapier, WhatConverts, CRM, or Slack. The m
 
 ## Stage 1 and the two qualifying questions
 
-Stage 1 parks name, address, phone, and email. That records a staged-table insert and does not create a CRM lead, load a Google tag, or fire a conversion. Leaving after that stays parked. No sweep, no disqualified event.
+Stage 1 parks name, address, phone, and email. That records a staged-table insert and does not create a CRM lead, load a Google tag, or fire a conversion. Leaving after stage 1 does not fire a conversion. The sweep moves that lead to self-serve after 10 minutes, tagged timeout.
 
 Q1 and Q2 use the live qualifier values: `sfh`, `townhouse`, `multi_2_4`, `condo`, `mobile`, `land`, and ownership `sole_owner`, `all_agree`, `decision_maker`, `no`.
 
-Only `sfh` and `multi_2_4` continue to ownership. Townhouse, condo, mobile, land, and any other listed Q1 value show the sorry screen and stay on the quiet path (`pg_cron` self-serve sweep). No Google tag and no conversion. Those exits push `seller_form_disqualified` with reason `quiet_property` and the property type.
+Only `sfh` and `multi_2_4` continue to ownership. Townhouse, condo, mobile, land, and any other listed Q1 value show the sorry screen. No Google tag and no conversion. The sweep moves that quiet lead to self-serve after 10 minutes, tagged q1_decline. Those exits push `seller_form_disqualified` with reason `quiet_property` and the property type.
 
 Taylor decided townhouses take that quiet path. `townhouse_route` defaults to `quiet`. Setting it to `hot` is the only switch that lets a townhouse continue to the dry-run tag. It is not the current decision, and it still does not emit `seller_form_completed`, because a townhouse is not the Hot conversion path.
 
@@ -44,7 +44,7 @@ The GTM container id is still undecided. The test-form config value is the place
 
 `seller_form_completed` is pushed to `dataLayer` exactly once, and only when the property type is `sfh` or `multi_2_4` and the ownership answer is an owner. `transaction_id` is the `lead_id`, so a second Hot completion in the same session does not push again.
 
-It does not fire on stage 1, abandon, a quiet or sorry property type, a non-owner, nurture, or DQ. Those exits (quiet property, non-owner, nurture, DQ) push `seller_form_disqualified` with a reason code: `quiet_property`, `not_owner`, `nurture`, or `dq`. Abandon stays parked and pushes neither event.
+It does not fire on stage 1, abandon, a quiet or sorry property type, a non-owner, nurture, or DQ. Those exits (quiet property, non-owner, nurture, DQ) push `seller_form_disqualified` with a reason code: `quiet_property`, `not_owner`, `nurture`, or `dq`. Abandon pushes neither conversion event. The sweep moves an abandoned lead to self-serve after 10 minutes, tagged timeout, and a quiet property lead to self-serve after 10 minutes, tagged q1_decline.
 
 `dataLayer` payloads are limited to `event`, `transaction_id`, `reason`, and `property_type`. Name, address, phone, and email never go on the data layer.
 
@@ -59,7 +59,9 @@ Order and wire values. The counter reads “Optional N of 4”. There is no aski
 3. Listed with an agent: `not_listed`, `listed_under_90`, `listed_over_90`, `expired`. A listed home stays on the Hot screen unless the claim response says otherwise.
 4. Timeline: `asap`, `30d`, `30_90d`, `over_90d`, `no_rush`
 
-`priority_tier` is server-set (`p1`, `p2`, or `p3`). The browser does not calculate it. Claim and complete both return it, and the test trace shows that response value. The mock uses the backend rule: `p1` when the home is vacant, or when the timeline is `asap` or `30d` and the condition is `needs_work` or `major_repairs` or the listing is `expired` or `listed_over_90`. `p2` is any other timeline within 90 days (`asap`, `30d`, or `30_90d`). Everything else is `p3`. At claim time the optional answers are not stored yet, so that response is `p3` until complete.
+`priority_tier` is server-set (`p1`, `p2`, or `p3`, or `null` before any optional answers). The browser does not calculate it. Claim returns `null` when enrichment is not stored yet, and the trace shows that as none. With `ENRICH_VIA_PARK` true, the optional answers are posted to `/intake-park/enrich` and that response supplies the tier. The site does not call complete. The Zap is the only completer. The mock enrich rule is: `p1` when the home is vacant, or when the timeline is `asap` or `30d` and the condition is `needs_work` or `major_repairs` or the listing is `expired` or `listed_over_90`. `p2` is any other timeline within 90 days (`asap`, `30d`, or `30_90d`). Everything else with at least one answer is `p3`.
+
+The enrich body is PROVISIONAL until the backend publishes the final shape. The current draft is a signed `POST /intake-park/enrich` with envelope stage `partial`, `session_binding`, signer `client_ip`, write-once tracking, and `payload.enrichment` of `{occupancy, condition, listed, timeline}`. The response includes `priority_tier`.
 
 The thank-you screen is the end of the optional questions. Headline: “Thanks. We have your info.”
 
@@ -95,7 +97,8 @@ All of these are `POST` with `content-type: application/json`. The placeholder b
 | Claim | `/intake-park/claim` | `partial` | `envelope`, `payload.by` of `promote` or `non_owner`, `client_ip`, tracking. Response includes `tier` and `priority_tier` |
 | Reserve | `/intake-reserve/reserve` | `first` or `final` (Hot uses `final`) | `envelope`, tracking `payload`, `session_binding`, `destination: crm_create`, generated `owner_token`, `lease_seconds: 120`. No `client_ip` |
 | Verify | `/intake-reserve/verify` | none | `reservation_id`, optional `intake_id` and `owner_token`. Header `x-intake-zap-token` only when the caller supplies it |
-| Complete, HMAC | `/intake-reserve/complete` | `final` | `envelope`, `payload` tracking and `enrichment`, `session_binding`, `owner_token`, `reservation_id`, `reservation_generation`. No `client_ip`. Response includes `priority_tier` |
+| Enrich (PROVISIONAL, `ENRICH_VIA_PARK`) | `/intake-park/enrich` | `partial` | Same envelope shape as answer, plus `payload.enrichment` `{occupancy, condition, listed, timeline}`, `session_binding`, `client_ip`, tracking. Response includes `priority_tier`. The site uses this instead of complete |
+| Complete, HMAC | `/intake-reserve/complete` | `final` | Kept for the Zap completer. The test page does not call it while `ENRICH_VIA_PARK` is true. `envelope`, `payload` tracking and `enrichment`, `session_binding`, `owner_token`, `reservation_id`, `reservation_generation`. No `client_ip`. Response includes `priority_tier` |
 | Complete, token | `/intake-reserve/complete` | none | The token-mode body, including `enrichment` and tracking, plus the caller-supplied header |
 | Reconcile, token | `/intake-reserve/reconcile` | none | `reservation_id`, `owner_token`, optional `reason` with control characters removed, plus the caller-supplied header |
 | Reconcile, HMAC | `/intake-reserve/reconcile` | the reservation's own `first` or `final` | `envelope` (that reservation's `intake_id`), `payload` of `{reason}` or `{}`, `reservation_id`. No `owner_token`, `session_binding`, or `client_ip`. Response `{ok, status:"needs_reconcile", needs_reconcile:true}` |

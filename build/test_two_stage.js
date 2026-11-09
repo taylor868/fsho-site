@@ -47,7 +47,7 @@ test("hot single-family and multi-family owners fire the tag only after owner=ye
   }
 });
 
-test("quiet property types stay parked for the sweep and never load the tag", () => {
+test("quiet property types go to the self-serve sweep after 10 minutes and never load the tag", () => {
   const qualifier = require("../content/forms/qualifier.json");
   assert.equal(flow.NOT_FIT.headline, qualifier.endings.not_fit.headline);
   assert.equal(flow.NOT_FIT.body, qualifier.endings.not_fit.body);
@@ -78,17 +78,17 @@ test("a non-owner is logged with no conversion", () => {
   assert.equal(tag.loaded, false);
 });
 
-test("abandoning after stage 1 stays parked and does not load the tag", () => {
+test("abandoning after stage 1 is tagged timeout for the 10 minute sweep and does not load the tag", () => {
   const { tag, adapter, session } = run();
   session.submitContact(contact);
   const left = session.abandon();
   assert.equal(left.view.branch, "abandoned");
-  assert.equal(left.view.downstream, "staying_parked");
+  assert.equal(left.view.downstream, "self_serve_timeout");
   assert.equal(left.view.googleTagFired, false);
   assert.equal(tag.loaded, false);
   assert.equal(session.answer("type", "sfh").error, "unexpected_answer");
   assert.equal(adapter.log.some((row) => row.op === "park"), true);
-  assert.equal(adapter.log.some((row) => row.op === "downstream" && row.path === "staying_parked"), true);
+  assert.equal(adapter.log.some((row) => row.op === "downstream" && row.path === "self_serve_timeout"), true);
 });
 
 test("townhouse stays listed and is quiet unless townhouse_route is hot", () => {
@@ -263,7 +263,7 @@ test("non-hot paths never convert and exits carry a reason code", () => {
   left.submitContact(contact);
   left.abandon();
   assert.equal(leftLayer.length, 0);
-  assert.equal(left.state.downstream, "staying_parked");
+  assert.equal(left.state.downstream, "self_serve_timeout");
 });
 
 test("enrichment is skippable, stays on the hot lead, and does not move the conversion", () => {
@@ -284,7 +284,8 @@ test("enrichment is skippable, stays on the hot lead, and does not move the conv
   assert.equal(done.view.downstream, "zap_hot");
   assert.equal(done.view.googleTagFired, true);
   assert.equal(done.view.priority, "");
-  assert.equal(done.view.serverTier, "p3");
+  assert.equal(done.view.serverTier, "");
+  assert.equal(done.view.tierPending, true);
   assert.equal(dataLayer.filter((e) => e.event === "seller_form_completed").length, 1);
   assert.equal(adapter.log.filter((row) => row.op === "google" && row.fired).length, 1);
   assert.equal(payloads(adapter).filter((row) => row.stage === "enrich" && row.skipped === true).length, 4);
@@ -314,7 +315,7 @@ test("the mock tier comes only from the claim and complete responses", () => {
   assert.equal(flow.priorityTier, undefined);
   assert.equal(flow.serverPriorityTier, undefined);
   const mock = flow.createMockAdapter();
-  assert.equal(mock.claim({ by: "promote" }).priority_tier, "p3");
+  assert.equal(mock.claim({ by: "promote" }).priority_tier, null);
   assert.equal(mock.complete({ enrichment: { occupancy: "vacant" } }).priority_tier, "p1");
   assert.equal(mock.complete({ enrichment: { timeline: "asap", condition: "needs_work" } }).priority_tier, "p1");
   assert.equal(mock.complete({ enrichment: { timeline: "30d", listed: "expired" } }).priority_tier, "p1");
@@ -327,7 +328,8 @@ test("the mock tier comes only from the claim and complete responses", () => {
   session.submitContact(contact);
   session.answer("type", "sfh");
   session.answer("ownership", "decision_maker");
-  assert.equal(session.state.serverTier, "p3");
+  assert.equal(session.state.serverTier, "");
+  assert.equal(session.state.tierPending, true);
   assert.equal(session.state.priority, "");
   session.answer("occupancy", "vacant");
   session.answer("condition", "good");
@@ -458,7 +460,7 @@ test("server priority_tier is shown from the response and is not sent by the cli
   session.answer("timeline", "asap");
   assert.equal(session.state.serverTier, "p1");
   assert.equal(session.state.trace.some((row) => row.id === "tier" && row.text.includes("p1")), true);
-  const sent = adapter.log.find((row) => row.op === "complete");
+  const sent = adapter.log.find((row) => row.op === "enrich");
   assert.equal(sent.req.priority, undefined);
   assert.equal(sent.req.enrichment.occupancy, "vacant");
   assert.equal(Object.prototype.hasOwnProperty.call(sent.req.enrichment, "price_vs_value"), false);
@@ -467,7 +469,7 @@ test("server priority_tier is shown from the response and is not sent by the cli
   assert.equal(JSON.stringify(session.state.trace).includes("price_vs_value"), false);
 });
 
-test("the real adapter matches the draft call shapes and never uses the network", () => {
+test("the real adapter matches the draft call shapes and never uses the network", async () => {
   const src = fs.readFileSync(path.join(__dirname, "two-stage.js"), "utf8");
   assert.equal(src.includes("fetch("), false);
   assert.equal(src.includes("INTAKE_HMAC_KEY"), false);
@@ -522,28 +524,29 @@ test("the real adapter matches the draft call shapes and never uses the network"
   };
   const adapter = flow.createRealAdapter({ transport, uuid, now: () => 1700000000, signer: { client_ip: "203.0.113.7" } });
   const track = { lead_id: "lead-1", gclid: "G-FIRST", gbraid: "GB1", wbraid: "WB1", fbclid: "FB1", utm_source: "google", utm_medium: "cpc", utm_campaign: "sell", utm_term: "cash", utm_content: "ad", utm_id: "u1" };
-  const parked = adapter.park(Object.assign({ name: "TEST LEAD", address: "100 Example Ave", phone: "(555) 010-0199", email: contact.email }, track));
+  const parked = await adapter.park(Object.assign({ name: "TEST LEAD", address: "100 Example Ave", phone: "(555) 010-0199", email: contact.email }, track));
+  assert.equal(adapter.intakeId, "intake-from-mint");
   assert.equal(parked.status, "parked");
   assert.equal(parked.owner_token, undefined);
-  adapter.answer(Object.assign({ question: "type", answer: "sfh", gclid: "LATER" }, track));
-  adapter.answer(Object.assign({ question: "ownership", answer: "sole_owner" }, track));
-  adapter.claim(Object.assign({ by: "promote", gclid: "LATER" }, track));
-  const reserved = adapter.reserve(Object.assign({ destination: "crm_create", stage: "final" }, track));
+  await adapter.answer(Object.assign({ question: "type", answer: "sfh", gclid: "LATER" }, track));
+  await adapter.answer(Object.assign({ question: "ownership", answer: "sole_owner" }, track));
+  await adapter.claim(Object.assign({ by: "promote", gclid: "LATER" }, track));
+  const reserved = await adapter.reserve(Object.assign({ destination: "crm_create", stage: "final" }, track));
   assert.equal(reserved.owner_token, undefined);
   assert.equal(reserved.reservation_id, "res-1");
-  adapter.complete(Object.assign({ mode: "hmac", enrichment: { occupancy: "vacant", condition: "needs_work", price_vs_value: "under_80", listed: "listed_over_90", timeline: "asap" } }, track));
-  const verified = adapter.verify({ reservation_id: "res-1", intake_id: adapter.intakeId, token: "supplied-for-the-test" });
+  await adapter.complete(Object.assign({ mode: "hmac", enrichment: { occupancy: "vacant", condition: "needs_work", price_vs_value: "under_80", listed: "listed_over_90", timeline: "asap" } }, track));
+  const verified = await adapter.verify({ reservation_id: "res-1", intake_id: adapter.intakeId, token: "supplied-for-the-test" });
   assert.equal(verified.status, "saved");
-  const noToken = adapter.verify({ reservation_id: "res-1" });
+  const noToken = await adapter.verify({ reservation_id: "res-1" });
   assert.equal(noToken.http, 401);
-  adapter.complete(Object.assign({ mode: "token", token: "supplied-for-the-test", remote_id: "crm-1", enrichment: { timeline: "30d", price_vs_value: "80_100" } }, track));
-  adapter.reconcile({ mode: "token", token: "supplied-for-the-test", reason: "check\u0001" });
-  const hmacReconcile = adapter.reconcile({ mode: "hmac", reason: "check\u0007" });
+  await adapter.complete(Object.assign({ mode: "token", token: "supplied-for-the-test", remote_id: "crm-1", enrichment: { timeline: "30d", price_vs_value: "80_100" } }, track));
+  await adapter.reconcile({ mode: "token", token: "supplied-for-the-test", reason: "check\u0001" });
+  const hmacReconcile = await adapter.reconcile({ mode: "hmac", reason: "check\u0007" });
   assert.equal(hmacReconcile.status, "needs_reconcile");
   assert.equal(hmacReconcile.needs_reconcile, true);
-  adapter.reserve(Object.assign({ destination: "crm_create", stage: "first" }, track));
-  adapter.reconcile({ mode: "hmac", reason: "later" });
-  const bad = adapter.park(Object.assign({ name: "TEST LEAD", phone: "000", email: "bad", address: "100 Example Ave" }, track));
+  await adapter.reserve(Object.assign({ destination: "crm_create", stage: "first" }, track));
+  await adapter.reconcile({ mode: "hmac", reason: "later" });
+  const bad = await adapter.park(Object.assign({ name: "TEST LEAD", phone: "000", email: "bad", address: "100 Example Ave" }, track));
   assert.equal(bad.ok, false);
   assert.equal(bad.http, 400);
   assert.deepEqual(bad.fields, ["phone", "email"]);
@@ -556,7 +559,7 @@ test("the real adapter matches the draft call shapes and never uses the network"
     assert.equal(row.method, "POST");
     assert.equal(row.headers["content-type"], "application/json");
     assert.equal(row.url.startsWith("https://placeholder.invalid/"), true);
-    const signed = /\/intake-park\/(park|answer|claim)$/.test(row.url);
+    const signed = /\/intake-park\/(park|answer|claim|enrich)$/.test(row.url);
     const ip = row.body && row.body.payload ? row.body.payload.client_ip : undefined;
     assert.equal(ip, signed ? "203.0.113.7" : undefined, row.url);
     assert.equal(row.body && row.body.payload ? row.body.payload.attribution : undefined, undefined);
@@ -662,13 +665,70 @@ test("the real adapter matches the draft call shapes and never uses the network"
     }
   });
   const session = flow.createFlow(live, { loaded: false, load() { this.loaded = true; } });
-  session.submitContact(contact);
-  session.answer("type", "sfh");
-  const overruled = session.answer("ownership", "sole_owner");
+  await session.submitContact(contact);
+  await session.answer("type", "sfh");
+  const overruled = await session.answer("ownership", "sole_owner");
   assert.equal(overruled.view.branch, "quiet_non_owner");
   assert.equal(overruled.view.googleTagFired, false);
   assert.equal(flowCalls.some((url) => url.endsWith("/intake-reserve/mint")), true);
   assert.equal(flowCalls.some((url) => url.endsWith("/reserve")), false);
   assert.equal(JSON.stringify(session.state.trace).includes("OWNER-TOKEN-DO-NOT-LOG"), false);
   assert.equal(usedNetwork, false);
+});
+
+test("async and Response-shaped transports set mint ids before every later stage", async () => {
+  assert.equal(flow.ENRICH_VIA_PARK, true);
+  function script(url) {
+    if (url.endsWith("/mint")) {
+      return { ok: true, intake_id: "async-intake", session_binding: "async-bind", kid: "async-kid" };
+    }
+    if (url.endsWith("/claim")) return { ok: true, claimed: true, tier: "hot", priority_tier: null, status: "claimed" };
+    if (url.endsWith("/enrich")) return { ok: true, status: "saved", priority_tier: "p1" };
+    if (url.endsWith("/park")) return { ok: true, status: "parked", intake_id: "async-intake", geocode_status: "ok" };
+    return { ok: true, status: "saved" };
+  }
+  const seen = [];
+  const delayed = (url, init) => new Promise((resolve) => {
+    setTimeout(() => {
+      seen.push(url);
+      const payload = script(url);
+      resolve({
+        status: 200,
+        headers: { get: () => "" },
+        json: () => new Promise((done) => queueMicrotask(() => done(payload)))
+      });
+    }, 0);
+  });
+  const adapter = flow.createRealAdapter({ transport: delayed, signer: { client_ip: "203.0.113.7" }, now: () => 1700000000 });
+  let parked;
+  const pending = adapter.park({ name: "TEST LEAD", address: "100 Example Ave", phone: "5550100199", email: contact.email, lead_id: "lead-async" });
+  assert.equal(adapter.intakeId, "");
+  parked = await pending;
+  assert.equal(seen[0].endsWith("/intake-reserve/mint"), true);
+  assert.equal(seen[1].endsWith("/intake-park/park"), true);
+  assert.equal(adapter.intakeId, "async-intake");
+  assert.equal(adapter.sessionBinding, "async-bind");
+  assert.equal(parked.status, "parked");
+  assert.equal(parked.http, 200);
+  const answered = await adapter.answer({ question: "type", answer: "sfh", lead_id: "lead-async" });
+  const claimed = await adapter.claim({ by: "promote", lead_id: "lead-async" });
+  const enriched = await adapter.enrich({ enrichment: { occupancy: "vacant", condition: "good", listed: "not_listed", timeline: "asap" }, lead_id: "lead-async" });
+  assert.equal(answered.ok, true);
+  assert.equal(claimed.ok, true);
+  assert.equal(enriched.priority_tier, "p1");
+  const enrichCall = seen.map((url, i) => url.endsWith("/intake-park/enrich") ? i : -1).filter((i) => i >= 0);
+  assert.equal(enrichCall.length, 1);
+  const tag = { loaded: false, load() { this.loaded = true; } };
+  const session = flow.createFlow(adapter, tag);
+  await session.submitContact(contact);
+  await session.answer("type", "sfh");
+  await session.answer("ownership", "sole_owner");
+  assert.equal(tag.loaded, true);
+  await session.answer("occupancy", "vacant");
+  await session.answer("condition", "needs_work");
+  await session.answer("listed", "not_listed");
+  await session.answer("timeline", "asap");
+  assert.equal(session.state.serverTier, "p1");
+  assert.equal(seen.some((url) => url.endsWith("/intake-reserve/complete")), false);
+  assert.equal(seen.filter((url) => url.endsWith("/intake-park/enrich")).length >= 1, true);
 });
