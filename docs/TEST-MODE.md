@@ -59,7 +59,7 @@ Order and wire values. The counter reads “Optional N of 4”. There is no aski
 3. Listed with an agent: `not_listed`, `listed_under_90`, `listed_over_90`, `expired`. A listed home stays on the Hot screen unless the claim response says otherwise.
 4. Timeline: `asap`, `30d`, `30_90d`, `over_90d`, `no_rush`
 
-`priority_tier` is server-set (`p1`, `p2`, or `p3`) on Hot rows. The client does not send it, and no payload includes `price_vs_value`. The mock complete response sets the tier from the answers it did receive. `p1` is a vacant home, or an `asap` / `30d` timeline together with condition `needs_work` or `major_repairs`, or listed `expired` or `listed_over_90`. `p2` is any other timeline within 90 days (`asap`, `30d`, or `30_90d`). Everything else is `p3`. The test trace shows that value.
+`priority_tier` is server-set (`p1`, `p2`, or `p3`). The browser does not calculate it. Claim and complete both return it, and the test trace shows that response value. The mock uses the backend rule: `p1` when the home is vacant, or when the timeline is `asap` or `30d` and the condition is `needs_work` or `major_repairs` or the listing is `expired` or `listed_over_90`. `p2` is any other timeline within 90 days (`asap`, `30d`, or `30_90d`). Everything else is `p3`. At claim time the optional answers are not stored yet, so that response is `p3` until complete.
 
 The thank-you screen is the end of the optional questions. Headline: “Thanks. We have your info.”
 
@@ -81,7 +81,7 @@ Ownership adds `ownership`. Hot adds `signal` `seller_form_completed` when the c
 
 Each enrich row adds `question`, `answer` (empty when skipped), and `skipped`.
 
-The thanks row adds `occupancy`, `condition`, `listed`, and `timeline`. The server tier comes back on the complete or verify response. It is not a request field. `price_vs_value` is not a field on any stage.
+The thanks row adds `occupancy`, `condition`, `listed`, and `timeline`. The server tier comes back on the claim and complete responses. It is not a request field.
 
 ## Real adapter requests
 
@@ -89,15 +89,18 @@ All of these are `POST` with `content-type: application/json`. The placeholder b
 
 | Stage | Path | Envelope stage | Body |
 |---|---|---|---|
-| Park | `/intake-park/park` | `partial` | `envelope`, `session_binding`, `payload` with `first_name`, `last_name` (when the name has two parts), `phone` digits, `email`, `address`, `is_test: true`, and write-once tracking |
-| Answer | `/intake-park/answer` | `partial` | `envelope`, `payload.question`, `payload.answer`, tracking. No enrichment |
-| Claim | `/intake-park/claim` | `partial` | `envelope`, `payload.by` of `promote` or `non_owner`, tracking |
-| Reserve | `/intake-reserve/reserve` | `final` on the Hot path | `envelope`, `payload` tracking, `session_binding`, `destination: crm_create`, generated `owner_token`, `lease_seconds: 120` |
+| Mint | `/intake-reserve/mint` | none | `{}`. Response supplies `intake_id`, `session_binding`, and `kid`. The browser does not mint those ids |
+| Park | `/intake-park/park` | `partial` | `envelope`, `session_binding`, `payload` with `full_name` (max 160), `address_line` (the single address line, max 200), digit `phone`, `email`, `is_test: true`, signer `client_ip`, and write-once tracking. No `attribution` |
+| Answer | `/intake-park/answer` | `partial` | `envelope`, `payload.question`, `payload.answer`, `client_ip`, tracking. No enrichment |
+| Claim | `/intake-park/claim` | `partial` | `envelope`, `payload.by` of `promote` or `non_owner`, `client_ip`, tracking. Response includes `tier` and `priority_tier` |
+| Reserve | `/intake-reserve/reserve` | `first` or `final` (Hot uses `final`) | `envelope`, tracking `payload`, `session_binding`, `destination: crm_create`, generated `owner_token`, `lease_seconds: 120`. No `client_ip` |
 | Verify | `/intake-reserve/verify` | none | `reservation_id`, optional `intake_id` and `owner_token`. Header `x-intake-zap-token` only when the caller supplies it |
-| Complete, HMAC | `/intake-reserve/complete` | `final` | `envelope`, `payload` tracking and `enrichment`, `session_binding`, `owner_token`, `reservation_id`, `reservation_generation` |
+| Complete, HMAC | `/intake-reserve/complete` | `final` | `envelope`, `payload` tracking and `enrichment`, `session_binding`, `owner_token`, `reservation_id`, `reservation_generation`. No `client_ip`. Response includes `priority_tier` |
 | Complete, token | `/intake-reserve/complete` | none | The token-mode body, including `enrichment` and tracking, plus the caller-supplied header |
-| Reconcile, token | `/intake-reserve/reconcile` | none | `reservation_id`, `owner_token`, optional `reason`, plus the caller-supplied header |
-| Reconcile, HMAC | `/intake-reserve/reconcile` | `final` | `envelope`, `payload.reason`, `session_binding`, `reservation_id`, `owner_token` |
+| Reconcile, token | `/intake-reserve/reconcile` | none | `reservation_id`, `owner_token`, optional `reason` with control characters removed, plus the caller-supplied header |
+| Reconcile, HMAC | `/intake-reserve/reconcile` | the reservation's own `first` or `final` | `envelope` (that reservation's `intake_id`), `payload` of `{reason}` or `{}`, `reservation_id`. No `owner_token`, `session_binding`, or `client_ip`. Response `{ok, status:"needs_reconcile", needs_reconcile:true}` |
+
+`client_ip` is a strict IP literal with no port. The browser does not look it up. A server-side signer injects it, filled in production from the `x-nf-client-connection-ip` header. The Ads `lead_id` is still a client `crypto.randomUUID()` and is the conversion `transaction_id`.
 
 A 400 `bad_input` response is returned as `{ok:false, http:400, status, fields}` and the field names are logged. The owner token is not written into the test trace. `payload_sha256` is the SHA-256 of the canonical payload (sorted keys, no spaces).
 

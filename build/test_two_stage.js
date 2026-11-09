@@ -283,7 +283,8 @@ test("enrichment is skippable, stays on the hot lead, and does not move the conv
   assert.equal(done.view.branch, "hot");
   assert.equal(done.view.downstream, "zap_hot");
   assert.equal(done.view.googleTagFired, true);
-  assert.equal(done.view.priority, "standard");
+  assert.equal(done.view.priority, "");
+  assert.equal(done.view.serverTier, "p3");
   assert.equal(dataLayer.filter((e) => e.event === "seller_form_completed").length, 1);
   assert.equal(adapter.log.filter((row) => row.op === "google" && row.fired).length, 1);
   assert.equal(payloads(adapter).filter((row) => row.stage === "enrich" && row.skipped === true).length, 4);
@@ -309,18 +310,30 @@ test("enrichment is skippable, stays on the hot lead, and does not move the conv
   assert.equal(thanks.occupancy, "tenant");
 });
 
-test("priority is high only for a vacant home", () => {
-  assert.equal(flow.priorityTier({}), "standard");
-  assert.equal(flow.priorityTier({ occupancy: "owner", listed: "yes" }), "standard");
-  assert.equal(flow.priorityTier({ occupancy: "tenant" }), "standard");
-  assert.equal(flow.priorityTier({ occupancy: "vacant" }), "high");
-  assert.equal(flow.priorityTier({ occupancy: "vacant", listed: "yes" }), "high");
+test("the mock tier comes only from the claim and complete responses", () => {
+  assert.equal(flow.priorityTier, undefined);
+  assert.equal(flow.serverPriorityTier, undefined);
+  const mock = flow.createMockAdapter();
+  assert.equal(mock.claim({ by: "promote" }).priority_tier, "p3");
+  assert.equal(mock.complete({ enrichment: { occupancy: "vacant" } }).priority_tier, "p1");
+  assert.equal(mock.complete({ enrichment: { timeline: "asap", condition: "needs_work" } }).priority_tier, "p1");
+  assert.equal(mock.complete({ enrichment: { timeline: "30d", listed: "expired" } }).priority_tier, "p1");
+  assert.equal(mock.complete({ enrichment: { timeline: "asap", listed: "listed_over_90" } }).priority_tier, "p1");
+  assert.equal(mock.complete({ enrichment: { timeline: "30d", condition: "major_repairs" } }).priority_tier, "p1");
+  assert.equal(mock.complete({ enrichment: { timeline: "30_90d", condition: "excellent" } }).priority_tier, "p2");
+  assert.equal(mock.complete({ enrichment: { timeline: "asap", condition: "good", listed: "not_listed" } }).priority_tier, "p2");
+  assert.equal(mock.complete({ enrichment: { timeline: "no_rush", condition: "needs_work" } }).priority_tier, "p3");
   const { session } = run();
   session.submitContact(contact);
   session.answer("type", "sfh");
   session.answer("ownership", "decision_maker");
+  assert.equal(session.state.serverTier, "p3");
+  assert.equal(session.state.priority, "");
   session.answer("occupancy", "vacant");
-  assert.equal(session.state.priority, "high");
+  session.answer("condition", "good");
+  session.answer("listed", "not_listed");
+  session.answer("timeline", "no_rush");
+  assert.equal(session.state.serverTier, "p1");
   assert.equal(session.state.branch, "hot");
   assert.equal(session.state.downstream, "zap_hot");
   const priced = flow.createFlow(flow.createMockAdapter(), { loaded: false, load() { this.loaded = true; } });
@@ -329,12 +342,11 @@ test("priority is high only for a vacant home", () => {
   priced.answer("ownership", "sole_owner");
   priced.skip();
   priced.skip();
-  priced.answer("listed", "yes");
-  assert.equal(priced.state.priority, "standard");
-  assert.equal(priced.state.branch, "hot");
+  priced.answer("listed", "not_listed");
   priced.answer("timeline", "no_rush");
   assert.equal(priced.state.stage, "thanks");
-  assert.equal(priced.state.priority, "standard");
+  assert.equal(priced.state.serverTier, "p3");
+  assert.equal(priced.state.priority, "");
   assert.equal(priced.state.downstream, "zap_hot");
   const quiet = flow.createFlow(flow.createMockAdapter(), { loaded: false, load() { this.loaded = true; } });
   quiet.submitContact(contact);
@@ -436,16 +448,6 @@ test("a disagreeing claim response decides the screen and blocks reserve", () =>
 });
 
 test("server priority_tier is shown from the response and is not sent by the client", () => {
-  assert.equal(flow.serverPriorityTier({ occupancy: "vacant" }), "p1");
-  assert.equal(flow.serverPriorityTier({ timeline: "asap", occupancy: "vacant" }), "p1");
-  assert.equal(flow.serverPriorityTier({ timeline: "30d", condition: "needs_work" }), "p1");
-  assert.equal(flow.serverPriorityTier({ timeline: "asap", listed: "expired" }), "p1");
-  assert.equal(flow.serverPriorityTier({ timeline: "asap", listed: "listed_over_90" }), "p1");
-  assert.equal(flow.serverPriorityTier({ timeline: "30d", condition: "major_repairs" }), "p1");
-  assert.equal(flow.serverPriorityTier({ timeline: "30_90d", condition: "excellent" }), "p2");
-  assert.equal(flow.serverPriorityTier({ timeline: "asap", condition: "good", listed: "not_listed" }), "p2");
-  assert.equal(flow.serverPriorityTier({ timeline: "no_rush", condition: "needs_work" }), "p3");
-  assert.equal(flow.serverPriorityTier({}), null);
   const { adapter, session } = run();
   session.submitContact(contact);
   session.answer("type", "sfh");
@@ -499,20 +501,26 @@ test("the real adapter matches the draft call shapes and never uses the network"
   const transport = (url, init) => {
     const body = JSON.parse(init.body);
     seen.push({ url, method: init.method, headers: init.headers, body });
+    if (url.endsWith("/mint")) {
+      return { status: 200, body: { ok: true, intake_id: "intake-from-mint", session_binding: "bind-from-mint", kid: "kid-from-mint" } };
+    }
     if (body.payload && body.payload.phone === "000") {
       return { status: 400, body: { status: "bad_input", fields: ["phone", "email"] } };
     }
     if (url.endsWith("/claim") && body.payload && body.payload.by === "promote" && body.payload.lead_id === "lead-disagree") {
-      return { status: 200, body: { ok: true, claimed: true, tier: "follow_up", status: "claimed" } };
+      return { status: 200, body: { ok: true, claimed: true, tier: "follow_up", priority_tier: "p3", status: "claimed" } };
     }
     if (url.endsWith("/reserve")) {
       return { status: 200, body: { ok: true, status: "dispatch_intended_committed", reservation_id: "res-1", reservation_generation: 2, session_binding: body.session_binding, execution_requested: false, exactly_once_external: false, owner_token: "OWNER-TOKEN-DO-NOT-LOG", owner_token_issued: true } };
     }
     if (url.endsWith("/complete")) return { status: 200, body: { ok: true, status: "delivered", priority_tier: "p1" } };
+    if (url.endsWith("/reconcile") && body.envelope) {
+      return { status: 200, body: { ok: true, status: "needs_reconcile", needs_reconcile: true } };
+    }
     if (url.endsWith("/park")) return { status: 200, body: { ok: true, status: "parked", intake_id: "intake-1", geocode_status: "ok" } };
     return { status: 200, body: { ok: true, status: "saved" } };
   };
-  const adapter = flow.createRealAdapter({ transport, uuid, now: () => 1700000000 });
+  const adapter = flow.createRealAdapter({ transport, uuid, now: () => 1700000000, signer: { client_ip: "203.0.113.7" } });
   const track = { lead_id: "lead-1", gclid: "G-FIRST", gbraid: "GB1", wbraid: "WB1", fbclid: "FB1", utm_source: "google", utm_medium: "cpc", utm_campaign: "sell", utm_term: "cash", utm_content: "ad", utm_id: "u1" };
   const parked = adapter.park(Object.assign({ name: "TEST LEAD", address: "100 Example Ave", phone: "(555) 010-0199", email: contact.email }, track));
   assert.equal(parked.status, "parked");
@@ -529,8 +537,12 @@ test("the real adapter matches the draft call shapes and never uses the network"
   const noToken = adapter.verify({ reservation_id: "res-1" });
   assert.equal(noToken.http, 401);
   adapter.complete(Object.assign({ mode: "token", token: "supplied-for-the-test", remote_id: "crm-1", enrichment: { timeline: "30d", price_vs_value: "80_100" } }, track));
-  adapter.reconcile({ mode: "token", token: "supplied-for-the-test", reason: "check" });
-  adapter.reconcile({ mode: "hmac", reason: "check" });
+  adapter.reconcile({ mode: "token", token: "supplied-for-the-test", reason: "check\u0001" });
+  const hmacReconcile = adapter.reconcile({ mode: "hmac", reason: "check\u0007" });
+  assert.equal(hmacReconcile.status, "needs_reconcile");
+  assert.equal(hmacReconcile.needs_reconcile, true);
+  adapter.reserve(Object.assign({ destination: "crm_create", stage: "first" }, track));
+  adapter.reconcile({ mode: "hmac", reason: "later" });
   const bad = adapter.park(Object.assign({ name: "TEST LEAD", phone: "000", email: "bad", address: "100 Example Ave" }, track));
   assert.equal(bad.ok, false);
   assert.equal(bad.http, 400);
@@ -538,43 +550,60 @@ test("the real adapter matches the draft call shapes and never uses the network"
   assert.equal(usedNetwork, false);
 
   function call(path) { return seen.filter((row) => row.url === flow.REAL_ADAPTER.base_url + path); }
-  const paths = ["/intake-park/park", "/intake-park/answer", "/intake-park/claim", "/intake-reserve/reserve", "/intake-reserve/verify", "/intake-reserve/complete", "/intake-reserve/reconcile"];
+  const paths = ["/intake-reserve/mint", "/intake-park/park", "/intake-park/answer", "/intake-park/claim", "/intake-reserve/reserve", "/intake-reserve/verify", "/intake-reserve/complete", "/intake-reserve/reconcile"];
   paths.forEach((path) => assert.ok(call(path).length > 0, path));
   seen.forEach((row) => {
     assert.equal(row.method, "POST");
     assert.equal(row.headers["content-type"], "application/json");
     assert.equal(row.url.startsWith("https://placeholder.invalid/"), true);
+    const signed = /\/intake-park\/(park|answer|claim)$/.test(row.url);
+    const ip = row.body && row.body.payload ? row.body.payload.client_ip : undefined;
+    assert.equal(ip, signed ? "203.0.113.7" : undefined, row.url);
+    assert.equal(row.body && row.body.payload ? row.body.payload.attribution : undefined, undefined);
   });
+  const mint = call("/intake-reserve/mint")[0];
+  assert.deepEqual(mint.body, {});
+  assert.equal(mint.body.envelope, undefined);
+  assert.equal(seen[0].url.endsWith("/intake-reserve/mint"), true);
   const park = call("/intake-park/park")[0].body;
   assert.equal(park.envelope.stage, "partial");
   assert.equal(park.envelope.v, "1");
-  assert.equal(park.envelope.kid, "KID-PLACEHOLDER");
+  assert.equal(park.envelope.kid, "kid-from-mint");
+  assert.equal(park.envelope.intake_id, "intake-from-mint");
   assert.equal(park.envelope.route, "ppc_inhouse");
   assert.equal(park.envelope.channel, "website");
   assert.equal(park.envelope.sig, "");
   assert.equal(park.envelope.exp, park.envelope.ts + 900);
   assert.equal(park.envelope.payload_sha256, flow.sha256Hex(flow.canonicalJson(park.payload)));
-  assert.equal(park.session_binding, adapter.sessionBinding);
-  assert.equal(park.payload.first_name, "TEST");
-  assert.equal(park.payload.last_name, "LEAD");
+  assert.equal(park.session_binding, "bind-from-mint");
+  assert.equal(adapter.intakeId, "intake-from-mint");
+  assert.equal(adapter.sessionBinding, "bind-from-mint");
+  assert.equal(park.payload.full_name, "TEST LEAD");
+  assert.equal(park.payload.first_name, undefined);
+  assert.equal(park.payload.last_name, undefined);
+  assert.equal(park.payload.address_line, "100 Example Ave");
+  assert.equal(park.payload.address, undefined);
+  assert.equal(park.payload.client_ip, "203.0.113.7");
   assert.equal(park.payload.phone, "5550100199");
   assert.equal(park.payload.email, contact.email);
-  assert.equal(park.payload.address, "100 Example Ave");
   assert.equal(park.payload.is_test, true);
   assert.equal(park.payload.gclid, "G-FIRST");
   assert.equal(park.payload.lead_id, "lead-1");
   assert.equal(park.payload.utm_id, "u1");
   assert.equal(park.payload.enrichment, undefined);
-  assert.equal(park.payload.city, undefined);
+  assert.equal(park.payload.attribution, undefined);
   const answers = call("/intake-park/answer").map((row) => row.body);
   assert.deepEqual(answers.map((row) => row.payload.question), ["type", "ownership"]);
   assert.equal(answers[0].payload.answer, "sfh");
   assert.equal(answers[0].payload.gclid, "G-FIRST");
+  assert.equal(answers[0].payload.client_ip, "203.0.113.7");
   assert.equal(answers[0].payload.enrichment, undefined);
+  assert.equal(answers[0].envelope.intake_id, "intake-from-mint");
   assert.equal(answers[0].envelope.stage, "partial");
   const claim = call("/intake-park/claim")[0].body;
   assert.equal(claim.payload.by, "promote");
   assert.equal(claim.payload.lead_id, "lead-1");
+  assert.equal(claim.payload.client_ip, "203.0.113.7");
   assert.equal(claim.envelope.stage, "partial");
   const reserve = call("/intake-reserve/reserve")[0].body;
   assert.equal(reserve.envelope.stage, "final");
@@ -583,6 +612,8 @@ test("the real adapter matches the draft call shapes and never uses the network"
   assert.equal(reserve.session_binding, adapter.sessionBinding);
   assert.match(reserve.owner_token, /^[0-9a-f-]{36}$/);
   assert.equal(reserve.payload.gclid, "G-FIRST");
+  assert.equal(reserve.payload.client_ip, undefined);
+  assert.equal(reserve.envelope.intake_id, "intake-from-mint");
   const verify = call("/intake-reserve/verify");
   assert.equal(verify.length, 1);
   assert.equal(verify[0].headers["x-intake-zap-token"], "supplied-for-the-test");
@@ -590,7 +621,7 @@ test("the real adapter matches the draft call shapes and never uses the network"
   assert.equal(verify[0].body.envelope, undefined);
   const completes = call("/intake-reserve/complete");
   assert.equal(completes[0].body.payload.enrichment.occupancy, "vacant");
-  assert.equal(completes[0].body.payload.enrichment.price_vs_value, undefined);
+  assert.equal(completes[0].body.payload.client_ip, undefined);
   assert.equal(completes[0].body.payload.priority_tier, undefined);
   assert.equal(completes[0].body.envelope.stage, "final");
   assert.equal(completes[0].body.reservation_id, "res-1");
@@ -598,22 +629,34 @@ test("the real adapter matches the draft call shapes and never uses the network"
   assert.equal(completes[1].headers["x-intake-zap-token"], "supplied-for-the-test");
   assert.equal(completes[1].body.envelope, undefined);
   assert.equal(completes[1].body.enrichment.timeline, "30d");
-  assert.equal(completes[1].body.enrichment.price_vs_value, undefined);
+  assert.equal(completes[1].body.enrichment.timeline, "30d");
+  assert.equal(completes[1].body.client_ip, undefined);
   assert.equal(completes[1].body.intake_id, adapter.intakeId);
+  assert.equal(src.includes("price_vs_value"), false);
   assert.equal(JSON.stringify(seen).includes("price_vs_value"), false);
+  assert.equal(JSON.stringify(seen).includes("attribution"), false);
   const reconciles = call("/intake-reserve/reconcile");
   assert.equal(reconciles[0].headers["x-intake-zap-token"], "supplied-for-the-test");
   assert.equal(reconciles[0].body.reason, "check");
   assert.equal(reconciles[0].body.envelope, undefined);
   assert.equal(reconciles[1].body.envelope.stage, "final");
+  assert.equal(reconciles[1].body.envelope.intake_id, "intake-from-mint");
   assert.equal(reconciles[1].body.payload.reason, "check");
+  assert.equal(reconciles[1].body.owner_token, undefined);
+  assert.equal(reconciles[1].body.session_binding, undefined);
+  assert.equal(reconciles[1].body.payload.client_ip, undefined);
+  assert.equal(reconciles[2].body.envelope.stage, "first");
+  assert.equal(reconciles[2].body.envelope.intake_id, "intake-from-mint");
+  assert.equal(reconciles[2].body.owner_token, undefined);
+  assert.equal(reconciles[2].body.session_binding, undefined);
 
   const flowCalls = [];
   const live = flow.createRealAdapter({
     transport(url, init) {
       const body = JSON.parse(init.body);
       flowCalls.push(url);
-      if (url.endsWith("/claim")) return { status: 200, body: { ok: true, claimed: true, tier: "follow_up", status: "claimed" } };
+      if (url.endsWith("/mint")) return { status: 200, body: { ok: true, intake_id: "minted-intake", session_binding: "minted-binding", kid: "kid-from-mint" } };
+      if (url.endsWith("/claim")) return { status: 200, body: { ok: true, claimed: true, tier: "follow_up", priority_tier: "p3", status: "claimed" } };
       if (url.endsWith("/park")) return { status: 200, body: { ok: true, status: "parked", intake_id: "i", geocode_status: "ok" } };
       return { status: 200, body: { ok: true, status: "saved" } };
     }
@@ -624,6 +667,7 @@ test("the real adapter matches the draft call shapes and never uses the network"
   const overruled = session.answer("ownership", "sole_owner");
   assert.equal(overruled.view.branch, "quiet_non_owner");
   assert.equal(overruled.view.googleTagFired, false);
+  assert.equal(flowCalls.some((url) => url.endsWith("/intake-reserve/mint")), true);
   assert.equal(flowCalls.some((url) => url.endsWith("/reserve")), false);
   assert.equal(JSON.stringify(session.state.trace).includes("OWNER-TOKEN-DO-NOT-LOG"), false);
   assert.equal(usedNetwork, false);

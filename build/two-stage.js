@@ -71,6 +71,14 @@
 
   function createMockAdapter() {
     var log = [];
+    function tierFrom(e) {
+      e = e || {};
+      var fast = e.timeline === "asap" || e.timeline === "30d";
+      var distress = e.condition === "needs_work" || e.condition === "major_repairs" || e.listed === "expired" || e.listed === "listed_over_90";
+      if (e.occupancy === "vacant" || (fast && distress)) return "p1";
+      if (fast || e.timeline === "30_90d") return "p2";
+      return "p3";
+    }
     return {
       log: log,
       park: function (row) { log.push({ op: "park", crm: false, google: false, row: row }); },
@@ -81,13 +89,12 @@
       answer: function (req) { log.push({ op: "answer", req: req }); return { ok: true, status: "saved" }; },
       claim: function (req) {
         var tier = req && req.by === "non_owner" ? "follow_up" : "hot";
-        var res = { ok: true, claimed: true, tier: tier, status: "claimed" };
+        var res = { ok: true, claimed: true, tier: tier, priority_tier: tierFrom(req && req.enrichment), status: "claimed" };
         log.push({ op: "claim", req: req, res: res });
         return res;
       },
       complete: function (req) {
-        var tier = serverPriorityTier(req && req.enrichment);
-        var res = { ok: true, status: "delivered", priority_tier: tier };
+        var res = { ok: true, status: "delivered", priority_tier: tierFrom(req && req.enrichment) };
         log.push({ op: "complete", req: req, res: res });
         return res;
       }
@@ -168,12 +175,6 @@
     return id;
   }
 
-  function priorityTier(answers) {
-    var a = answers || {};
-    if (a.occupancy === "vacant") return "high";
-    return "standard";
-  }
-
   function conversionName(answers) {
     var a = answers || {};
     return CONTINUE[a.type] && OWNERS[a.ownership] ? "seller_form_completed" : "";
@@ -192,15 +193,6 @@
     var spec = QUESTIONS[id];
     if (spec && spec[1].some(function (opt) { return opt[0] === value; })) return true;
     return !!(LEGACY_VALUES[id] && LEGACY_VALUES[id][value]);
-  }
-
-  function serverPriorityTier(e) {
-    if (!e || !Object.keys(e).length) return null;
-    var fast = e.timeline === "asap" || e.timeline === "30d";
-    var distress = e.condition === "needs_work" || e.condition === "major_repairs" || e.listed === "expired" || e.listed === "listed_over_90";
-    if (e.occupancy === "vacant" || (fast && distress)) return "p1";
-    if (fast || e.timeline === "30_90d") return "p2";
-    return "p3";
   }
 
   function canonicalJson(value, depth) {
@@ -394,7 +386,6 @@
       state.sorry = branch === "quiet_property" ? NOT_FIT : null;
       state.followup = branch === "quiet_non_owner" ? FOLLOW_UP : null;
       state.thanks = null;
-      state.priority = branch === "hot" ? priorityTier(state.answers) : "";
       if (branch === "hot" && conversionName(state.answers)) fireConversion();
       else fireExit(branch);
       adapter.branch(branch);
@@ -408,7 +399,6 @@
       state.enrichIndex += 1;
       if (state.enrichIndex < ENRICH_STEPS.length) return;
       state.stage = "thanks";
-      state.priority = priorityTier(state.answers);
       state.thanks = THANKS;
       emit("thanks", {
         occupancy: state.answers.occupancy || "",
@@ -463,7 +453,6 @@
         var id = ENRICH_STEPS[state.enrichIndex];
         state.skipped[id] = true;
         delete state.answers[id];
-        state.priority = priorityTier(state.answers);
         emit("enrich", { question: id, answer: "", skipped: true });
         note(state, "skip", "Skipped " + id + ". Conversion unchanged.");
         advance();
@@ -530,7 +519,6 @@
           if (ENRICH_STEPS.indexOf(id) >= 0 && !knownOption(id, value)) return { ok: false, error: "unknown_option" };
           state.answers[id] = value;
           delete state.skipped[id];
-          state.priority = priorityTier(state.answers);
           var listed = id === "listed" ? " Listed homes stay on the hot path." : "";
           emit("enrich", { question: id, answer: value, skipped: false });
           note(state, "enrich", "Optional " + id + "=" + value + ". Conversion unchanged." + listed);
@@ -548,19 +536,29 @@
     options = options || {};
     var send = options.transport;
     var base = String(options.baseUrl || REAL_ADAPTER.base_url).replace(/\/$/, "");
+    var signer = options.signer || {};
     var stuck = {};
     var ownerToken = "";
     var reservationId = "";
     var reservationGeneration = 1;
-    function nextId() {
+    var reservation = { stage: "", intake: "" };
+    var ids = { intake: "", binding: "", kid: options.kid || REAL_ADAPTER.kid };
+    var mintedOnce = false;
+    function eventId() {
       if (typeof options.uuid === "function") return options.uuid();
       return mintLeadId();
     }
     function nowSec() {
       return typeof options.now === "function" ? options.now() : Math.floor(Date.now() / 1000);
     }
-    var intakeId = nextId();
-    var sessionBinding = nextId();
+    function ensureMint() {
+      if (mintedOnce) return;
+      mintedOnce = true;
+      var minted = normalize(send(base + "/intake-reserve/mint", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }));
+      ids.intake = minted.intake_id || "";
+      ids.binding = minted.session_binding || "";
+      if (minted.kid) ids.kid = minted.kid;
+    }
     function remember(row) {
       WIRE_KEYS.forEach(function (key) {
         if (!stuck[key] && row && row[key]) stuck[key] = String(row[key]);
@@ -572,27 +570,26 @@
       WIRE_KEYS.forEach(function (key) { if (stuck[key]) out[key] = stuck[key]; });
       return out;
     }
-    function envelope(stage, payload) {
+    function envelope(stage, payload, intake) {
+      ensureMint();
       var ts = nowSec();
       return {
-        v: "1", kid: options.kid || REAL_ADAPTER.kid, route: REAL_ADAPTER.route, channel: REAL_ADAPTER.channel,
-        intake_id: intakeId, event_id: nextId(), stage: stage, ts: ts, exp: ts + 900,
+        v: "1", kid: ids.kid, route: REAL_ADAPTER.route, channel: REAL_ADAPTER.channel,
+        intake_id: intake || ids.intake, event_id: eventId(), stage: stage, ts: ts, exp: ts + 900,
         payload_sha256: sha256Hex(canonicalJson(payload)), sig: ""
       };
     }
-    function splitName(name) {
-      var parts = String(name || "").trim().split(/\s+/).filter(Boolean);
-      var out = {};
-      if (parts[0]) out.first_name = parts[0];
-      if (parts.length > 1) out.last_name = parts.slice(1).join(" ");
-      return out;
+    function signedIp(payload) {
+      if (signer.client_ip) payload.client_ip = signer.client_ip;
+      return payload;
+    }
+    function cleanReason(reason) {
+      if (!reason) return "";
+      return String(reason).replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 200);
     }
     function mapEnrichment(source) {
       var out = {};
-      Object.keys(source || {}).forEach(function (key) {
-        if (!source[key] || key === "price_vs_value") return;
-        out[key] = source[key];
-      });
+      ENRICH_STEPS.forEach(function (key) { if (source && source[key]) out[key] = source[key]; });
       return out;
     }
     function readBody(res) {
@@ -634,39 +631,44 @@
       return { "x-intake-zap-token": req.token };
     }
     return {
-      intakeId: intakeId,
-      sessionBinding: sessionBinding,
+      get intakeId() { return ids.intake; },
+      get sessionBinding() { return ids.binding; },
       park: function (row) {
         row = row || {};
-        var payload = Object.assign(splitName(row.name), tracking(row), { is_test: true });
-        if (row.first_name) payload.first_name = row.first_name;
-        if (row.last_name) payload.last_name = row.last_name;
+        var payload = Object.assign(tracking(row), { is_test: true });
+        var full = String(row.full_name || row.name || "").slice(0, 160);
+        var line = String(row.address_line || row.address || "").slice(0, 200);
+        if (full) payload.full_name = full;
+        if (line) payload.address_line = line;
         var phone = String(row.phone || "").replace(/\D/g, "");
         if (phone) payload.phone = phone;
         if (row.email) payload.email = row.email;
-        if (row.address) payload.address = row.address;
-        if (row.city) payload.city = row.city;
-        if (row.state) payload.state = row.state;
-        if (row.postal) payload.postal = row.postal;
-        return post("/intake-park/park", { envelope: envelope("partial", payload), session_binding: sessionBinding, payload: payload });
+        signedIp(payload);
+        var env = envelope("partial", payload);
+        return post("/intake-park/park", { envelope: env, session_binding: ids.binding, payload: payload });
       },
       answer: function (req) {
         req = req || {};
-        var payload = Object.assign({ question: req.question, answer: req.answer }, tracking(req));
-        return post("/intake-park/answer", { envelope: envelope("partial", payload), payload: payload });
+        var payload = signedIp(Object.assign({ question: req.question, answer: req.answer }, tracking(req)));
+        var env = envelope("partial", payload);
+        return post("/intake-park/answer", { envelope: env, payload: payload });
       },
       claim: function (req) {
         req = req || {};
-        var payload = Object.assign({ by: req.by }, tracking(req));
-        return post("/intake-park/claim", { envelope: envelope("partial", payload), payload: payload });
+        var payload = signedIp(Object.assign({ by: req.by }, tracking(req)));
+        var env = envelope("partial", payload);
+        return post("/intake-park/claim", { envelope: env, payload: payload });
       },
       reserve: function (req) {
         req = req || {};
-        if (!ownerToken) ownerToken = req.owner_token || nextId();
+        if (!ownerToken) ownerToken = req.owner_token || eventId();
         var payload = tracking(req);
         var stage = req.stage === "first" ? "first" : "final";
+        var env = envelope(stage, payload);
+        reservation.stage = stage;
+        reservation.intake = ids.intake;
         return post("/intake-reserve/reserve", {
-          envelope: envelope(stage, payload), payload: payload, session_binding: sessionBinding,
+          envelope: env, payload: payload, session_binding: ids.binding,
           destination: req.destination || "crm_create", owner_token: ownerToken, lease_seconds: req.lease_seconds || 120
         });
       },
@@ -689,19 +691,20 @@
             reservation_id: req.reservation_id || reservationId,
             owner_token: req.owner_token || ownerToken,
             reservation_generation: req.reservation_generation || reservationGeneration,
-            session_binding: req.session_binding || sessionBinding,
-            intake_id: req.intake_id || intakeId
+            session_binding: req.session_binding || ids.binding,
+            intake_id: req.intake_id || ids.intake
           };
           if (req.remote_id) tokenBody.remote_id = req.remote_id;
           Object.assign(tokenBody, tracking(req));
           if (Object.keys(enrichment).length) tokenBody.enrichment = enrichment;
           return post("/intake-reserve/complete", tokenBody, header);
         }
-        if (!ownerToken) ownerToken = req.owner_token || nextId();
+        if (!ownerToken) ownerToken = req.owner_token || eventId();
         var payload = tracking(req);
         if (Object.keys(enrichment).length) payload.enrichment = enrichment;
+        var env = envelope("final", payload);
         var hmacBody = {
-          envelope: envelope("final", payload), payload: payload, session_binding: sessionBinding,
+          envelope: env, payload: payload, session_binding: ids.binding,
           owner_token: ownerToken, reservation_id: req.reservation_id || reservationId,
           reservation_generation: req.reservation_generation || reservationGeneration
         };
@@ -710,18 +713,17 @@
       },
       reconcile: function (req) {
         req = req || {};
+        var reason = cleanReason(req.reason);
         if (req.mode === "hmac") {
-          var payload = {};
-          if (req.reason) payload.reason = String(req.reason).slice(0, 200);
-          return post("/intake-reserve/reconcile", {
-            envelope: envelope("final", payload), payload: payload, session_binding: sessionBinding,
-            reservation_id: req.reservation_id || reservationId, owner_token: req.owner_token || ownerToken
-          });
+          var payload = reason ? { reason: reason } : {};
+          var stage = reservation.stage === "first" || reservation.stage === "final" ? reservation.stage : (req.stage === "first" ? "first" : req.stage);
+          var env = envelope(stage, payload, reservation.intake);
+          return post("/intake-reserve/reconcile", { envelope: env, payload: payload, reservation_id: req.reservation_id || reservationId });
         }
         var header = tokenHeader(req);
         if (!header) return { ok: false, http: 401, status: "auth_failed", fields: [] };
         var body = { reservation_id: req.reservation_id || reservationId, owner_token: req.owner_token || ownerToken };
-        if (req.reason) body.reason = String(req.reason).slice(0, 200);
+        if (reason) body.reason = reason;
         return post("/intake-reserve/reconcile", body, header);
       },
       branch: function () {},
@@ -746,8 +748,6 @@
     selectAdapter: selectAdapter,
     createFlow: createFlow,
     captureAttribution: captureAttribution,
-    priorityTier: priorityTier,
-    serverPriorityTier: serverPriorityTier,
     canonicalJson: canonicalJson,
     sha256Hex: sha256Hex,
     REAL_ADAPTER: REAL_ADAPTER,
