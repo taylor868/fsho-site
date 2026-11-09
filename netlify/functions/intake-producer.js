@@ -41,40 +41,60 @@ function openCookie(key, header) {
   return diff === 0 ? fields : null;
 }
 
+function retryHeader(res) {
+  if (!res.headers) return null;
+  if (typeof res.headers.get === "function") return res.headers.get("retry-after");
+  return res.headers["retry-after"] || res.headers["Retry-After"] || null;
+}
+
 async function edgeCall(fetchImpl, sleep, base, op, payload) {
+  if (op === "sign" || contract.OPS.indexOf(op) < 0) {
+    return { status: 410, body: { ok: false, status: "sign_removed" } };
+  }
   let attempt = 0;
   for (;;) {
-    const res = await fetchImpl(base.replace(/\/$/, "") + "/" + op, {
+    const res = await fetchImpl(String(base).replace(/\/$/, "") + "/" + op, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify(payload),
     });
-    if (res.status !== 429) {
-      const text = await res.text();
-      let parsed = null;
-      try { parsed = text ? JSON.parse(text) : null; } catch (e) { parsed = null; }
-      return { status: res.status, body: parsed };
+    const text = await res.text();
+    let parsed = null;
+    try { parsed = text ? JSON.parse(text) : null; } catch (e) { parsed = null; }
+    const retryable = res.status === 429 || (res.status === 503 && parsed && parsed.status === "limiter_unavailable");
+    if (!retryable) return { status: res.status, body: parsed };
+    const decision = contract.decide429(attempt, contract.parseRetryAfterSeconds(retryHeader(res)));
+    if (decision.action !== "wait") {
+      return { status: res.status, rate_limited: decision, body: parsed, upstream_status: parsed && parsed.status };
     }
-    const decision = contract.decide429(attempt, contract.parseRetryAfterSeconds(res.headers && res.headers.get ? res.headers.get("retry-after") : res.headers["retry-after"]));
-    if (decision.action !== "wait") return { status: 429, rate_limited: decision, body: null };
     await sleep(decision.ms);
     attempt += 1;
   }
 }
 
-function publicLead(payload) {
-  const copy = Object.assign({}, payload);
-  delete copy.source;
-  delete copy.source_tag;
-  delete copy.detected_source;
-  delete copy.intake_id;
-  delete copy.session_binding;
-  delete copy.continuation;
-  delete copy.wc_lead_id;
-  delete copy.wc_profile_id;
-  delete copy.crm_lead_id;
-  delete copy.p_lead;
-  return copy;
+function limited(result) {
+  if (!result.rate_limited) return null;
+  const status = result.upstream_status || (result.status === 503 ? "limiter_unavailable" : "rate_limited");
+  return json(result.status, {
+    ok: false,
+    status,
+    form_state: "kept",
+    retry_after_seconds: result.rate_limited.retry_after_seconds || null,
+  });
+}
+
+function signFor(key, kid, session, stage, payload, nowMs) {
+  const ts = Math.floor(nowMs / 1000);
+  return contract.signEnvelope(key, kid, {
+    route: session.route,
+    channel: session.channel,
+    intake_id: session.intake_id,
+    event_id: crypto.randomUUID(),
+    stage,
+    ts,
+    exp: ts + contract.TTL_SECONDS,
+    payload_sha256: contract.payloadSha256(payload),
+  });
 }
 
 async function handle(event, deps) {
@@ -82,6 +102,7 @@ async function handle(event, deps) {
   const fetchImpl = deps && deps.fetch;
   const sleep = (deps && deps.sleep) || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   const now = deps && typeof deps.now === "number" ? deps.now : Date.now();
+  const reserveUrl = (deps && deps.reserveUrl) || contract.RESERVE_BASE;
   if (!event || event.httpMethod !== "POST") return json(405, { ok: false, error: "method_not_allowed" });
   let payload;
   try { payload = JSON.parse(event.body || ""); } catch (e) { payload = null; }
@@ -91,9 +112,21 @@ async function handle(event, deps) {
   }
   const key = env.INTAKE_HMAC_KEY_V1;
   const kid = env.INTAKE_HMAC_KID;
-  const reserveUrl = env.INTAKE_RESERVE_URL;
-  if (!key || !kid || !reserveUrl) {
-    return json(503, { ok: false, error: "intake_unconfigured", missing: ["INTAKE_HMAC_KEY_V1", "INTAKE_HMAC_KID", "INTAKE_RESERVE_URL"].filter((name) => !env[name]) });
+  if (!key || !kid) {
+    return json(503, {
+      ok: false,
+      error: "intake_unconfigured",
+      block: contract.NETLIFY_ENV_STATUS,
+      missing: ["INTAKE_HMAC_KEY_V1", "INTAKE_HMAC_KID"].filter((name) => !env[name]),
+      form_state: "kept",
+    });
+  }
+  if (!contract.keyIsUtf8Hex(key) || kid !== contract.REQUIRED_KID) {
+    return json(503, { ok: false, error: "intake_key_rejected", block: contract.NETLIFY_ENV_STATUS, form_state: "kept" });
+  }
+  let lead;
+  try { lead = contract.leadPayload(payload); } catch (e) {
+    return json(400, { ok: false, error: "payload_rejected", form_state: "kept" });
   }
   const bound = routeFromEnv(env.FSHO_INTAKE_ROUTE);
   if (bound.blocked) {
@@ -107,16 +140,20 @@ async function handle(event, deps) {
   }
   let session = held;
   if (session && (payload.recover === true || stage === "first" || stage === "final")) {
-    const recovered = await edgeCall(fetchImpl, sleep, reserveUrl, "recover", {
-      envelope: signFor(key, kid, session, stage, event.body, now),
+    const recovered = await edgeCall(fetchImpl, sleep, reserveUrl, "recover", Object.assign(signFor(key, kid, session, stage, lead, now), {
+      payload: lead,
       session_binding: session.session_binding,
       expected_generation: session.generation,
-    });
-    if (recovered.rate_limited) return json(429, { ok: false, status: "rate_limited", form_state: "kept", retry_after_seconds: recovered.rate_limited.retry_after_seconds || null });
+    }));
+    const paused = limited(recovered);
+    if (paused) return paused;
     if (!recovered.body || recovered.body.ok !== true) {
       return json(409, { ok: false, error: recovered.body && recovered.body.status || "recover_failed", form_state: "kept" });
     }
-    if (typeof recovered.body.reservation_generation === "number") session.generation = recovered.body.reservation_generation;
+    const generation = typeof recovered.body.reservation_generation === "number"
+      ? recovered.body.reservation_generation
+      : recovered.body.ledger && recovered.body.ledger.reservation_generation;
+    if (typeof generation === "number") session.generation = generation;
     if (stage === "first") {
       return json(200, {
         ok: true,
@@ -132,23 +169,27 @@ async function handle(event, deps) {
   }
   if (!session) {
     const minted = await edgeCall(fetchImpl, sleep, reserveUrl, "mint", {});
-    if (minted.rate_limited) return json(429, { ok: false, status: "rate_limited", form_state: "kept", retry_after_seconds: minted.rate_limited.retry_after_seconds || null });
+    const paused = limited(minted);
+    if (paused) return paused;
     if (!minted.body || minted.body.ok !== true || !minted.body.intake_id || !minted.body.session_binding) {
       return json(502, { ok: false, error: "mint_failed", form_state: "kept" });
     }
     session = { v: 1, intake_id: minted.body.intake_id, session_binding: minted.body.session_binding, generation: 1, route: bound.route_id, channel: "website" };
   }
-  const envelope = signFor(key, kid, session, stage, event.body, now);
-  const reserved = await edgeCall(fetchImpl, sleep, reserveUrl, "reserve", {
-    envelope,
+  const envelope = signFor(key, kid, session, stage, lead, now);
+  const destination = bound.wc_action === "reuse" ? "wc_update" : (stage === "final" ? "crm_update" : "wc_create");
+  const reserved = await edgeCall(fetchImpl, sleep, reserveUrl, "reserve", Object.assign({}, envelope, {
+    payload: lead,
     session_binding: session.session_binding,
-    destination: bound.wc_action === "reuse" ? "wc_update" : (stage === "final" ? "crm_update" : "wc_create"),
-  });
-  if (reserved.rate_limited) return json(429, { ok: false, status: "rate_limited", form_state: "kept", retry_after_seconds: reserved.rate_limited.retry_after_seconds || null });
+    destination,
+  }));
+  const reservePaused = limited(reserved);
+  if (reservePaused) return reservePaused;
   if (!reserved.body || reserved.body.ok !== true || contract.DRAFT.authorize_statuses.indexOf(reserved.body.status) < 0) {
     return json(409, { ok: false, error: reserved.body && reserved.body.status || "reserve_failed", form_state: "kept" });
   }
   if (typeof reserved.body.reservation_generation === "number") session.generation = reserved.body.reservation_generation;
+  if (reserved.body.reservation_id) session.reservation_id = reserved.body.reservation_id;
   const hook = env.FSHO_CORE_ZAP_WEBHOOK_URL;
   if (!hook) return json(503, { ok: false, error: "hook_unconfigured", form_state: "kept" });
   const forwarded = await fetchImpl(hook, {
@@ -156,7 +197,7 @@ async function handle(event, deps) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       envelope,
-      payload: publicLead(payload),
+      payload: lead,
       route_binding: {
         route_id: bound.route_id,
         campaign_id: bound.campaign_id || null,
@@ -167,7 +208,14 @@ async function handle(event, deps) {
       execution_requested: false,
     }),
   });
-  if (forwarded.status < 200 || forwarded.status >= 300) {
+  if (!forwarded || forwarded.status < 200 || forwarded.status >= 300) {
+    if (session.reservation_id) {
+      await edgeCall(fetchImpl, sleep, reserveUrl, "reconcile", Object.assign(signFor(key, kid, session, stage, lead, now), {
+        payload: lead,
+        reservation_id: session.reservation_id,
+        reason: "hook_uncertain",
+      }));
+    }
     return json(502, { ok: false, error: "hook_uncertain", needs_reconcile: true, form_state: "kept" });
   }
   return json(200, {
@@ -181,20 +229,6 @@ async function handle(event, deps) {
   }, { "set-cookie": sealCookie(key, session) });
 }
 
-function signFor(key, kid, session, stage, rawBody, nowMs) {
-  const ts = Math.floor(nowMs / 1000);
-  return contract.signEnvelope(key, kid, {
-    route: session.route,
-    channel: session.channel,
-    intake_id: session.intake_id,
-    event_id: crypto.randomUUID(),
-    stage,
-    ts,
-    exp: ts + contract.DRAFT.ttl_seconds,
-    payload_sha256: contract.draftDigest(rawBody),
-  });
-}
-
 exports.handle = handle;
 exports.handler = handle;
-exports.PENDING_CONTRACT = contract.PENDING_CONTRACT;
+exports.PENDING_CONTRACT = contract.PENDING;
