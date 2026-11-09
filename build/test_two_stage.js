@@ -388,3 +388,238 @@ print(json.dumps(out))
     assert.equal(src.includes(needle), false, needle);
   }
 });
+
+test("click ids, utms, and lead id are write-once per field", () => {
+  const local = memory();
+  const first = flow.captureAttribution("?gclid=G-FIRST&utm_source=google", local);
+  assert.equal(first.gclid, "G-FIRST");
+  assert.equal(first.fbclid, "");
+  const added = flow.captureAttribution("?gclid=LATER&fbclid=FB-NEW&utm_source=facebook&utm_id=camp-1", local);
+  assert.equal(added.gclid, "G-FIRST");
+  assert.equal(added.utm_source, "google");
+  assert.equal(added.fbclid, "FB-NEW");
+  assert.equal(added.utm_id, "camp-1");
+  const sessionStore = memory();
+  sessionStore.setItem(flow.TRACKING.lead_key, "lead_already_set");
+  const calls = [];
+  const orig = crypto.randomUUID;
+  crypto.randomUUID = () => { calls.push("mint"); return orig.call(crypto); };
+  try {
+    const session = flow.createFlow(flow.createMockAdapter(), { loaded: false, load() {} }, { sessionStorage: sessionStore, localStorage: local });
+    assert.equal(session.state.leadId, "lead_already_set");
+    assert.equal(calls.length, 0);
+  } finally {
+    crypto.randomUUID = orig;
+  }
+});
+
+test("a disagreeing claim response decides the screen and blocks reserve", () => {
+  const { tag, adapter, session } = run();
+  adapter.claim = (req) => {
+    adapter.log.push({ op: "claim", req });
+    return { ok: true, claimed: true, tier: "follow_up", status: "claimed" };
+  };
+  adapter.reserve = () => { throw new Error("reserve"); };
+  session.submitContact(contact);
+  session.answer("type", "sfh");
+  const done = session.answer("ownership", "sole_owner");
+  assert.equal(done.view.branch, "quiet_non_owner");
+  assert.equal(done.view.googleTagFired, false);
+  assert.equal(tag.loaded, false);
+  assert.equal(done.view.conversionFired, false);
+  assert.equal(session.state.trace.some((row) => row.id === "server" && row.text.includes("overrides")), true);
+  const stopped = flow.createFlow(flow.createMockAdapter(), { loaded: false, load() { this.loaded = true; } });
+  stopped.adapter.claim = () => ({ ok: true, claimed: false, status: "already_claimed" });
+  stopped.adapter.reserve = () => { throw new Error("reserve"); };
+  stopped.submitContact(contact);
+  stopped.answer("type", "multi_2_4");
+  const held = stopped.answer("ownership", "all_agree");
+  assert.equal(held.view.branch, "stopped");
+  assert.equal(held.view.googleTagFired, false);
+  assert.equal(held.view.conversionFired, false);
+  assert.equal(stopped.state.trace.some((row) => row.text.includes("No reserve")), true);
+});
+
+test("server priority_tier is shown from the response and is not sent by the client", () => {
+  assert.equal(flow.serverPriorityTier({ timeline: "asap", occupancy: "vacant" }), "p1");
+  assert.equal(flow.serverPriorityTier({ timeline: "30_90d", condition: "excellent" }), "p2");
+  assert.equal(flow.serverPriorityTier({ timeline: "no_rush", price_vs_value: "under_80" }), "p3");
+  assert.equal(flow.serverPriorityTier({}), null);
+  const { adapter, session } = run();
+  session.submitContact(contact);
+  session.answer("type", "sfh");
+  session.answer("ownership", "sole_owner");
+  session.answer("occupancy", "vacant");
+  session.answer("condition", "needs_work");
+  session.answer("price_vs_value", "under_80");
+  session.answer("listed", "not_listed");
+  session.answer("timeline", "asap");
+  assert.equal(session.state.serverTier, "p1");
+  assert.equal(session.state.trace.some((row) => row.id === "tier" && row.text.includes("p1")), true);
+  const sent = adapter.log.find((row) => row.op === "complete");
+  assert.equal(sent.req.priority, undefined);
+  assert.equal(sent.req.enrichment.occupancy, "vacant");
+  assert.equal(sent.req.enrichment.price_vs_value, "under_80");
+  assert.equal(payloads(adapter).every((row) => row.priority === undefined), true);
+});
+
+test("the real adapter matches the draft call shapes and never uses the network", () => {
+  const src = fs.readFileSync(path.join(__dirname, "two-stage.js"), "utf8");
+  assert.equal(src.includes("fetch("), false);
+  assert.equal(src.includes("INTAKE_HMAC_KEY"), false);
+  assert.equal(src.includes("INTAKE_ZAP_TOKEN"), false);
+  assert.equal(flow.REAL_ADAPTER.enabled, false);
+  assert.equal(flow.REAL_ADAPTER.base_url, "https://placeholder.invalid/functions/v1");
+  assert.deepEqual(flow.PRICE_VS_VALUE_WIRE, { under_80: "under_80", "80_100": "80_100", over_100: "over_100", unsure: "unsure" });
+  let usedNetwork = false;
+  global.fetch = () => { usedNetwork = true; throw new Error("network"); };
+  let calls = 0;
+  const blocked = flow.selectAdapter({
+    adapter: "real",
+    context: "production",
+    search: "?test=1",
+    transport() { calls += 1; throw new Error("network"); }
+  });
+  blocked.park({ name: "TEST LEAD", address: "100 Example Ave", phone: "5550100199", email: contact.email });
+  assert.equal(calls, 0);
+  assert.equal(blocked.log[0].op, "park");
+  const noTransport = flow.selectAdapter({ adapter: "real", context: "local", search: "?test=1" });
+  noTransport.park({ name: "A", address: "B", phone: "5550100199", email: "a@b.co" });
+  assert.equal(noTransport.log[0].op, "park");
+
+  const seen = [];
+  let n = 0;
+  function uuid() {
+    n += 1;
+    return "00000000-0000-4000-8000-" + String(n).padStart(12, "0");
+  }
+  const transport = (url, init) => {
+    const body = JSON.parse(init.body);
+    seen.push({ url, method: init.method, headers: init.headers, body });
+    if (body.payload && body.payload.phone === "000") {
+      return { status: 400, body: { status: "bad_input", fields: ["phone", "email"] } };
+    }
+    if (url.endsWith("/claim") && body.payload && body.payload.by === "promote" && body.payload.lead_id === "lead-disagree") {
+      return { status: 200, body: { ok: true, claimed: true, tier: "follow_up", status: "claimed" } };
+    }
+    if (url.endsWith("/reserve")) {
+      return { status: 200, body: { ok: true, status: "dispatch_intended_committed", reservation_id: "res-1", reservation_generation: 2, session_binding: body.session_binding, execution_requested: false, exactly_once_external: false, owner_token: "OWNER-TOKEN-DO-NOT-LOG", owner_token_issued: true } };
+    }
+    if (url.endsWith("/complete")) return { status: 200, body: { ok: true, status: "delivered", priority_tier: "p1" } };
+    if (url.endsWith("/park")) return { status: 200, body: { ok: true, status: "parked", intake_id: "intake-1", geocode_status: "ok" } };
+    return { status: 200, body: { ok: true, status: "saved" } };
+  };
+  const adapter = flow.createRealAdapter({ transport, uuid, now: () => 1700000000 });
+  const track = { lead_id: "lead-1", gclid: "G-FIRST", gbraid: "GB1", wbraid: "WB1", fbclid: "FB1", utm_source: "google", utm_medium: "cpc", utm_campaign: "sell", utm_term: "cash", utm_content: "ad", utm_id: "u1" };
+  const parked = adapter.park(Object.assign({ name: "TEST LEAD", address: "100 Example Ave", phone: "(555) 010-0199", email: contact.email }, track));
+  assert.equal(parked.status, "parked");
+  assert.equal(parked.owner_token, undefined);
+  adapter.answer(Object.assign({ question: "type", answer: "sfh", gclid: "LATER" }, track));
+  adapter.answer(Object.assign({ question: "ownership", answer: "sole_owner" }, track));
+  adapter.claim(Object.assign({ by: "promote", gclid: "LATER" }, track));
+  const reserved = adapter.reserve(Object.assign({ destination: "crm_create", stage: "final" }, track));
+  assert.equal(reserved.owner_token, undefined);
+  assert.equal(reserved.reservation_id, "res-1");
+  adapter.complete(Object.assign({ mode: "hmac", enrichment: { occupancy: "vacant", condition: "needs_work", price_vs_value: "under_80", listed: "listed_over_90", timeline: "asap" } }, track));
+  const verified = adapter.verify({ reservation_id: "res-1", intake_id: adapter.intakeId, token: "supplied-for-the-test" });
+  assert.equal(verified.status, "saved");
+  const noToken = adapter.verify({ reservation_id: "res-1" });
+  assert.equal(noToken.http, 401);
+  adapter.complete(Object.assign({ mode: "token", token: "supplied-for-the-test", remote_id: "crm-1", enrichment: { timeline: "30d", price_vs_value: "80_100" } }, track));
+  adapter.reconcile({ mode: "token", token: "supplied-for-the-test", reason: "check" });
+  adapter.reconcile({ mode: "hmac", reason: "check" });
+  const bad = adapter.park(Object.assign({ name: "TEST LEAD", phone: "000", email: "bad", address: "100 Example Ave" }, track));
+  assert.equal(bad.ok, false);
+  assert.equal(bad.http, 400);
+  assert.deepEqual(bad.fields, ["phone", "email"]);
+  assert.equal(usedNetwork, false);
+
+  function call(path) { return seen.filter((row) => row.url === flow.REAL_ADAPTER.base_url + path); }
+  const paths = ["/intake-park/park", "/intake-park/answer", "/intake-park/claim", "/intake-reserve/reserve", "/intake-reserve/verify", "/intake-reserve/complete", "/intake-reserve/reconcile"];
+  paths.forEach((path) => assert.ok(call(path).length > 0, path));
+  seen.forEach((row) => {
+    assert.equal(row.method, "POST");
+    assert.equal(row.headers["content-type"], "application/json");
+    assert.equal(row.url.startsWith("https://placeholder.invalid/"), true);
+  });
+  const park = call("/intake-park/park")[0].body;
+  assert.equal(park.envelope.stage, "partial");
+  assert.equal(park.envelope.v, "1");
+  assert.equal(park.envelope.kid, "KID-PLACEHOLDER");
+  assert.equal(park.envelope.route, "ppc_inhouse");
+  assert.equal(park.envelope.channel, "website");
+  assert.equal(park.envelope.sig, "");
+  assert.equal(park.envelope.exp, park.envelope.ts + 900);
+  assert.equal(park.envelope.payload_sha256, flow.sha256Hex(flow.canonicalJson(park.payload)));
+  assert.equal(park.session_binding, adapter.sessionBinding);
+  assert.equal(park.payload.first_name, "TEST");
+  assert.equal(park.payload.last_name, "LEAD");
+  assert.equal(park.payload.phone, "5550100199");
+  assert.equal(park.payload.email, contact.email);
+  assert.equal(park.payload.address, "100 Example Ave");
+  assert.equal(park.payload.is_test, true);
+  assert.equal(park.payload.gclid, "G-FIRST");
+  assert.equal(park.payload.lead_id, "lead-1");
+  assert.equal(park.payload.utm_id, "u1");
+  assert.equal(park.payload.enrichment, undefined);
+  assert.equal(park.payload.city, undefined);
+  const answers = call("/intake-park/answer").map((row) => row.body);
+  assert.deepEqual(answers.map((row) => row.payload.question), ["type", "ownership"]);
+  assert.equal(answers[0].payload.answer, "sfh");
+  assert.equal(answers[0].payload.gclid, "G-FIRST");
+  assert.equal(answers[0].payload.enrichment, undefined);
+  assert.equal(answers[0].envelope.stage, "partial");
+  const claim = call("/intake-park/claim")[0].body;
+  assert.equal(claim.payload.by, "promote");
+  assert.equal(claim.payload.lead_id, "lead-1");
+  assert.equal(claim.envelope.stage, "partial");
+  const reserve = call("/intake-reserve/reserve")[0].body;
+  assert.equal(reserve.envelope.stage, "final");
+  assert.equal(reserve.destination, "crm_create");
+  assert.equal(reserve.lease_seconds, 120);
+  assert.equal(reserve.session_binding, adapter.sessionBinding);
+  assert.match(reserve.owner_token, /^[0-9a-f-]{36}$/);
+  assert.equal(reserve.payload.gclid, "G-FIRST");
+  const verify = call("/intake-reserve/verify");
+  assert.equal(verify.length, 1);
+  assert.equal(verify[0].headers["x-intake-zap-token"], "supplied-for-the-test");
+  assert.equal(verify[0].body.reservation_id, "res-1");
+  assert.equal(verify[0].body.envelope, undefined);
+  const completes = call("/intake-reserve/complete");
+  assert.equal(completes[0].body.payload.enrichment.price_vs_value, "under_80");
+  assert.equal(completes[0].body.payload.enrichment.occupancy, "vacant");
+  assert.equal(completes[0].body.payload.priority_tier, undefined);
+  assert.equal(completes[0].body.envelope.stage, "final");
+  assert.equal(completes[0].body.reservation_id, "res-1");
+  assert.equal(completes[0].body.reservation_generation, 2);
+  assert.equal(completes[1].headers["x-intake-zap-token"], "supplied-for-the-test");
+  assert.equal(completes[1].body.envelope, undefined);
+  assert.equal(completes[1].body.enrichment.price_vs_value, "80_100");
+  assert.equal(completes[1].body.intake_id, adapter.intakeId);
+  const reconciles = call("/intake-reserve/reconcile");
+  assert.equal(reconciles[0].headers["x-intake-zap-token"], "supplied-for-the-test");
+  assert.equal(reconciles[0].body.reason, "check");
+  assert.equal(reconciles[0].body.envelope, undefined);
+  assert.equal(reconciles[1].body.envelope.stage, "final");
+  assert.equal(reconciles[1].body.payload.reason, "check");
+
+  const flowCalls = [];
+  const live = flow.createRealAdapter({
+    transport(url, init) {
+      const body = JSON.parse(init.body);
+      flowCalls.push(url);
+      if (url.endsWith("/claim")) return { status: 200, body: { ok: true, claimed: true, tier: "follow_up", status: "claimed" } };
+      if (url.endsWith("/park")) return { status: 200, body: { ok: true, status: "parked", intake_id: "i", geocode_status: "ok" } };
+      return { status: 200, body: { ok: true, status: "saved" } };
+    }
+  });
+  const session = flow.createFlow(live, { loaded: false, load() { this.loaded = true; } });
+  session.submitContact(contact);
+  session.answer("type", "sfh");
+  const overruled = session.answer("ownership", "sole_owner");
+  assert.equal(overruled.view.branch, "quiet_non_owner");
+  assert.equal(overruled.view.googleTagFired, false);
+  assert.equal(flowCalls.some((url) => url.endsWith("/reserve")), false);
+  assert.equal(JSON.stringify(session.state.trace).includes("OWNER-TOKEN-DO-NOT-LOG"), false);
+  assert.equal(usedNetwork, false);
+});

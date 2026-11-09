@@ -4,7 +4,7 @@ The public form stays off (`preview` true, `lead_form.enabled` false, empty endp
 
 Test mode is on only when the build context is `local`, `dev`, `deploy-preview`, or `branch-deploy`, and the URL has `?test=1`. A production build (`CONTEXT=production` or `gen.py --live`) bakes `production`, and `?test=1` does not turn it on.
 
-The test page does not call Supabase, intake-reserve, Zapier, WhatConverts, CRM, or Slack. The mock adapter only records. It never calls fetch. The address field is a plain text input. There is no Google Maps or Places autocomplete.
+The test page does not call Supabase, Zapier, WhatConverts, CRM, or Slack. The mock adapter is the default and only records. The address field is a plain text input. There is no Google Maps or Places autocomplete. The page script has no network call of its own. A real adapter exists beside the mock and is used only when `adapter` is `"real"`, the build context is non-production, and the caller passes a transport. Its base URL is the placeholder `https://placeholder.invalid/functions/v1`. There is no HMAC key and no Zap token in the source. `sig` is left empty because the Netlify function that holds the key signs the envelope.
 
 ## Stage 1 and the two qualifying questions
 
@@ -23,15 +23,20 @@ The quiet screen reuses the live qualifier `not_fit` ending, not new copy:
 
 Flagged for Taylor: this is the existing qualifier ending. It says “may not be a fit” and mentions a later reach-out. Confirm that is the line he wants, or replace it.
 
-Q1 single-family or multi-family waits for Q2. The tag is still not loaded. An owner answer (`sole_owner`, `all_agree`, or `decision_maker`) is the form fill: the dry-run records the tag, then the expected path is the Zap Hot path (WhatConverts, CRM, Slack).
+Q1 single-family or multi-family waits for Q2. The tag is still not loaded. The client uses the answers only to choose the next screen. After Q2 it sends the raw ownership answer and calls claim. The claim response decides:
 
-Q2 `no` (not an owner, or not everyone agrees) on a hot property type is logged as CRM follow-up. No tag and no conversion. The exit event is `seller_form_disqualified` with reason `not_owner`.
+- `tier: "hot"` is the form fill. The dry-run records the tag, then the expected path is the Zap Hot path (WhatConverts, CRM, Slack). The real adapter then builds reserve.
+- `tier: "follow_up"` is CRM follow-up. No tag and no conversion. The exit event is `seller_form_disqualified` with reason `not_owner`.
+- `already_claimed` stops. No reserve and no Zap.
+- `not_qualified` or `not_non_owner` follows the server. The test trace logs the disagreement when that tier differs from the screen the client was about to show.
+
+The mock claim agrees with the requested `by`, so the dry-run still matches the screen hint. A townhouse only continues when `townhouse_route` is `hot`, and that switch still does not emit `seller_form_completed`.
 
 ## Click ids, lead id, and tags
 
-Attribution is config-driven on `TRACKING` in `build/two-stage.js`. On the first request that carries any of them, the page stores `gclid`, `gbraid`, `wbraid`, `fbclid`, `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, and `utm_content` in `localStorage` under `fsho_ts_attr`. A later click does not overwrite that first touch. Every stage payload includes those fields (empty string when absent).
+Attribution is config-driven on `TRACKING` in `build/two-stage.js`. The page stores `gclid`, `gbraid`, `wbraid`, `fbclid`, `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`, and `utm_id` in `localStorage` under `fsho_ts_attr`. Each field is write-once: a stored value is never replaced, and a field that is still empty can be filled later. Every stage payload includes the stored fields.
 
-`lead_id` is created with `crypto.randomUUID()` once per browser session and kept in `sessionStorage` under `fsho_ts_lead`. The same id is sent on every stage of that session. A new session gets a new id.
+`lead_id` is created with `crypto.randomUUID()` once per browser session and kept in `sessionStorage` under `fsho_ts_lead`. A value already in that key is kept. The same id is sent on every stage. The real adapter also refuses to overwrite a click id, UTM, or lead id it has already sent.
 
 The GTM container id is still undecided. The test-form config value is the placeholder `GTM-PLACEHOLDER`. GA4 is off. The Meta pixel is off. Tags are lazy: nothing is requested at page load, and the only marker is the existing dry-run JSON script, inserted after `owner = yes`. The test form does not load the site container.
 
@@ -45,17 +50,17 @@ It does not fire on stage 1, abandon, a quiet or sorry property type, a non-owne
 
 ## Enrichment and priority
 
-Enrichment starts only after the Hot decision, after the conversion has already fired. It never gates the conversion and never disqualifies. Each screen is one tap and can be skipped. Skip is a full-width button labeled “Skip”.
+Enrichment starts only after the claim response says Hot, after the conversion has already fired. It never gates the conversion and never disqualifies. Each screen is one tap and can be skipped. Skip is a full-width button labeled “Skip”. Answers are raw values. `/answer` is not used for these, because enrichment on that route is a 400. They go on complete.
 
-Order:
+Order and wire values:
 
-1. Occupancy: `owner`, `tenant`, `vacant`
-2. Condition: `move_in`, `wear`, `repairs`, `major`
-3. Asking price vs estimated value: `under_80` (under 80%), `band_80_100` (80% to 100%), `over_100` (over 100%), `not_sure`
-4. Listed with an agent: `yes` or `no`. A listed home stays Hot.
-5. Timeline: `asap`, `30d`, `over_90d`, `no_rush`
+1. Occupancy: `owner_occupied`, `tenant_occupied`, `vacant`, `unknown`
+2. Condition: `excellent`, `good`, `fair`, `needs_work`, `major_repairs`
+3. Asking price vs estimated value. Labels stay “Under 80% of the value”, “80% to 100%”, “Over 100%”, and “Not sure”. The wire values are `under_80`, `80_100`, `over_100`, and `unsure`, mapped only by `PRICE_VS_VALUE_WIRE`.
+4. Listed with an agent: `not_listed`, `listed_under_90`, `listed_over_90`, `expired`. A listed home stays on the Hot screen unless the claim response says otherwise.
+5. Timeline: `asap`, `30d`, `30_90d`, `over_90d`, `no_rush`
 
-Priority is `high` when occupancy is `vacant` or the price band is `under_80`. Every other combination, including a skip, is `standard`. The tier is stored on the enrich and thanks payloads for that same `lead_id`. The branch stays `zap_hot`.
+`priority_tier` is server-set (`p1`, `p2`, or `p3`) on Hot rows. The client does not send it. The mock complete response applies the draft rule (fast timeline plus a distress signal is `p1`, any other timeline inside 90 days is `p2`, otherwise `p3`) and the test trace shows that value. `p1` treats `under_80` as the distress price until the edge adopts that value or the one wire map is switched to `below`.
 
 The thank-you screen is the end of the optional questions. Headline: “Thanks. We have your info.”
 
@@ -67,16 +72,35 @@ Every stage includes:
 - `stage` (`contact`, `property_type`, `ownership`, `enrich`, `thanks`, `abandoned`)
 - `gclid`, `gbraid`, `wbraid`, `fbclid`
 - `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`
+- `utm_id` when it has been captured
 
-Stage 1 is the park row and also includes `name`, `address`, `phone`, `email`, and `status` (`parked`). The park record is not a CRM create. Later stage rows are mock `stage` operations.
+Stage 1 is the park row and also includes `name`, `address`, `phone`, `email`, and `status` (`parked`). The park record is not a CRM create. Later stage rows are mock `stage` operations. None of these rows carry a client priority.
 
 Property type adds `property_type`. A quiet type also adds `signal` `seller_form_disqualified` and `reason` `quiet_property`.
 
 Ownership adds `ownership`. Hot adds `signal` `seller_form_completed` when the conversion rule matches. A non-owner adds `signal` `seller_form_disqualified` and `reason` `not_owner`.
 
-Each enrich row adds `question`, `answer` (empty when skipped), `skipped`, and `priority`.
+Each enrich row adds `question`, `answer` (empty when skipped), and `skipped`.
 
-The thanks row adds `priority` plus `occupancy`, `condition`, `price_vs_value`, `listed`, and `timeline`.
+The thanks row adds `occupancy`, `condition`, `price_vs_value`, `listed`, and `timeline`. The server tier comes back on the complete or verify response. It is not a request field.
+
+## Real adapter requests
+
+All of these are `POST` with `content-type: application/json`. The placeholder base is `https://placeholder.invalid/functions/v1`. Tests inject a transport. Nothing in the suite calls the network.
+
+| Stage | Path | Envelope stage | Body |
+|---|---|---|---|
+| Park | `/intake-park/park` | `partial` | `envelope`, `session_binding`, `payload` with `first_name`, `last_name` (when the name has two parts), `phone` digits, `email`, `address`, `is_test: true`, and write-once tracking |
+| Answer | `/intake-park/answer` | `partial` | `envelope`, `payload.question`, `payload.answer`, tracking. No enrichment |
+| Claim | `/intake-park/claim` | `partial` | `envelope`, `payload.by` of `promote` or `non_owner`, tracking |
+| Reserve | `/intake-reserve/reserve` | `final` on the Hot path | `envelope`, `payload` tracking, `session_binding`, `destination: crm_create`, generated `owner_token`, `lease_seconds: 120` |
+| Verify | `/intake-reserve/verify` | none | `reservation_id`, optional `intake_id` and `owner_token`. Header `x-intake-zap-token` only when the caller supplies it |
+| Complete, HMAC | `/intake-reserve/complete` | `final` | `envelope`, `payload` tracking and `enrichment`, `session_binding`, `owner_token`, `reservation_id`, `reservation_generation` |
+| Complete, token | `/intake-reserve/complete` | none | The token-mode body, including `enrichment` and tracking, plus the caller-supplied header |
+| Reconcile, token | `/intake-reserve/reconcile` | none | `reservation_id`, `owner_token`, optional `reason`, plus the caller-supplied header |
+| Reconcile, HMAC | `/intake-reserve/reconcile` | `final` | `envelope`, `payload.reason`, `session_binding`, `reservation_id`, `owner_token` |
+
+A 400 `bad_input` response is returned as `{ok:false, http:400, status, fields}` and the field names are logged. The owner token is not written into the test trace. `payload_sha256` is the SHA-256 of the canonical payload (sorted keys, no spaces).
 
 ## Copy check
 
