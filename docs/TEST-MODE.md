@@ -8,11 +8,18 @@ Stage 1 parks name, address, phone, and email through the mock adapter. That rec
 
 Q1 and Q2 use the live qualifier values: `sfh`, `townhouse`, `multi_2_4`, `condo`, `mobile`, `land`, and ownership `sole_owner`, `all_agree`, `decision_maker`, `no`.
 
-Q1 condo, mobile, or land stays parked for a `pg_cron` self-serve sweep. No tag.
+Only `sfh` and `multi_2_4` continue to ownership. Townhouse, condo, mobile, and land stay parked for the `pg_cron` self-serve sweep. No Google tag and no conversion. Any other listed Q1 value does the same.
 
-Q1 single-family or multi-family (`multi_2_4`) waits for Q2. The tag is still not loaded. Any owner answer is the form fill: the dry-run records the tag and the conversion, then the expected path is the Zap Hot path (WhatConverts, CRM, Slack). Q3–Q6 only add enrichment lines.
+Taylor decided townhouses take that quiet path. `townhouse_route` defaults to `quiet`. Setting it to `hot` is the only switch that lets a townhouse continue, and it is not the current decision.
 
-Townhouse has its own answer. `townhouse_route` defaults to `hot`, the same path as single-family, and setting it to `quiet` sends townhouse through the sweep with no tag. That default is pending Taylor's confirmation. The published qualifier still ends townhouse at `not_fit`; this test flow does not change that file.
+The quiet screen reuses the live qualifier `not_fit` ending, not new copy:
+
+- Headline: “Thanks for the details.”
+- Body: “This one may not be a fit for us right now, but we saved your info and will reach out if anything changes.”
+
+Flagged for Taylor: this is the existing qualifier ending. It says “may not be a fit” and mentions a later reach-out. Confirm that is the line he wants, or replace it.
+
+Q1 single-family or multi-family waits for Q2. The tag is still not loaded. Any owner answer is the form fill: the dry-run records the tag and the conversion, then the expected path is the Zap Hot path (WhatConverts, CRM, Slack). Q3–Q6 only add enrichment lines.
 
 Q2 `no` (not an owner, or not everyone agrees) on a hot property type is logged as CRM follow-up with no conversion and no tag. Abandoning after stage 1 stays parked and does not start the sweep.
 

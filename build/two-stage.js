@@ -5,11 +5,14 @@
   if (root) root.FSHOTwoStage = api;
   if (typeof document !== "undefined") boot(api);
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
-  var HOT = { sfh: 1, multi_2_4: 1 };
-  var QUIET = { condo: 1, mobile: 1, land: 1 };
+  var CONTINUE = { sfh: 1, multi_2_4: 1 };
   var OWNERS = { sole_owner: 1, all_agree: 1, decision_maker: 1 };
   var ENRICH = { timeline: 1, situation: 1, equity: 1, ability: 1 };
-  var CONFIG = { townhouse_route: "hot" };
+  var CONFIG = { townhouse_route: "quiet" };
+  var NOT_FIT = {
+    headline: "Thanks for the details.",
+    body: "This one may not be a fit for us right now, but we saved your info and will reach out if anything changes."
+  };
   var QUESTIONS = {
     type: ["What kind of property is it?", [["sfh", "Single-family house"], ["townhouse", "Townhouse"], ["multi_2_4", "Multi-family (2-4 units)"], ["condo", "Condo"], ["mobile", "Mobile or manufactured home"], ["land", "Vacant land"]]],
     ownership: ["Are you the owner, or can you make the decision to sell?", [["sole_owner", "Yes, I'm the only owner"], ["all_agree", "Yes, and all owners agree"], ["decision_maker", "I'm an heir, executor, or POA"], ["no", "No, or not everyone agrees"]]],
@@ -60,10 +63,18 @@
     var gate = tag || { loaded: false, load: function () { this.loaded = true; } };
     var townhouseRoute = (config && config.townhouse_route) || CONFIG.townhouse_route;
     var state = { stage: "contact", parked: false, branch: null, googleTagFired: false, downstream: null, answers: {}, trace: [], contact: null };
+    function goesQuiet(value) {
+      if (value === "townhouse") return townhouseRoute !== "hot";
+      if (CONTINUE[value]) return false;
+      var known = false;
+      QUESTIONS.type[1].forEach(function (opt) { if (opt[0] === value) known = true; });
+      return known ? true : null;
+    }
     function finish(branch, path, googleText) {
       state.branch = branch;
       state.downstream = path;
       state.stage = branch === "hot" ? "enrich" : "done";
+      state.sorry = branch === "quiet_property" ? NOT_FIT : null;
       adapter.branch(branch);
       adapter.google(state.googleTagFired);
       adapter.downstream(path);
@@ -105,9 +116,8 @@
       },
       answer: function (id, value) {
         if (state.stage === "q_type" && id === "type") {
-          var quiet = !!QUIET[value] || (value === "townhouse" && townhouseRoute === "quiet");
-          var hot = !!HOT[value] || (value === "townhouse" && townhouseRoute !== "quiet");
-          if (!quiet && !hot) return { ok: false, error: "unknown_property" };
+          var quiet = goesQuiet(value);
+          if (quiet === null) return { ok: false, error: "unknown_property" };
           state.answers.type = value;
           note(state, "q1", "Q1 property type: " + value + ".");
           if (quiet) {
@@ -147,6 +157,7 @@
     createMockAdapter: createMockAdapter,
     createFlow: createFlow,
     CONFIG: CONFIG,
+    NOT_FIT: NOT_FIT,
     QUESTIONS: QUESTIONS,
     PATHS: PATHS
   };
@@ -178,6 +189,16 @@ function boot(api) {
     summary.dataset.google = flow.state.googleTagFired ? "fired" : "not-loaded";
     summary.dataset.branch = flow.state.branch || "";
     summary.textContent = "Branch: " + (flow.state.branch || "not chosen") + ". Google tag: " + (flow.state.googleTagFired ? "fired" : "not loaded") + ". Path: " + (api.PATHS[path] || "not chosen");
+    var sorry = document.getElementById("ts-sorry");
+    sorry.replaceChildren();
+    if (flow.state.sorry) {
+      var sh = document.createElement("h2");
+      sh.textContent = flow.state.sorry.headline;
+      var sp = document.createElement("p");
+      sp.textContent = flow.state.sorry.body;
+      sorry.appendChild(sh);
+      sorry.appendChild(sp);
+    }
     ask.replaceChildren();
     var qid = flow.state.stage === "q_type" ? "type" : (flow.state.stage === "q_ownership" ? "ownership" : "");
     if (flow.state.stage === "q_type") {
