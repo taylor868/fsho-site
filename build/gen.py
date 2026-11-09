@@ -57,6 +57,17 @@ def esc(s):
 def pos_int(v):
     return type(v) is int and v > 0
 
+def deploy_context(live):
+    """Baked into the test page. Production cannot be overridden by a query string."""
+    if live or os.environ.get('CONTEXT') == 'production':
+        return 'production'
+    ctx = os.environ.get('CONTEXT', '')
+    if ctx in ('deploy-preview', 'branch-deploy', 'dev'):
+        return ctx
+    if not ctx:
+        return 'local'
+    return 'denied'
+
 def show_drafts(site, live):
     """True when this build should include draft:true pages and markets."""
     if live:
@@ -450,6 +461,26 @@ def build(site, pages, markets, redirects, live):
         c = QC.get('consent', {})
         if not c.get('enabled'): return ''
         return f'<label class="chk"><input type="checkbox" name="consent"{" required" if c.get("required") else ""}> <small>{c["text"]} <a href="/text-messaging-terms/">Text Terms</a> · <a href="/privacy/">Privacy</a></small></label>'
+    def test_intake():
+        ctx = deploy_context(live)
+        src = re.sub(r'\n\s*\n', '\n', open(os.path.join(B, 'two-stage.js'), encoding='utf-8').read().strip()).replace('</', '<\\/')
+        return (
+            '<section class="wrap pad" id="two-stage"><h1>Two-stage test intake</h1>'
+            '<p class="fine">Test mode only. The public form stays off. Nothing on this page is sent.</p>'
+            '<p id="ts-off" hidden>Test mode is off. Production builds cannot enable it, and other builds need ?test=1.</p>'
+            '<div id="ts-app" hidden><form id="ts-form" action="#" method="post">'
+            '<div class="lead-h"><strong>Stage 1</strong><span>Name, property, phone, and email. This only parks the lead.</span></div>'
+            '<label>Name<input name="name" autocomplete="name" required></label>'
+            '<label>Property address<input name="address" autocomplete="street-address" required></label>'
+            '<label>Phone<input name="phone" type="tel" autocomplete="tel" required></label>'
+            '<label>Email<input name="email" type="email" autocomplete="email" required></label>'
+            '<button class="btn btn-o" type="submit">Park this lead</button></form>'
+            '<h2>Step trace</h2><p id="ts-summary" data-google="not-loaded" data-downstream=""></p><ol id="ts-trace"></ol><div id="ts-ask"></div></div>'
+            '<style>#ts-form,#ts-trace{max-width:720px}#ts-form label{display:block;font-weight:600;margin:10px 0}'
+            '#ts-form input{display:block;width:100%;margin-top:4px;padding:14px;border:1.5px solid #c8d1da;border-radius:10px;font-size:17px}'
+            '#ts-app .ts-choices{display:flex;flex-wrap:wrap;gap:8px}#ts-trace li{margin:6px 0}</style>'
+            f'<script>window.FSHO_DEPLOY_CONTEXT="{ctx}";</script><script>{src}</script></section>'
+        )
     def qualifier_form():
         cfg = {k: QC[k] for k in ('id', 'version', 'start', 'result', 'endings') if k in QC}
         cfg['questions'] = [{k: v for k, v in x.items() if not k.startswith('_')} for x in QC['questions']]
@@ -534,6 +565,7 @@ def build(site, pages, markets, redirects, live):
             if k == 'states': return states
             if k == 'step2_form': return step2()
             if k == 'qualifier_form': return qualifier_form()
+            if k == 'test_intake': return test_intake()
             if k == 'phone': return PH
             raise ValueError(f'unknown shortcode {{{{{k}}}}}')
         return re.sub(r'\{\{([a-z0-9_]+(?::[^}]*)?)\}\}', rep, body)

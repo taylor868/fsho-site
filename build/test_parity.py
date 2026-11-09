@@ -121,7 +121,7 @@ class ParityTests(unittest.TestCase):
         env.pop('CONTEXT', None)
         proc = subprocess.run([sys.executable, 'build/gen.py', '--check'], cwd=ROOT, env=env, capture_output=True, text=True)
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertIn('OK: 14 pages, 39 markets, 16 redirects', proc.stdout)
+        self.assertIn('OK: 15 pages, 39 markets, 16 redirects', proc.stdout)
         for name in ('california', 'connecticut', 'massachusetts', 'mississippi', 'north-carolina', 'pennsylvania', 'rhode-island', 'washington'):
             self.assertIn(f'content/markets/{name}.json: title is ', proc.stdout)
         self.assertNotIn('ERROR', proc.stdout)
@@ -142,6 +142,22 @@ class ParityTests(unittest.TestCase):
         self.assertNotIn('until the narrow create_lead token exists', joined)
         self.assertNotIn('Blocked on the narrow', joined)
         self.assertNotIn('blocked only on the narrow token', joined)
+
+    def test_two_stage_page_is_off_when_the_build_is_production(self):
+        os.environ['CONTEXT'] = 'production'
+        self.build(live=False)
+        page = (Path(gen.OUT) / 'test-intake' / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('FSHO_DEPLOY_CONTEXT="production"', page)
+        self.assertIn('tracking:false', page)
+        self.assertNotIn('id="fsho-google-gate"', page)
+        self.assertNotIn('/test-intake/', (Path(gen.OUT) / 'sitemap.xml').read_text(encoding='utf-8'))
+        home = (Path(gen.OUT) / 'index.html').read_text(encoding='utf-8')
+        self.assertNotIn('id="ts-form"', home)
+        self.assertIn('var FSHO={endpoint:""', home)
+        os.environ.pop('CONTEXT')
+        self.build(live=True)
+        live_page = (Path(gen.OUT) / 'test-intake' / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('FSHO_DEPLOY_CONTEXT="production"', live_page)
 
     def test_drafts_preview_included_live_and_production_skipped(self):
         self.add_drafts()
