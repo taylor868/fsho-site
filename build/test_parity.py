@@ -245,7 +245,11 @@ draft: false
         width = 1 + int.from_bytes(blob[24:27], 'little')
         height = 1 + int.from_bytes(blob[27:30], 'little')
         manifest = json.loads((self.root / 'content' / 'media' / 'media.json').read_text(encoding='utf-8'))
-        self.assertEqual(manifest, [{'file': 'logo.webp', 'alt': 'Fair & Simple Home Offer', 'width': width, 'height': height}])
+        self.assertEqual(manifest, [
+            {'file': 'logo.webp', 'alt': 'Fair & Simple Home Offer', 'width': width, 'height': height},
+            {'file': 'andrew-family-768.webp', 'alt': 'Andrew Collier with his wife and baby', 'width': 768, 'height': 720},
+            {'file': 'andrew-family-400.webp', 'alt': 'Andrew Collier with his wife and baby', 'width': 400, 'height': 375},
+        ])
         self.assertEqual((width, height), (320, 122))
 
         manifest[0].pop('alt')
