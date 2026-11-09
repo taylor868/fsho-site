@@ -52,15 +52,14 @@ It does not fire on stage 1, abandon, a quiet or sorry property type, a non-owne
 
 Enrichment starts only after the claim response says Hot, after the conversion has already fired. It never gates the conversion and never disqualifies. Each screen is one tap and can be skipped. Skip is a full-width button labeled “Skip”. Answers are raw values. `/answer` is not used for these, because enrichment on that route is a 400. They go on complete.
 
-Order and wire values:
+Order and wire values. The counter reads “Optional N of 4”. There is no asking-price question.
 
 1. Occupancy: `owner_occupied`, `tenant_occupied`, `vacant`, `unknown`
 2. Condition: `excellent`, `good`, `fair`, `needs_work`, `major_repairs`
-3. Asking price vs estimated value. Labels stay “Under 80% of the value”, “80% to 100%”, “Over 100%”, and “Not sure”. The wire values are `under_80`, `80_100`, `over_100`, and `unsure`, mapped only by `PRICE_VS_VALUE_WIRE`.
-4. Listed with an agent: `not_listed`, `listed_under_90`, `listed_over_90`, `expired`. A listed home stays on the Hot screen unless the claim response says otherwise.
-5. Timeline: `asap`, `30d`, `30_90d`, `over_90d`, `no_rush`
+3. Listed with an agent: `not_listed`, `listed_under_90`, `listed_over_90`, `expired`. A listed home stays on the Hot screen unless the claim response says otherwise.
+4. Timeline: `asap`, `30d`, `30_90d`, `over_90d`, `no_rush`
 
-`priority_tier` is server-set (`p1`, `p2`, or `p3`) on Hot rows. The client does not send it. The mock complete response applies the draft rule (fast timeline plus a distress signal is `p1`, any other timeline inside 90 days is `p2`, otherwise `p3`) and the test trace shows that value. `p1` treats `under_80` as the distress price until the edge adopts that value or the one wire map is switched to `below`.
+`priority_tier` is server-set (`p1`, `p2`, or `p3`) on Hot rows. The client does not send it, and no payload includes `price_vs_value`. The mock complete response sets the tier from the answers it did receive. `p1` is a vacant home, or an `asap` / `30d` timeline together with condition `needs_work` or `major_repairs`, or listed `expired` or `listed_over_90`. `p2` is any other timeline within 90 days (`asap`, `30d`, or `30_90d`). Everything else is `p3`. The test trace shows that value.
 
 The thank-you screen is the end of the optional questions. Headline: “Thanks. We have your info.”
 
@@ -82,7 +81,7 @@ Ownership adds `ownership`. Hot adds `signal` `seller_form_completed` when the c
 
 Each enrich row adds `question`, `answer` (empty when skipped), and `skipped`.
 
-The thanks row adds `occupancy`, `condition`, `price_vs_value`, `listed`, and `timeline`. The server tier comes back on the complete or verify response. It is not a request field.
+The thanks row adds `occupancy`, `condition`, `listed`, and `timeline`. The server tier comes back on the complete or verify response. It is not a request field. `price_vs_value` is not a field on any stage.
 
 ## Real adapter requests
 

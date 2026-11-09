@@ -8,7 +8,7 @@
   var CONTINUE = { sfh: 1, multi_2_4: 1 };
   var OWNERS = { sole_owner: 1, all_agree: 1, decision_maker: 1 };
   var LEGACY = { situation: 1, equity: 1, ability: 1 };
-  var ENRICH_STEPS = ["occupancy", "condition", "price_vs_value", "listed", "timeline"];
+  var ENRICH_STEPS = ["occupancy", "condition", "listed", "timeline"];
   var PAYLOAD_FIELDS = ["lead_id", "stage", "gclid", "gbraid", "wbraid", "fbclid", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
   var PUBLIC_EVENT_KEYS = { event: 1, transaction_id: 1, reason: 1, property_type: 1 };
   var TRACKING = {
@@ -28,12 +28,9 @@
     route: "ppc_inhouse",
     channel: "website"
   };
-  // Form value -> wire value. One place to switch if the edge keeps below/about/above/unsure.
-  var PRICE_VS_VALUE_WIRE = { under_80: "under_80", "80_100": "80_100", over_100: "over_100", unsure: "unsure" };
   var LEGACY_VALUES = {
     occupancy: { owner: 1, tenant: 1 },
     condition: { move_in: 1, wear: 1, repairs: 1, major: 1 },
-    price_vs_value: { band_80_100: 1, not_sure: 1 },
     listed: { yes: 1, no: 1 }
   };
   var CONFIG = { townhouse_route: "quiet" };
@@ -54,7 +51,6 @@
     ownership: ["Are you the owner, or can you make the decision to sell?", [["sole_owner", "Yes, I'm the only owner"], ["all_agree", "Yes, and all owners agree"], ["decision_maker", "I'm an heir, executor, or POA"], ["no", "No, or not everyone agrees"]]],
     occupancy: ["Who is living there?", [["owner_occupied", "I live there"], ["tenant_occupied", "A tenant lives there"], ["vacant", "It's vacant"], ["unknown", "Not sure"]]],
     condition: ["What condition is the property in?", [["excellent", "Excellent"], ["good", "Good"], ["fair", "Fair"], ["needs_work", "Needs work"], ["major_repairs", "Major repairs"]]],
-    price_vs_value: ["How does the asking price compare with the estimated value?", [["under_80", "Under 80% of the value"], ["80_100", "80% to 100%"], ["over_100", "Over 100%"], ["unsure", "Not sure"]]],
     listed: ["Is it listed with an agent?", [["not_listed", "Not listed"], ["listed_under_90", "Listed under 90 days"], ["listed_over_90", "Listed 90 days or more"], ["expired", "Listing expired"]]],
     timeline: ["When do you need to sell?", [["asap", "As soon as possible"], ["30d", "Within 30 days"], ["30_90d", "In 30 to 90 days"], ["over_90d", "More than 90 days"], ["no_rush", "No rush"]]],
     situation: ["What's the main reason you're selling?", [["behind", "Behind on payments"], ["repairs", "Needs repairs"], ["curious", "Just curious"]]],
@@ -174,7 +170,7 @@
 
   function priorityTier(answers) {
     var a = answers || {};
-    if (a.occupancy === "vacant" || a.price_vs_value === "under_80") return "high";
+    if (a.occupancy === "vacant") return "high";
     return "standard";
   }
 
@@ -200,11 +196,9 @@
 
   function serverPriorityTier(e) {
     if (!e || !Object.keys(e).length) return null;
-    var price = PRICE_VS_VALUE_WIRE[e.price_vs_value] || e.price_vs_value;
-    var below = price === "under_80" || price === "below";
     var fast = e.timeline === "asap" || e.timeline === "30d";
-    var distress = e.condition === "needs_work" || e.condition === "major_repairs" || e.occupancy === "vacant" || e.listed === "expired" || e.listed === "listed_over_90" || below;
-    if (fast && distress) return "p1";
+    var distress = e.condition === "needs_work" || e.condition === "major_repairs" || e.listed === "expired" || e.listed === "listed_over_90";
+    if (e.occupancy === "vacant" || (fast && distress)) return "p1";
     if (fast || e.timeline === "30_90d") return "p2";
     return "p3";
   }
@@ -419,7 +413,6 @@
       emit("thanks", {
         occupancy: state.answers.occupancy || "",
         condition: state.answers.condition || "",
-        price_vs_value: state.answers.price_vs_value || "",
         listed: state.answers.listed || "",
         timeline: state.answers.timeline || ""
       });
@@ -597,8 +590,8 @@
     function mapEnrichment(source) {
       var out = {};
       Object.keys(source || {}).forEach(function (key) {
-        if (!source[key]) return;
-        out[key] = key === "price_vs_value" && PRICE_VS_VALUE_WIRE[source[key]] ? PRICE_VS_VALUE_WIRE[source[key]] : source[key];
+        if (!source[key] || key === "price_vs_value") return;
+        out[key] = source[key];
       });
       return out;
     }
@@ -757,7 +750,6 @@
     serverPriorityTier: serverPriorityTier,
     canonicalJson: canonicalJson,
     sha256Hex: sha256Hex,
-    PRICE_VS_VALUE_WIRE: PRICE_VS_VALUE_WIRE,
     REAL_ADAPTER: REAL_ADAPTER,
     conversionName: conversionName,
     exitEvent: exitEvent,

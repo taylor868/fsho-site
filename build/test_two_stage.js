@@ -208,7 +208,6 @@ test("the hot path records one seller_form_completed and dedupes on lead id", ()
   assert.equal(JSON.stringify(dataLayer).includes("Example"), false);
   hot.answer("occupancy", "owner");
   hot.answer("condition", "wear");
-  hot.answer("price_vs_value", "band_80_100");
   hot.answer("listed", "yes");
   hot.answer("timeline", "asap");
   assert.equal(dataLayer.filter((e) => e.event === "seller_form_completed").length, 1);
@@ -277,7 +276,6 @@ test("enrichment is skippable, stays on the hot lead, and does not move the conv
   assert.equal(dataLayer.length, 1);
   assert.equal(hot.state.stage, "enrich");
   assert.equal(hot.skip().view.screen, "condition");
-  assert.equal(hot.skip().view.screen, "price_vs_value");
   assert.equal(hot.skip().view.screen, "listed");
   assert.equal(hot.skip().view.screen, "timeline");
   const done = hot.skip();
@@ -288,7 +286,7 @@ test("enrichment is skippable, stays on the hot lead, and does not move the conv
   assert.equal(done.view.priority, "standard");
   assert.equal(dataLayer.filter((e) => e.event === "seller_form_completed").length, 1);
   assert.equal(adapter.log.filter((row) => row.op === "google" && row.fired).length, 1);
-  assert.equal(payloads(adapter).filter((row) => row.stage === "enrich" && row.skipped === true).length, 5);
+  assert.equal(payloads(adapter).filter((row) => row.stage === "enrich" && row.skipped === true).length, 4);
   assert.equal(payloads(adapter).every((row) => row.lead_id === hot.state.leadId), true);
   const answered = flow.createFlow(flow.createMockAdapter(), { loaded: false, load() { this.loaded = true; } }, { dataLayer: [] });
   answered.submitContact(contact);
@@ -297,7 +295,6 @@ test("enrichment is skippable, stays on the hot lead, and does not move the conv
   const before = answered.state.dataLayer.length;
   answered.answer("occupancy", "tenant");
   answered.answer("condition", "repairs");
-  answered.answer("price_vs_value", "over_100");
   const listed = answered.answer("listed", "yes");
   assert.equal(listed.view.branch, "hot");
   assert.equal(listed.view.downstream, "zap_hot");
@@ -312,13 +309,12 @@ test("enrichment is skippable, stays on the hot lead, and does not move the conv
   assert.equal(thanks.occupancy, "tenant");
 });
 
-test("priority is high only for a vacant home or an asking price under 80 percent", () => {
+test("priority is high only for a vacant home", () => {
   assert.equal(flow.priorityTier({}), "standard");
-  assert.equal(flow.priorityTier({ occupancy: "owner", price_vs_value: "band_80_100", listed: "yes" }), "standard");
-  assert.equal(flow.priorityTier({ occupancy: "tenant", price_vs_value: "over_100" }), "standard");
+  assert.equal(flow.priorityTier({ occupancy: "owner", listed: "yes" }), "standard");
+  assert.equal(flow.priorityTier({ occupancy: "tenant" }), "standard");
   assert.equal(flow.priorityTier({ occupancy: "vacant" }), "high");
-  assert.equal(flow.priorityTier({ price_vs_value: "under_80" }), "high");
-  assert.equal(flow.priorityTier({ occupancy: "vacant", price_vs_value: "not_sure", listed: "yes" }), "high");
+  assert.equal(flow.priorityTier({ occupancy: "vacant", listed: "yes" }), "high");
   const { session } = run();
   session.submitContact(contact);
   session.answer("type", "sfh");
@@ -333,13 +329,12 @@ test("priority is high only for a vacant home or an asking price under 80 percen
   priced.answer("ownership", "sole_owner");
   priced.skip();
   priced.skip();
-  priced.answer("price_vs_value", "under_80");
-  assert.equal(priced.state.priority, "high");
-  assert.equal(priced.state.branch, "hot");
   priced.answer("listed", "yes");
+  assert.equal(priced.state.priority, "standard");
+  assert.equal(priced.state.branch, "hot");
   priced.answer("timeline", "no_rush");
   assert.equal(priced.state.stage, "thanks");
-  assert.equal(priced.state.priority, "high");
+  assert.equal(priced.state.priority, "standard");
   assert.equal(priced.state.downstream, "zap_hot");
   const quiet = flow.createFlow(flow.createMockAdapter(), { loaded: false, load() { this.loaded = true; } });
   quiet.submitContact(contact);
@@ -441,9 +436,15 @@ test("a disagreeing claim response decides the screen and blocks reserve", () =>
 });
 
 test("server priority_tier is shown from the response and is not sent by the client", () => {
+  assert.equal(flow.serverPriorityTier({ occupancy: "vacant" }), "p1");
   assert.equal(flow.serverPriorityTier({ timeline: "asap", occupancy: "vacant" }), "p1");
+  assert.equal(flow.serverPriorityTier({ timeline: "30d", condition: "needs_work" }), "p1");
+  assert.equal(flow.serverPriorityTier({ timeline: "asap", listed: "expired" }), "p1");
+  assert.equal(flow.serverPriorityTier({ timeline: "asap", listed: "listed_over_90" }), "p1");
+  assert.equal(flow.serverPriorityTier({ timeline: "30d", condition: "major_repairs" }), "p1");
   assert.equal(flow.serverPriorityTier({ timeline: "30_90d", condition: "excellent" }), "p2");
-  assert.equal(flow.serverPriorityTier({ timeline: "no_rush", price_vs_value: "under_80" }), "p3");
+  assert.equal(flow.serverPriorityTier({ timeline: "asap", condition: "good", listed: "not_listed" }), "p2");
+  assert.equal(flow.serverPriorityTier({ timeline: "no_rush", condition: "needs_work" }), "p3");
   assert.equal(flow.serverPriorityTier({}), null);
   const { adapter, session } = run();
   session.submitContact(contact);
@@ -451,7 +452,6 @@ test("server priority_tier is shown from the response and is not sent by the cli
   session.answer("ownership", "sole_owner");
   session.answer("occupancy", "vacant");
   session.answer("condition", "needs_work");
-  session.answer("price_vs_value", "under_80");
   session.answer("listed", "not_listed");
   session.answer("timeline", "asap");
   assert.equal(session.state.serverTier, "p1");
@@ -459,8 +459,10 @@ test("server priority_tier is shown from the response and is not sent by the cli
   const sent = adapter.log.find((row) => row.op === "complete");
   assert.equal(sent.req.priority, undefined);
   assert.equal(sent.req.enrichment.occupancy, "vacant");
-  assert.equal(sent.req.enrichment.price_vs_value, "under_80");
+  assert.equal(Object.prototype.hasOwnProperty.call(sent.req.enrichment, "price_vs_value"), false);
   assert.equal(payloads(adapter).every((row) => row.priority === undefined), true);
+  assert.equal(JSON.stringify(adapter.log).includes("price_vs_value"), false);
+  assert.equal(JSON.stringify(session.state.trace).includes("price_vs_value"), false);
 });
 
 test("the real adapter matches the draft call shapes and never uses the network", () => {
@@ -470,7 +472,8 @@ test("the real adapter matches the draft call shapes and never uses the network"
   assert.equal(src.includes("INTAKE_ZAP_TOKEN"), false);
   assert.equal(flow.REAL_ADAPTER.enabled, false);
   assert.equal(flow.REAL_ADAPTER.base_url, "https://placeholder.invalid/functions/v1");
-  assert.deepEqual(flow.PRICE_VS_VALUE_WIRE, { under_80: "under_80", "80_100": "80_100", over_100: "over_100", unsure: "unsure" });
+  assert.equal(flow.PRICE_VS_VALUE_WIRE, undefined);
+  assert.deepEqual(flow.ENRICH_STEPS, ["occupancy", "condition", "listed", "timeline"]);
   let usedNetwork = false;
   global.fetch = () => { usedNetwork = true; throw new Error("network"); };
   let calls = 0;
@@ -586,16 +589,18 @@ test("the real adapter matches the draft call shapes and never uses the network"
   assert.equal(verify[0].body.reservation_id, "res-1");
   assert.equal(verify[0].body.envelope, undefined);
   const completes = call("/intake-reserve/complete");
-  assert.equal(completes[0].body.payload.enrichment.price_vs_value, "under_80");
   assert.equal(completes[0].body.payload.enrichment.occupancy, "vacant");
+  assert.equal(completes[0].body.payload.enrichment.price_vs_value, undefined);
   assert.equal(completes[0].body.payload.priority_tier, undefined);
   assert.equal(completes[0].body.envelope.stage, "final");
   assert.equal(completes[0].body.reservation_id, "res-1");
   assert.equal(completes[0].body.reservation_generation, 2);
   assert.equal(completes[1].headers["x-intake-zap-token"], "supplied-for-the-test");
   assert.equal(completes[1].body.envelope, undefined);
-  assert.equal(completes[1].body.enrichment.price_vs_value, "80_100");
+  assert.equal(completes[1].body.enrichment.timeline, "30d");
+  assert.equal(completes[1].body.enrichment.price_vs_value, undefined);
   assert.equal(completes[1].body.intake_id, adapter.intakeId);
+  assert.equal(JSON.stringify(seen).includes("price_vs_value"), false);
   const reconciles = call("/intake-reserve/reconcile");
   assert.equal(reconciles[0].headers["x-intake-zap-token"], "supplied-for-the-test");
   assert.equal(reconciles[0].body.reason, "check");
