@@ -286,6 +286,7 @@ test("enrichment is skippable, stays on the hot lead, and does not move the conv
   assert.equal(done.view.priority, "");
   assert.equal(done.view.serverTier, "");
   assert.equal(done.view.tierPending, true);
+  assert.deepEqual(adapter.log.find((row) => row.op === "enrich").req.enrichment, {});
   assert.equal(dataLayer.filter((e) => e.event === "seller_form_completed").length, 1);
   assert.equal(adapter.log.filter((row) => row.op === "google" && row.fired).length, 1);
   assert.equal(payloads(adapter).filter((row) => row.stage === "enrich" && row.skipped === true).length, 4);
@@ -316,14 +317,15 @@ test("the mock tier comes only from the claim and complete responses", () => {
   assert.equal(flow.serverPriorityTier, undefined);
   const mock = flow.createMockAdapter();
   assert.equal(mock.claim({ by: "promote" }).priority_tier, null);
-  assert.equal(mock.complete({ enrichment: { occupancy: "vacant" } }).priority_tier, "p1");
-  assert.equal(mock.complete({ enrichment: { timeline: "asap", condition: "needs_work" } }).priority_tier, "p1");
-  assert.equal(mock.complete({ enrichment: { timeline: "30d", listed: "expired" } }).priority_tier, "p1");
-  assert.equal(mock.complete({ enrichment: { timeline: "asap", listed: "listed_over_90" } }).priority_tier, "p1");
-  assert.equal(mock.complete({ enrichment: { timeline: "30d", condition: "major_repairs" } }).priority_tier, "p1");
-  assert.equal(mock.complete({ enrichment: { timeline: "30_90d", condition: "excellent" } }).priority_tier, "p2");
-  assert.equal(mock.complete({ enrichment: { timeline: "asap", condition: "good", listed: "not_listed" } }).priority_tier, "p2");
-  assert.equal(mock.complete({ enrichment: { timeline: "no_rush", condition: "needs_work" } }).priority_tier, "p3");
+  assert.equal(mock.enrich({ enrichment: { occupancy: "vacant" } }).priority_tier, "p1");
+  assert.equal(mock.enrich({ enrichment: { timeline: "asap", condition: "needs_work" } }).priority_tier, "p1");
+  assert.equal(mock.enrich({ enrichment: { timeline: "30d", listed: "expired" } }).priority_tier, "p1");
+  assert.equal(mock.enrich({ enrichment: { timeline: "asap", listed: "listed_over_90" } }).priority_tier, "p1");
+  assert.equal(mock.enrich({ enrichment: { timeline: "30d", condition: "major_repairs" } }).priority_tier, "p1");
+  assert.equal(mock.enrich({ enrichment: { timeline: "30_90d", condition: "excellent" } }).priority_tier, "p2");
+  assert.equal(mock.enrich({ enrichment: { timeline: "asap", condition: "good", listed: "not_listed" } }).priority_tier, "p2");
+  assert.equal(mock.enrich({ enrichment: { timeline: "no_rush", condition: "needs_work" } }).priority_tier, "p3");
+  assert.equal(mock.enrich({ enrichment: {} }).priority_tier, null);
   const { session } = run();
   session.submitContact(contact);
   session.answer("type", "sfh");
@@ -623,7 +625,7 @@ test("the real adapter matches the draft call shapes and never uses the network"
   assert.equal(verify[0].body.reservation_id, "res-1");
   assert.equal(verify[0].body.envelope, undefined);
   const completes = call("/intake-reserve/complete");
-  assert.equal(completes[0].body.payload.enrichment.occupancy, "vacant");
+  assert.equal(completes[0].body.payload.enrichment, undefined);
   assert.equal(completes[0].body.payload.client_ip, undefined);
   assert.equal(completes[0].body.payload.priority_tier, undefined);
   assert.equal(completes[0].body.envelope.stage, "final");
@@ -631,8 +633,8 @@ test("the real adapter matches the draft call shapes and never uses the network"
   assert.equal(completes[0].body.reservation_generation, 2);
   assert.equal(completes[1].headers["x-intake-zap-token"], "supplied-for-the-test");
   assert.equal(completes[1].body.envelope, undefined);
-  assert.equal(completes[1].body.enrichment.timeline, "30d");
-  assert.equal(completes[1].body.enrichment.timeline, "30d");
+  assert.equal(completes[1].body.enrichment, undefined);
+  assert.equal(completes[1].body.lead_id, "lead-1");
   assert.equal(completes[1].body.client_ip, undefined);
   assert.equal(completes[1].body.intake_id, adapter.intakeId);
   assert.equal(src.includes("price_vs_value"), false);
@@ -677,7 +679,7 @@ test("the real adapter matches the draft call shapes and never uses the network"
 });
 
 test("async and Response-shaped transports set mint ids before every later stage", async () => {
-  assert.equal(flow.ENRICH_VIA_PARK, true);
+  assert.equal(flow.ENRICH_VIA_PARK, undefined);
   function script(url) {
     if (url.endsWith("/mint")) {
       return { ok: true, intake_id: "async-intake", session_binding: "async-bind", kid: "async-kid" };
@@ -731,4 +733,81 @@ test("async and Response-shaped transports set mint ids before every later stage
   assert.equal(session.state.serverTier, "p1");
   assert.equal(seen.some((url) => url.endsWith("/intake-reserve/complete")), false);
   assert.equal(seen.filter((url) => url.endsWith("/intake-park/enrich")).length >= 1, true);
+});
+
+test("enrich returns the saved tier, sends {} when skipped, and retries one unavailable response", async () => {
+  function mint(url) {
+    return url.endsWith("/mint");
+  }
+  const savedCalls = [];
+  const saved = flow.createRealAdapter({
+    enrichRetryMs: 0,
+    signer: { client_ip: "203.0.113.7" },
+    now: () => 1700000000,
+    transport(url, init) {
+      const body = JSON.parse(init.body);
+      savedCalls.push({ url, body });
+      if (mint(url)) return { status: 200, body: { ok: true, intake_id: "enrich-intake", session_binding: "enrich-bind", kid: "enrich-kid" } };
+      return { status: 200, body: { ok: true, status: "saved", priority_tier: "p1" } };
+    }
+  });
+  const ok = await saved.enrich({ enrichment: { occupancy: "vacant" }, lead_id: "lead-e", gclid: "G-E" });
+  assert.equal(ok.priority_tier, "p1");
+  const post = savedCalls.find((row) => row.url.endsWith("/intake-park/enrich"));
+  assert.equal(post.body.envelope.stage, "partial");
+  assert.equal(post.body.envelope.channel, "website");
+  assert.equal(post.body.envelope.intake_id, "enrich-intake");
+  assert.equal(post.body.session_binding, "enrich-bind");
+  assert.equal(post.body.payload.client_ip, "203.0.113.7");
+  assert.equal(post.body.payload.lead_id, "lead-e");
+  assert.equal(post.body.payload.gclid, "G-E");
+  assert.equal(post.body.payload.enrichment.occupancy, "vacant");
+
+  let unavailable = 0;
+  const retried = await flow.createRealAdapter({
+    enrichRetryMs: 0,
+    signer: { client_ip: "203.0.113.7" },
+    transport(url) {
+      if (mint(url)) return { status: 200, body: { ok: true, intake_id: "i", session_binding: "s", kid: "k" } };
+      unavailable += 1;
+      if (unavailable === 1) return { status: 503, body: { ok: false, status: "enrich_unavailable" } };
+      return { status: 200, body: { ok: true, status: "saved", priority_tier: "p2" } };
+    }
+  }).enrich({ enrichment: { timeline: "30_90d" } });
+  assert.equal(unavailable, 2);
+  assert.equal(retried.priority_tier, "p2");
+
+  let gaveUp = 0;
+  const failed = await flow.createRealAdapter({
+    enrichRetryMs: 0,
+    signer: { client_ip: "203.0.113.7" },
+    transport(url) {
+      if (mint(url)) return { status: 200, body: { ok: true, intake_id: "i", session_binding: "s", kid: "k" } };
+      gaveUp += 1;
+      return { status: 503, body: { ok: false, status: "enrich_unavailable" } };
+    }
+  }).enrich({ enrichment: {} });
+  assert.equal(gaveUp, 2);
+  assert.equal(failed.http, 503);
+  const quiet = flow.createFlow(flow.createRealAdapter({
+    enrichRetryMs: 0,
+    signer: { client_ip: "203.0.113.7" },
+    transport(url) {
+      if (mint(url)) return { status: 200, body: { ok: true, intake_id: "i", session_binding: "s", kid: "k" } };
+      if (url.endsWith("/claim")) return { status: 200, body: { ok: true, claimed: true, tier: "hot", priority_tier: null, status: "claimed" } };
+      if (url.endsWith("/enrich")) return { status: 409, body: { ok: false, status: "not_hot" } };
+      return { status: 200, body: { ok: true, status: "saved" } };
+    }
+  }), { loaded: false, load() { this.loaded = true; } });
+  await quiet.submitContact(contact);
+  await quiet.answer("type", "sfh");
+  await quiet.answer("ownership", "sole_owner");
+  await quiet.skip();
+  await quiet.skip();
+  await quiet.skip();
+  const done = await quiet.skip();
+  assert.equal(done.view.stage, "thanks");
+  assert.equal(done.view.serverTier, "");
+  assert.equal(done.view.tierPending, false);
+  assert.equal(quiet.state.trace.some((row) => row.text.indexOf("No tier.") >= 0), true);
 });

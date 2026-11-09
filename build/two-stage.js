@@ -9,7 +9,6 @@
   var OWNERS = { sole_owner: 1, all_agree: 1, decision_maker: 1 };
   var LEGACY = { situation: 1, equity: 1, ability: 1 };
   var ENRICH_STEPS = ["occupancy", "condition", "listed", "timeline"];
-  var ENRICH_VIA_PARK = true;
   var PAYLOAD_FIELDS = ["lead_id", "stage", "gclid", "gbraid", "wbraid", "fbclid", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
   var PUBLIC_EVENT_KEYS = { event: 1, transaction_id: 1, reason: 1, property_type: 1 };
   var TRACKING = {
@@ -100,13 +99,14 @@
         return res;
       },
       complete: function (req) {
-        var res = { ok: true, status: "delivered", priority_tier: tierOrNull(req && req.enrichment) };
+        var res = { ok: true, status: "delivered" };
         log.push({ op: "complete", req: req, res: res });
         return res;
       },
       enrich: function (req) {
-        var res = { ok: true, status: "saved", priority_tier: tierOrNull(req && req.enrichment) };
-        log.push({ op: "enrich", req: req, res: res });
+        var enrichment = (req && req.enrichment) || {};
+        var res = { ok: true, status: "saved", priority_tier: tierOrNull(enrichment) };
+        log.push({ op: "enrich", req: Object.assign({}, req, { enrichment: enrichment }), res: res });
         return res;
       }
     };
@@ -388,26 +388,37 @@
         note(state, "reserve", res.ok === false ? "Reserve returned " + (res.status || "held") + "." : "Reserve committed. Owner token stays off this trace.");
       });
     }
-    function applyTier(res, label) {
+    function applyTier(res) {
       res = res || {};
+      if (res.http === 409 || res.status === "not_hot") {
+        state.serverTier = "";
+        state.tierPending = false;
+        note(state, "tier", "Enrich was not applied. No tier.");
+        return;
+      }
+      if (res.http === 503 || res.status === "enrich_unavailable") {
+        state.serverTier = "";
+        state.tierPending = false;
+        note(state, "tier", "Enrich was unavailable. No tier.");
+        return;
+      }
       if (res.priority_tier) {
         state.serverTier = res.priority_tier;
         state.tierPending = false;
         note(state, "tier", "Server priority_tier " + res.priority_tier + ".");
-      } else if (res.priority_tier === null) {
+      } else if (res.priority_tier === null || res.status === "saved") {
         state.serverTier = "";
         state.tierPending = true;
+        note(state, "tier", "Server priority_tier none.");
       }
-      if (rejected(res)) note(state, "fields", label + " rejected: " + (res.fields || []).join(", ") + ".");
+      if (rejected(res)) note(state, "fields", "Enrich rejected: " + (res.fields || []).join(", ") + ".");
     }
     function sendEnrichment() {
+      if (typeof adapter.enrich !== "function") return;
       var enrichment = {};
       ENRICH_STEPS.forEach(function (key) { if (state.answers[key]) enrichment[key] = state.answers[key]; });
-      if (!Object.keys(enrichment).length) return;
-      var op = ENRICH_VIA_PARK ? "enrich" : "complete";
-      if (typeof adapter[op] !== "function") return;
-      return chain(adapter[op](Object.assign(trackingFields(), { enrichment: enrichment, mode: "hmac" })), function (res) {
-        applyTier(res, op === "enrich" ? "Enrich" : "Complete");
+      return chain(adapter.enrich(Object.assign(trackingFields(), { enrichment: enrichment })), function (res) {
+        applyTier(res);
       });
     }
     function finish(branch, path, googleText) {
@@ -711,15 +722,26 @@
       },
       enrich: function (req) {
         req = req || {};
-        var payload = signedIp(Object.assign(tracking(req), { enrichment: mapEnrichment(req.enrichment) }));
-        return envelope("partial", payload).then(function (env) {
-          return post("/intake-park/enrich", { envelope: env, session_binding: ids.binding, payload: payload });
+        var waitMs = options.enrichRetryMs == null ? 40 : options.enrichRetryMs;
+        function once() {
+          var payload = signedIp(Object.assign(tracking(req), { enrichment: mapEnrichment(req.enrichment) }));
+          return envelope("partial", payload).then(function (env) {
+            return post("/intake-park/enrich", { envelope: env, session_binding: ids.binding, payload: payload });
+          });
+        }
+        function wait() {
+          return new Promise(function (resolve) { setTimeout(resolve, waitMs); });
+        }
+        return once().then(function (res) {
+          if (res && res.http === 503) return wait().then(once);
+          return res;
         });
       },
       reserve: function (req) {
         req = req || {};
         if (!ownerToken) ownerToken = req.owner_token || eventId();
         var payload = tracking(req);
+        delete payload.enrichment;
         var stage = req.stage === "first" ? "first" : "final";
         return envelope(stage, payload).then(function (env) {
           reservation.stage = stage;
@@ -741,7 +763,6 @@
       },
       complete: function (req) {
         req = req || {};
-        var enrichment = mapEnrichment(req.enrichment);
         if (req.mode === "token") {
           var header = tokenHeader(req);
           if (!header) return { ok: false, http: 401, status: "auth_failed", fields: [] };
@@ -754,12 +775,12 @@
           };
           if (req.remote_id) tokenBody.remote_id = req.remote_id;
           Object.assign(tokenBody, tracking(req));
-          if (Object.keys(enrichment).length) tokenBody.enrichment = enrichment;
+          delete tokenBody.enrichment;
           return post("/intake-reserve/complete", tokenBody, header);
         }
         if (!ownerToken) ownerToken = req.owner_token || eventId();
         var payload = tracking(req);
-        if (Object.keys(enrichment).length) payload.enrichment = enrichment;
+        delete payload.enrichment;
         return envelope("final", payload).then(function (env) {
         var hmacBody = {
           envelope: env, payload: payload, session_binding: ids.binding,
@@ -818,7 +839,6 @@
     TRACKING: TRACKING,
     PAYLOAD_FIELDS: PAYLOAD_FIELDS,
     ENRICH_STEPS: ENRICH_STEPS,
-    ENRICH_VIA_PARK: ENRICH_VIA_PARK,
     NOT_FIT: NOT_FIT,
     FOLLOW_UP: FOLLOW_UP,
     THANKS: THANKS,
