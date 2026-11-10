@@ -482,7 +482,7 @@ def build(site, pages, markets, redirects, live):
         return f'''<form class="lead" id="f" action="/step-2/" method="post" novalidate>
 <div class="lead-h"><strong>Get your fair cash offer</strong><span>Takes about 60 seconds. No obligation.</span></div>
 <ol class="steps-ind"><li class="on">1. Property</li><li>2. Contact</li></ol>
-<input type="hidden" name="gclid"><input type="hidden" name="utm_campaign"><input type="hidden" name="utm_term"><input type="hidden" name="utm_source"><input type="hidden" name="utm_medium"><input type="hidden" name="form_id" value="1"><fieldset class="s1">{s1}
+<input type="hidden" name="gclid"><input type="hidden" name="gbraid"><input type="hidden" name="wbraid"><input type="hidden" name="utm_source"><input type="hidden" name="utm_medium"><input type="hidden" name="utm_campaign"><input type="hidden" name="utm_term"><input type="hidden" name="utm_content"><input type="hidden" name="form_id" value="1"><fieldset class="s1">{s1}
 <button type="button" class="btn btn-o nx">Get My Offer &rarr;</button></fieldset>
 <fieldset class="s2" hidden>{s2}
 {consent_box()}

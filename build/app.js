@@ -2,10 +2,16 @@
 var FSHO={endpoint:"",/* e.g. Zapier/Make webhook -> Carrot CRM + Twilio SMS. Empty = local demo, nothing sent */
 tracking:false,/* single flag: GTM + ClickCease load after window load */
 gtm:"GTM-WWPBQGDZ",clickcease:"" /* ClickCease site ID TBD */};
-(function(){var K=["gclid","utm_campaign","utm_term","utm_source","utm_medium"],q=new URLSearchParams(location.search),A={};
+(function(){var K=["gclid","gbraid","wbraid","utm_source","utm_medium","utm_campaign","utm_term","utm_content"],I={"gclid":1,"gbraid":1,"wbraid":1},q=new URLSearchParams(location.search),A={},n=Date.now(),id=0;
 try{A=JSON.parse(localStorage.getItem("fsho_attr")||"{}")}catch(e){}
-K.forEach(function(k){var v=q.get(k);if(v)A[k]=v});try{localStorage.setItem("fsho_attr",JSON.stringify(A))}catch(e){}
+if(A.t&&n-A.t>7776e6)A={};
+K.forEach(function(k){if(q.get(k)&&I[k])id=1});
+if(id){A={t:n};K.forEach(function(k){var v=q.get(k);if(v)A[k]=v})}
+else{K.forEach(function(k){var v=q.get(k);if(v){A[k]=v;A.t=n}});if(!A.t){var keep=0;K.forEach(function(k){if(A[k])keep=1});if(keep)A.t=n}}
+try{if(A.t)localStorage.setItem("fsho_attr",JSON.stringify(A));else localStorage.removeItem("fsho_attr")}catch(e){}
 document.querySelectorAll("input[type=hidden]").forEach(function(i){if(A[i.name])i.value=A[i.name]});
+function tag(a){try{var u=new URL(a.href);if(u.hostname.replace(/^www\./,"")!=="fairandsimplehomeoffer.com")return;var c=0;K.forEach(function(k){if(A[k]&&!u.searchParams.has(k)){u.searchParams.set(k,A[k]);c=1}});if(c)a.href=u.href}catch(e){}}
+document.querySelectorAll('a[href*="fairandsimplehomeoffer.com"]').forEach(tag);
 function send(d,next){d.page=location.pathname;d.ts=new Date().toISOString();
 var go=function(){location.href=next};if(!FSHO.endpoint){console.info("FSHO partial lead (preview, not sent):",d);return go()}
 fetch(FSHO.endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d),keepalive:true}).then(go,go)}

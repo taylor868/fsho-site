@@ -425,6 +425,21 @@ cta_label: "Page specific heading"
         errors, _warns = self.check()
         self.assertTrue(any('pair "broken" must be exactly two consecutive fields' in e for e in errors), errors)
 
+    def test_click_ids_are_stored_and_ready_for_carrot_links(self):
+        self.build(live=False)
+        home = (Path(gen.OUT) / 'index.html').read_text(encoding='utf-8')
+        for name in ('gclid', 'gbraid', 'wbraid', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'):
+            self.assertIn(f'<input type="hidden" name="{name}">', home)
+        self.assertIn('7776e6', home)
+        self.assertIn('fsho_attr', home)
+        self.assertIn('fairandsimplehomeoffer.com', home)
+        self.assertNotIn('whatconverts', home.lower())
+        self.assertNotIn('googletagmanager.com/gtag', home)
+        step2 = (Path(gen.OUT) / 'step-2' / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('"gbraid"', step2)
+        self.assertIn('"wbraid"', step2)
+        self.assertIn('"utm_content"', step2)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2, warnings='ignore')
