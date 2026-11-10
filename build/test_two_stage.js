@@ -759,7 +759,8 @@ test("enrich returns the saved tier, sends {} when skipped, and retries one unav
   assert.equal(post.body.envelope.stage, "partial");
   assert.equal(post.body.envelope.channel, "website");
   assert.equal(post.body.envelope.intake_id, "enrich-intake");
-  assert.equal(post.body.session_binding, "enrich-bind");
+  assert.equal(post.body.session_binding, undefined);
+  assert.deepEqual(Object.keys(post.body).sort(), ["envelope", "payload"]);
   assert.equal(post.body.payload.client_ip, "203.0.113.7");
   assert.equal(post.body.payload.lead_id, "lead-e");
   assert.equal(post.body.payload.gclid, "G-E");
@@ -834,6 +835,30 @@ test("producer mode posts to the function and does not sign in the browser", asy
   assert.equal(calls[0].body.gclid, "click-1");
   assert.equal(calls[0].body.full_name, "Ada Lovelace");
   assert.equal(calls[0].body.attribution, undefined);
+});
+
+test("park non-2xx stays on contact and asks to try again", () => {
+  for (const http of [401, 429, 503]) {
+    const { session } = run();
+    session.adapter.park = () => ({ ok: false, http: http, status: "auth_failed" });
+    const res = session.submitContact(contact);
+    assert.equal(res.ok, false);
+    assert.equal(res.error, "try_again");
+    assert.equal(session.state.stage, "contact");
+    assert.equal(session.state.parked, false);
+    assert.equal(res.view.stage, "contact");
+  }
+  const { session } = run();
+  session.adapter.park = () => ({ ok: false, http: 400, status: "bad_input", fields: ["email"] });
+  const bad = session.submitContact(contact);
+  assert.equal(bad.ok, false);
+  assert.equal(bad.error, "bad_input");
+  assert.equal(session.state.stage, "contact");
+  session.adapter.park = () => ({ ok: true, http: 200, status: "parked" });
+  const parked = session.submitContact(contact);
+  assert.equal(parked.ok, true);
+  assert.equal(session.state.stage, "q_type");
+  assert.equal(fs.readFileSync(path.join(__dirname, "two-stage.js"), "utf8").includes("You can try again."), true);
 });
 
 test("late_hot is a normal hot claim", () => {

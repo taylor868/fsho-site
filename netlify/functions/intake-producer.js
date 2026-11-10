@@ -1,10 +1,10 @@
 "use strict";
 
-// Signs edge calls with HMAC-SHA256 over canonicalLines: envelope fields except sig,
-// keys sorted, each line "key=value", joined with newlines. envelope.ts is not in this
-// repo. payload_sha256 is SHA-256 of canonical JSON (sorted keys, no spaces).
-// Enrich follows the settled /intake-park/enrich body: envelope, session_binding, and
-// payload {enrichment, client_ip, tracking}. A 503 on enrich is retried once.
+// Signs edge calls with HMAC-SHA256 over canonicalLines from edge/envelope.ts.
+// The line order is fixed: v, kid, route, channel, intake_id, event_id, stage, ts, exp, payload_sha256.
+// payload_sha256 is SHA-256 of canonical JSON (sorted keys, no spaces).
+// session_binding is sent only on park and reserve. Answer, claim, and enrich are {envelope, payload}.
+// A 503 on enrich is retried once. A Catch Hook failure is retried once, then reconciled.
 
 const crypto = require("crypto");
 
@@ -40,12 +40,14 @@ function canonicalJson(value, depth) {
   return "{" + keys.map((key) => JSON.stringify(key) + ":" + canonicalJson(value[key], level + 1)).join(",") + "}";
 }
 
+const LINE_ORDER = ["v", "kid", "route", "channel", "intake_id", "event_id", "stage", "ts", "exp", "payload_sha256"];
+
 function canonicalLines(fields) {
-  return Object.keys(fields).filter((key) => fields[key] !== undefined && key !== "sig").sort().map((key) => {
-    const value = fields[key];
-    const text = value !== null && typeof value === "object" ? canonicalJson(value) : String(value);
-    return key + "=" + text;
-  }).join("\n");
+  return LINE_ORDER.map((key) => key + "=" + (fields[key] == null ? "" : String(fields[key]))).join("\n");
+}
+
+function stripControls(value) {
+  return String(value == null ? "" : value).replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 200);
 }
 
 function sha256(text) {
@@ -87,26 +89,27 @@ function cookies(header) {
   return out;
 }
 
-function aesKey(secret) {
-  return crypto.createHash("sha256").update(String(secret)).digest();
+function cookieKey(env) {
+  if (env && env.INTAKE_COOKIE_KEY) return crypto.createHash("sha256").update(String(env.INTAKE_COOKIE_KEY), "utf8").digest();
+  return crypto.hkdfSync("sha256", Buffer.from(String(env.INTAKE_HMAC_KEY_V1), "utf8"), Buffer.alloc(0), Buffer.from("fsho-intake-cookie-v1", "utf8"), 32);
 }
 
-function seal(obj, secret) {
+function seal(obj, key) {
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", aesKey(secret), iv);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
   const body = Buffer.concat([cipher.update(JSON.stringify(obj), "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return Buffer.concat([iv, tag, body]).toString("base64url");
 }
 
-function open(token, secret) {
+function open(token, key) {
   try {
     const buf = Buffer.from(String(token || ""), "base64url");
     if (buf.length < 29) return null;
     const iv = buf.subarray(0, 12);
     const tag = buf.subarray(12, 28);
     const body = buf.subarray(28);
-    const decipher = crypto.createDecipheriv("aes-256-gcm", aesKey(secret), iv);
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
     decipher.setAuthTag(tag);
     const json = Buffer.concat([decipher.update(body), decipher.final()]).toString("utf8");
     const obj = JSON.parse(json);
@@ -242,7 +245,8 @@ async function handle(event, deps) {
   if (!ops[op]) return bad(404, { ok: false, status: "unknown_op" });
   const headers = event.headers || {};
   const jar = cookies(headers.cookie || headers.Cookie || "");
-  let state = open(jar[COOKIE], env.INTAKE_HMAC_KEY_V1) || {};
+  const ckey = cookieKey(env);
+  let state = open(jar[COOKIE], ckey) || {};
   const base = String(env.INTAKE_EDGE_BASE_URL).replace(/\/$/, "");
   const ip = clientIp(headers);
 
@@ -324,7 +328,8 @@ async function handle(event, deps) {
 
   const stage = op === "reserve" ? (input.stage === "first" ? "first" : "final") : "partial";
   const envFields = envelopeFor(env, state, stage, payload, now);
-  const edgeBody = { envelope: envFields, session_binding: state.session_binding, payload };
+  const edgeBody = { envelope: envFields, payload };
+  if (op === "park" || op === "reserve") edgeBody.session_binding = state.session_binding;
   if (op === "reserve") {
     state.owner_token = state.owner_token || crypto.randomUUID();
     edgeBody.destination = input.destination === "crm_update" ? "crm_update" : "crm_create";
@@ -344,28 +349,27 @@ async function handle(event, deps) {
     state.reservation_generation = result.body.reservation_generation || state.reservation_generation || 1;
     if (result.body.owner_token) state.owner_token = result.body.owner_token;
     if (!state.zap_sent) {
-      let hook;
-      try {
-        hook = await doFetch(env.INTAKE_ZAP_HOOK_URL, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            intake_id: state.intake_id,
-            reservation_id: state.reservation_id,
-            reservation_generation: state.reservation_generation,
-            session_binding: state.session_binding,
-            owner_token: state.owner_token,
-            full_name: state.contact.full_name,
-            phone: state.contact.phone,
-            email: state.contact.email,
-            address_line: state.contact.address_line
-          })
-        });
-      } catch (e) {
-        hook = null;
-      }
-      if (!hook || hook.status < 200 || hook.status >= 300) {
-        return respond(env, state, 503, { ok: false, status: "zap_unavailable" });
+      const hookBody = JSON.stringify({
+        intake_id: state.intake_id,
+        reservation_id: state.reservation_id,
+        reservation_generation: state.reservation_generation,
+        session_binding: state.session_binding,
+        owner_token: state.owner_token,
+        full_name: state.contact.full_name,
+        phone: state.contact.phone,
+        email: state.contact.email,
+        address_line: state.contact.address_line
+      });
+      let hook = await postHook(doFetch, env.INTAKE_ZAP_HOOK_URL, hookBody);
+      if (!hookOk(hook)) hook = await postHook(doFetch, env.INTAKE_ZAP_HOOK_URL, hookBody);
+      if (!hookOk(hook)) {
+        const reason = stripControls("hook_uncertain");
+        const payload = { reason: reason };
+        const stage = state.reserve_stage === "first" ? "first" : "final";
+        const envFields = envelopeFor(env, state, stage, payload, now);
+        await edge("/intake-reserve/reconcile", { envelope: envFields, payload: payload, reservation_id: state.reservation_id });
+        console.log(String(state.reservation_id || ""));
+        return respond(env, state, 200, { ok: false, status: "needs_reconcile" });
       }
       state.zap_sent = true;
     }
@@ -375,13 +379,25 @@ async function handle(event, deps) {
   return respond(env, state, result.status || 502, publicBody(result.body), extra);
 }
 
+function hookOk(hook) {
+  return !!(hook && hook.status >= 200 && hook.status < 300);
+}
+
+async function postHook(doFetch, url, body) {
+  try {
+    return await doFetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: body });
+  } catch (e) {
+    return null;
+  }
+}
+
 function envelopeRetry(env, state, payload, now) {
   const envFields = envelopeFor(env, state, "partial", payload, now);
-  return { envelope: envFields, session_binding: state.session_binding, payload };
+  return { envelope: envFields, payload: payload };
 }
 
 function respond(env, state, status, body, extra) {
-  const headers = Object.assign({ "content-type": "application/json", "set-cookie": cookieHeader(seal(state, env.INTAKE_HMAC_KEY_V1)) }, extra || {});
+  const headers = Object.assign({ "content-type": "application/json", "set-cookie": cookieHeader(seal(state, cookieKey(env))) }, extra || {});
   return { statusCode: status, headers, body: JSON.stringify(body) };
 }
 
@@ -390,3 +406,5 @@ exports.handler = (event) => handle(event, { env: process.env, fetch: global.fet
 exports.canonicalJson = canonicalJson;
 exports.canonicalLines = canonicalLines;
 exports.signFields = signFields;
+exports.cookieKey = cookieKey;
+exports.stripControls = stripControls;

@@ -91,7 +91,10 @@
     }
     return {
       log: log,
-      park: function (row) { log.push({ op: "park", crm: false, google: false, row: row }); },
+      park: function (row) {
+        log.push({ op: "park", crm: false, google: false, row: row });
+        return { ok: true, http: 200, status: "parked" };
+      },
       branch: function (name) { log.push({ op: "branch", name: name }); },
       google: function (fired) { log.push({ op: "google", fired: fired === true }); },
       downstream: function (path) { log.push({ op: "downstream", path: path }); },
@@ -477,11 +480,15 @@
         if (!name || !address || !phone || !email) return { ok: false, error: "contact_required" };
         state.contact = { name: name, address: address, phone: phone, email: email };
         return chain(adapter.park(Object.assign(basePayload("contact"), { name: name, address: address, phone: phone, email: email, status: "parked" })), function (parked) {
-          if (rejected(parked)) {
+          if (parked && (parked.ok === false || (typeof parked.http === "number" && (parked.http < 200 || parked.http >= 300)))) {
             state.parked = false;
             state.stage = "contact";
-            note(state, "fields", "Park rejected: " + (parked.fields || []).join(", ") + ".");
-            return { ok: false, error: "bad_input", fields: parked.fields, view: snapshot(state) };
+            if (rejected(parked)) {
+              note(state, "fields", "Park rejected: " + (parked.fields || []).join(", ") + ".");
+              return { ok: false, error: "bad_input", fields: parked.fields, view: snapshot(state) };
+            }
+            note(state, "park", "Park returned " + ((parked && parked.status) || "error") + ". Nothing was saved.");
+            return { ok: false, error: "try_again", view: snapshot(state) };
           }
           state.parked = true;
           state.stage = "q_type";
@@ -781,7 +788,7 @@
         function once() {
           var payload = signedIp(Object.assign(tracking(req), { enrichment: mapEnrichment(req.enrichment) }));
           return envelope("partial", payload).then(function (env) {
-            return post("/intake-park/enrich", { envelope: env, session_binding: ids.binding, payload: payload });
+            return post("/intake-park/enrich", { envelope: env, payload: payload });
           });
         }
         function wait() {
