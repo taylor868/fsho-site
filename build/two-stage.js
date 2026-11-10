@@ -12,7 +12,7 @@
   var PAYLOAD_FIELDS = ["lead_id", "stage", "gclid", "gbraid", "wbraid", "fbclid", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
   var PUBLIC_EVENT_KEYS = { event: 1, transaction_id: 1, reason: 1, property_type: 1 };
   var TRACKING = {
-    gtm_id: "GTM-PLACEHOLDER",
+    gtm_id: "GTM-WWPBQGDZ",
     ga4: false,
     meta_pixel: false,
     lazy: true,
@@ -33,7 +33,12 @@
     condition: { move_in: 1, wear: 1, repairs: 1, major: 1 },
     listed: { yes: 1, no: 1 }
   };
-  var CONFIG = { townhouse_route: "quiet" };
+  var CONFIG = {
+    townhouse_route: "quiet",
+    use_real_adapter: false,
+    producer_path: "/.netlify/functions/intake-producer",
+    gtm_id: "GTM-WWPBQGDZ"
+  };
   var NOT_FIT = {
     headline: "Thanks for the details.",
     body: "This one may not be a fit for us right now, but we saved your info and will reach out if anything changes."
@@ -359,6 +364,13 @@
       if (typeof adapter.claim !== "function") return hint;
       return chain(adapter.claim(Object.assign(trackingFields(), { by: by })), function (res) {
       res = res || {};
+      if (res.status === "late_hot") {
+        res.tier = "hot";
+        res.claimed = true;
+        res.ok = res.ok !== false;
+        res.status = "claimed";
+        note(state, "server", "Claim returned late_hot. Treated as a Hot claim.");
+      }
       state.claimStatus = res.status || "";
       if (res.priority_tier) { state.serverTier = res.priority_tier; state.tierPending = false; }
       else if (res.priority_tier === null) { state.serverTier = ""; state.tierPending = true; }
@@ -679,6 +691,49 @@
       return { ok: false, http: status, status: body.status || "bad_response", fields: body.fields || [] };
       });
     }
+    if (options.mode === "producer") {
+      function producerCall(op, fields) {
+        var body = { op: op };
+        Object.keys(fields || {}).forEach(function (key) {
+          if (key === "client_ip" || key === "attribution" || key === "envelope" || key === "session_binding" || key === "owner_token" || key === "sig") return;
+          if (fields[key] !== undefined && fields[key] !== "") body[key] = fields[key];
+        });
+        return post("", body);
+      }
+      return {
+        get intakeId() { return ""; },
+        get sessionBinding() { return ""; },
+        park: function (row) {
+          row = row || {};
+          return producerCall("park", Object.assign(tracking(row), {
+            full_name: row.full_name || row.name || "",
+            address_line: row.address_line || row.address || "",
+            phone: row.phone || "",
+            email: row.email || ""
+          }));
+        },
+        answer: function (req) {
+          req = req || {};
+          return producerCall("answer", Object.assign(tracking(req), { question: req.question, answer: req.answer }));
+        },
+        claim: function (req) {
+          req = req || {};
+          return producerCall("claim", Object.assign(tracking(req), { by: req.by }));
+        },
+        enrich: function (req) {
+          req = req || {};
+          return producerCall("enrich", Object.assign(tracking(req), { enrichment: mapEnrichment(req.enrichment) }));
+        },
+        reserve: function (req) {
+          req = req || {};
+          return producerCall("reserve", Object.assign(tracking(req), { destination: req.destination || "crm_create", stage: req.stage === "first" ? "first" : "final" }));
+        },
+        branch: function () {},
+        google: function () {},
+        downstream: function () {},
+        stage: function () {}
+      };
+    }
     function post(path, body, extraHeaders) {
       var headers = { "content-type": "application/json" };
       if (extraHeaders) Object.keys(extraHeaders).forEach(function (key) { if (extraHeaders[key]) headers[key] = extraHeaders[key]; });
@@ -866,7 +921,7 @@ function boot(api) {
   var pending = false;
   var tag = { loaded: false, load: function () { this.loaded = true; var n = document.createElement("script"); n.id = "fsho-google-gate"; n.type = "application/json"; n.textContent = "{\"event\":\"form_fill\",\"dry_run\":true}"; document.body.appendChild(n); } };
   var dl = globalThis.dataLayer = globalThis.dataLayer || [];
-  var flow = api.createFlow(api.createMockAdapter(), tag, {
+  var flow = api.createFlow(pageAdapter(), tag, {
     search: location.search,
     localStorage: safeStore(localStorage),
     sessionStorage: safeStore(sessionStorage),
@@ -994,6 +1049,39 @@ function boot(api) {
       return flow.submitContact({ name: data.get("name"), address: data.get("address"), phone: data.get("phone"), email: data.get("email") });
     });
   };
+  armGtm(api.CONFIG.gtm_id || api.TRACKING.gtm_id);
+  function pageAdapter() {
+    var real = api.CONFIG.use_real_adapter === true;
+    try { if (String(globalThis.FSHO_USE_REAL_ADAPTER || "") === "1") real = true; } catch (e) {}
+    var net = globalThis.fetch;
+    if (!real || typeof net !== "function") return api.createMockAdapter();
+    return api.createRealAdapter({
+      mode: "producer",
+      baseUrl: api.CONFIG.producer_path,
+      transport: function (url, init) {
+        var opts = {};
+        if (init) Object.keys(init).forEach(function (key) { opts[key] = init[key]; });
+        opts.credentials = "same-origin";
+        return net.call(globalThis, url, opts);
+      }
+    });
+  }
+  function armGtm(id) {
+    if (!id || id === "GTM-PLACEHOLDER") return;
+    var started = false;
+    function load() {
+      if (started) return;
+      started = true;
+      globalThis.dataLayer = globalThis.dataLayer || [];
+      globalThis.dataLayer.push({ "gtm.start": Date.now(), event: "gtm.js" });
+      var s = document.createElement("script");
+      s.async = true;
+      s.src = "https://www.googletagmanager.com/gtm.js?id=" + encodeURIComponent(id);
+      document.head.appendChild(s);
+    }
+    addEventListener("pointerdown", load, { once: true, passive: true });
+    addEventListener("keydown", load, { once: true, passive: true });
+  }
   function safeStore(store) {
     try {
       var key = "__fsho_probe";

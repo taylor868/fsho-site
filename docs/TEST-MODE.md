@@ -38,7 +38,7 @@ Attribution is config-driven on `TRACKING` in `build/two-stage.js`. The page sto
 
 `lead_id` is created with `crypto.randomUUID()` once per browser session and kept in `sessionStorage` under `fsho_ts_lead`. A value already in that key is kept. The same id is sent on every stage. The real adapter also refuses to overwrite a click id, UTM, or lead id it has already sent.
 
-The GTM container id is still undecided. The test-form config value is the placeholder `GTM-PLACEHOLDER`. GA4 is off. The Meta pixel is off. Tags are lazy: nothing is requested at page load, and the only marker is the existing dry-run JSON script, inserted after `owner = yes`. The test form does not load the site container.
+`CONFIG.gtm_id` and `TRACKING.gtm_id` are `GTM-WWPBQGDZ`. GA4 is off. The Meta pixel is off. The container script is not in the HTML and is not requested at page load. The first `pointerdown` or `keydown` inserts one async `gtm.js` script. The dry-run Google marker is still the JSON script inserted after `owner = yes`. Site-wide tracking stays off, so the shared pages do not load this container.
 
 ## Conversion
 
@@ -101,7 +101,17 @@ All of these are `POST` with `content-type: application/json`. The placeholder b
 | Reconcile, token | `/intake-reserve/reconcile` | none | `reservation_id`, `owner_token`, optional `reason` with control characters removed, plus the caller-supplied header |
 | Reconcile, HMAC | `/intake-reserve/reconcile` | the reservation's own `first` or `final` | `envelope` (that reservation's `intake_id`), `payload` of `{reason}` or `{}`, `reservation_id`. No `owner_token`, `session_binding`, or `client_ip`. Response `{ok, status:"needs_reconcile", needs_reconcile:true}` |
 
-`client_ip` is a strict IP literal with no port. The browser does not look it up. A server-side signer injects it, filled in production from the `x-nf-client-connection-ip` header. The Ads `lead_id` is still a client `crypto.randomUUID()` and is the conversion `transaction_id`.
+`client_ip` is a strict IP literal with no port. The browser does not look it up. The Netlify producer reads it from the `x-nf-client-connection-ip` header and puts it inside the signed payload on park, answer, claim, and enrich. The Ads `lead_id` is still a client `crypto.randomUUID()` and is the conversion `transaction_id`.
+
+A claim response of `status: "late_hot"` with `tier: "hot"` is a normal Hot claim. The producer rewrites it to `status: "claimed"` before the browser sees it, and the flow treats a raw `late_hot` the same way.
+
+## Producer
+
+`netlify/functions/intake-producer.js` is the server-side signer. The browser calls it only when `CONFIG.use_real_adapter` is true or `FSHO_USE_REAL_ADAPTER` is `"1"`. The default remains the mock, which never calls the network. The function reads `INTAKE_HMAC_KEY_V1`, `INTAKE_HMAC_KID`, `INTAKE_EDGE_BASE_URL`, and `INTAKE_ZAP_HOOK_URL` from the environment. Those values are not hardcoded, logged, or returned.
+
+The browser sends `{op, ...whitelisted fields}`. The function mints when the session cookie is empty, then signs park, answer, claim, enrich, and reserve. Session state, including `session_binding` and `owner_token`, stays in an opaque HttpOnly cookie. `attribution` and `price_vs_value` are rejected. Tracking is write-once. After a reserve that commits, the function POSTs the Catch Hook with `intake_id`, `reservation_id`, `reservation_generation`, `session_binding`, `owner_token`, `full_name`, `phone`, `email`, and `address_line`. That POST is server-side only.
+
+Enrich `503` is retried once. `409` and `429` are not retried. A second enrich `503` is returned with no tier.
 
 A 400 `bad_input` response is returned as `{ok:false, http:400, status, fields}` and the field names are logged. The owner token is not written into the test trace. `payload_sha256` is the SHA-256 of the canonical payload (sorted keys, no spaces).
 

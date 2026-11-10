@@ -105,10 +105,10 @@ test("townhouse stays listed and is quiet unless townhouse_route is hot", () => 
   assert.equal(flipped.tag.loaded, true);
 });
 
-test("the dry-run source does not call fetch or name a Google host", () => {
+test("the dry-run source does not call fetch and waits to load the container", () => {
   const src = fs.readFileSync(path.join(__dirname, "two-stage.js"), "utf8");
   assert.equal(src.includes("fetch("), false);
-  assert.equal(src.includes("googletagmanager"), false);
+  assert.equal(src.includes("pointerdown"), true);
   assert.equal(src.includes("supabase"), false);
   global.fetch = function () { throw new Error("network"); };
   const { session } = run();
@@ -134,7 +134,9 @@ function payloads(adapter) {
 const CLICK = "?test=1&gclid=G-FIRST&gbraid=GB1&wbraid=WB1&fbclid=FB1&utm_source=google&utm_medium=cpc&utm_campaign=sell&utm_term=cash-offer&utm_content=ad1";
 
 test("click ids and UTMs stick on first touch and ride every stage payload", () => {
-  assert.equal(flow.TRACKING.gtm_id, "GTM-PLACEHOLDER");
+  assert.equal(flow.TRACKING.gtm_id, "GTM-WWPBQGDZ");
+  assert.equal(flow.CONFIG.gtm_id, "GTM-WWPBQGDZ");
+  assert.equal(flow.CONFIG.use_real_adapter, false);
   assert.equal(flow.TRACKING.ga4, false);
   assert.equal(flow.TRACKING.meta_pixel, false);
   assert.equal(flow.TRACKING.lazy, true);
@@ -395,7 +397,7 @@ print(json.dumps(out))
   assert.deepEqual(report.ok, []);
   assert.deepEqual(report.check, []);
   const src = fs.readFileSync(path.join(__dirname, "two-stage.js"), "utf8");
-  for (const needle of ["fetch(", "googletagmanager", "maps.googleapis", "places.googleapis", "google-analytics", "facebook.net", "gtag("]) {
+  for (const needle of ["fetch(", "maps.googleapis", "places.googleapis", "google-analytics", "facebook.net", "gtag("]) {
     assert.equal(src.includes(needle), false, needle);
   }
 });
@@ -810,4 +812,38 @@ test("enrich returns the saved tier, sends {} when skipped, and retries one unav
   assert.equal(done.view.serverTier, "");
   assert.equal(done.view.tierPending, false);
   assert.equal(quiet.state.trace.some((row) => row.text.indexOf("No tier.") >= 0), true);
+});
+
+test("producer mode posts to the function and does not sign in the browser", async () => {
+  const calls = [];
+  const adapter = flow.createRealAdapter({
+    mode: "producer",
+    baseUrl: "/.netlify/functions/intake-producer",
+    transport(url, init) {
+      calls.push({ url, body: JSON.parse(init.body) });
+      return { status: 200, body: { ok: true, status: "parked" } };
+    }
+  });
+  await adapter.park({ full_name: "Ada Lovelace", address_line: "1 Main St", phone: "5550100199", email: "ada@example.com", client_ip: "198.51.100.9", gclid: "click-1", attribution: { landing: "/" } });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "/.netlify/functions/intake-producer");
+  assert.equal(calls[0].body.op, "park");
+  assert.equal(calls[0].body.client_ip, undefined);
+  assert.equal(calls[0].body.sig, undefined);
+  assert.equal(calls[0].body.envelope, undefined);
+  assert.equal(calls[0].body.gclid, "click-1");
+  assert.equal(calls[0].body.full_name, "Ada Lovelace");
+  assert.equal(calls[0].body.attribution, undefined);
+});
+
+test("late_hot is a normal hot claim", () => {
+  const { tag, adapter, session } = run();
+  adapter.claim = () => ({ ok: true, claimed: true, tier: "hot", status: "late_hot", priority_tier: null });
+  session.submitContact(contact);
+  session.answer("type", "sfh");
+  const hot = session.answer("ownership", "sole_owner");
+  assert.equal(hot.view.branch, "hot");
+  assert.equal(hot.view.googleTagFired, true);
+  assert.equal(tag.loaded, true);
+  assert.equal(hot.view.downstream, "zap_hot");
 });
