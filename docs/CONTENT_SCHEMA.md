@@ -51,7 +51,7 @@ content/
 | `video_ids[]` | string | YouTube IDs; click-to-load thumbnails. |
 | `faq[]` | `{q, a}` | Site-wide FAQ. |
 | `cta` | `{heading, text, button}` | Bottom call-to-action band default. |
-| `form1_fields[]` | `{name, label, type, required, step, autocomplete?, placeholder?, pair?}` | Hero form (Carrot Form 1). `type` is `text`, `tel`, or `email`. `required` is a boolean. `step` is `1` (property) or `2` (contact). Two consecutive fields may share `pair` (the first/last name row). Must include `address` (step 1) and `first`, `phone`, `email` (step 2). gclid/UTM hidden fields stay in the generator. The form stays off while `lead_form.enabled` is false. |
+| `form1_fields[]` | `{name, label, type, required, step, autocomplete?, placeholder?, pair?}` | Hero form (Carrot Form 1). `type` is `text`, `tel`, or `email`. `required` is a boolean. `step` is `1` (property) or `2` (contact). Two consecutive fields may share `pair` (the first/last name row). Must include `address` (step 1) and `first`, `phone`, `email` (step 2). Hidden `gclid`, `gbraid`, `wbraid`, and `utm_source` / `utm_medium` / `utm_campaign` / `utm_term` / `utm_content` stay in the generator. The inline script stores those values in `localStorage` (`fsho_attr`, about 90 days) and appends any that are missing onto links to `fairandsimplehomeoffer.com`. The form stays off while `lead_form.enabled` is false. |
 | `step2_fields[]` | `{name, label, type: select\|textarea, options[]}` | Step 2 form. Placeholder until the real Carrot Form 6 fields are confirmed. |
 
 ## content/pages/&lt;slug&gt;.md
@@ -215,7 +215,7 @@ Tags: `no-condo`, `no-townhouse`, `no-mobile`, `no-land`, `not-decision-maker`, 
  "answers":{"type":"sfh","ownership":"sole_owner","timeline":"asap","situation":"listed_under_90","equity":"free_clear","ability":"ready"},
  "emota":{"E":true,"M":false,"O":true,"T":true,"A":true},"failed":["M"],
  "tags":["listed-under-90","emota-fail-M","emota-4of5"],"tier":"nurture","cadence":"60day","conversion":"none",
- "page":"/step-2/","ts":"...","gclid":"","utm_campaign":"","utm_term":"","utm_source":"","utm_medium":""}
+ "page":"/step-2/","ts":"...","gclid":"","gbraid":"","wbraid":"","utm_source":"","utm_medium":"","utm_campaign":"","utm_term":"","utm_content":""}
 ```
 
 Hard declines send `emota: null`, `failed: null`, `tier: "disqualified"`, `cadence: "none"`, `conversion: "none"`.

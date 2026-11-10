@@ -18,7 +18,7 @@ var O={};K.forEach(function(l){O[l]=P[l]});P=O;res=F.length?C.result.any_fail:C.
 else{e=C.endings[nx.slice(5)];res=e;P=null;F=null}
 var d={form:C.id,form_version:C.version,stage:"complete",lead_id:L.lead_id||"",first:L.first||"",last:L.last||"",phone:L.phone||"",email:L.email||"",address:L.address||"",
 answers:A,emota:P,failed:F,tags:T,tier:res.tier,cadence:res.cadence,conversion:e.conversion,page:location.pathname,ts:new Date().toISOString()};
-["gclid","utm_campaign","utm_term","utm_source","utm_medium"].forEach(function(k){d[k]=at[k]||""});
+["gclid","gbraid","wbraid","utm_source","utm_medium","utm_campaign","utm_term","utm_content"].forEach(function(k){d[k]=at[k]||""});
 if(C.consent.enabled){d[C.consent.field]=!!L.consent;d.consent_text=C.consent.text}
 bar.style.width="100%";box.innerHTML="";box.appendChild(el("h2","",e.headline));box.appendChild(el("p","lede",e.body));
 r.dataset.tier=d.tier;e.conversion!="none"&&window.dataLayer&&dataLayer.push({event:"fsho_qualifier",tier:d.tier,conversion:e.conversion});

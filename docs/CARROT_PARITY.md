@@ -24,7 +24,7 @@ Status key:
 | 12 | Blog: posts list + post pages | Schema | Live blog is empty (now 301 → /). Add `content/posts/*.md` + `template: post` + `/blog/` index only when first post exists. |
 | 13 | Blog: categories/tags, authors, comments | Drop | Unused; no posts exist. |
 | 14 | RSS feed | Drop | No blog content. |
-| 15 | Gravity Form 1 (main lead form) | Covered | Two-step form in hero; gclid/UTM capture; locked until routing decided. |
+| 15 | Gravity Form 1 (main lead form) | Covered | Two-step form in hero; gclid/gbraid/wbraid/UTM stored ~90 days and appended to fairandsimplehomeoffer.com links; locked until routing decided. |
 | 16 | Gravity Form 6 (Step 2) | Covered | `step2_fields[]` in `site.json`; fields are placeholders until real Form 6 fields confirmed. |
 | 17 | Other Gravity Forms (contact, etc.) | Drop | Inventory shows only Forms 1 and 6 in real use. |
 | 18 | Form field editing | Covered | `form1_fields[]` in `site.json` (name, label, type, required, step) validated by `--check`. Form stays disabled until lead routing exists. |
