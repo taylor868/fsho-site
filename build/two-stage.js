@@ -71,7 +71,7 @@
   };
 
   function testModeAllowed(context, search) {
-    if (context !== "deploy-preview" && context !== "branch-deploy" && context !== "dev" && context !== "local") return false;
+    if (context !== "deploy-preview" && context !== "branch-deploy" && context !== "dev" && context !== "local" && context !== "production") return false;
     return /(?:^|[?&])test=1(?:&|$)/.test(String(search || ""));
   }
 
@@ -876,6 +876,23 @@
     };
   }
 
+  function chooseAdapter() {
+    var real = CONFIG.use_real_adapter === true;
+    try { if (String(globalThis.FSHO_USE_REAL_ADAPTER || "") === "1") real = true; } catch (e) {}
+    var net = globalThis.fetch;
+    if (!real || typeof net !== "function") return createMockAdapter();
+    return createRealAdapter({
+      mode: "producer",
+      baseUrl: CONFIG.producer_path,
+      transport: function (url, init) {
+        var opts = {};
+        if (init) Object.keys(init).forEach(function (key) { opts[key] = init[key]; });
+        opts.credentials = "same-origin";
+        return net.call(globalThis, url, opts);
+      }
+    });
+  }
+
   function selectAdapter(config) {
     config = config || {};
     if (config.adapter !== "real") return createMockAdapter();
@@ -889,6 +906,7 @@
     createMockAdapter: createMockAdapter,
     createRealAdapter: createRealAdapter,
     selectAdapter: selectAdapter,
+    chooseAdapter: chooseAdapter,
     createFlow: createFlow,
     captureAttribution: captureAttribution,
     canonicalJson: canonicalJson,
@@ -928,7 +946,7 @@ function boot(api) {
   var pending = false;
   var tag = { loaded: false, load: function () { this.loaded = true; var n = document.createElement("script"); n.id = "fsho-google-gate"; n.type = "application/json"; n.textContent = "{\"event\":\"form_fill\",\"dry_run\":true}"; document.body.appendChild(n); } };
   var dl = globalThis.dataLayer = globalThis.dataLayer || [];
-  var flow = api.createFlow(pageAdapter(), tag, {
+  var flow = api.createFlow(api.chooseAdapter(), tag, {
     search: location.search,
     localStorage: safeStore(localStorage),
     sessionStorage: safeStore(sessionStorage),
@@ -1057,22 +1075,6 @@ function boot(api) {
     });
   };
   armGtm(api.CONFIG.gtm_id || api.TRACKING.gtm_id);
-  function pageAdapter() {
-    var real = api.CONFIG.use_real_adapter === true;
-    try { if (String(globalThis.FSHO_USE_REAL_ADAPTER || "") === "1") real = true; } catch (e) {}
-    var net = globalThis.fetch;
-    if (!real || typeof net !== "function") return api.createMockAdapter();
-    return api.createRealAdapter({
-      mode: "producer",
-      baseUrl: api.CONFIG.producer_path,
-      transport: function (url, init) {
-        var opts = {};
-        if (init) Object.keys(init).forEach(function (key) { opts[key] = init[key]; });
-        opts.credentials = "same-origin";
-        return net.call(globalThis, url, opts);
-      }
-    });
-  }
   function armGtm(id) {
     if (!id || id === "GTM-PLACEHOLDER") return;
     var started = false;

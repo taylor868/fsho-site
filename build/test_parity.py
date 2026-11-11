@@ -159,6 +159,30 @@ class ParityTests(unittest.TestCase):
         live_page = (Path(gen.OUT) / 'test-intake' / 'index.html').read_text(encoding='utf-8')
         self.assertIn('FSHO_DEPLOY_CONTEXT="production"', live_page)
 
+    def test_production_test_page_boots_only_with_the_query_and_keeps_preview(self):
+        os.environ['CONTEXT'] = 'production'
+        os.environ.pop('FSHO_USE_REAL_ADAPTER', None)
+        self.build(live=False)
+        page = (Path(gen.OUT) / 'test-intake' / 'index.html').read_text(encoding='utf-8')
+        home = (Path(gen.OUT) / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('FSHO_DEPLOY_CONTEXT="production"', page)
+        self.assertIn('window.FSHO_USE_REAL_ADAPTER=""', page)
+        self.assertIn('Test mode is off', page)
+        self.assertIn('noindex,nofollow', page)
+        self.assertNotIn('/test-intake/', (Path(gen.OUT) / 'sitemap.xml').read_text(encoding='utf-8'))
+        self.assertIn('PREVIEW: not the live site', home)
+        self.assertIn('var FSHO={endpoint:""', home)
+        os.environ['FSHO_USE_REAL_ADAPTER'] = '1'
+        self.build(live=False)
+        flagged = (Path(gen.OUT) / 'test-intake' / 'index.html').read_text(encoding='utf-8')
+        home_flagged = (Path(gen.OUT) / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('window.FSHO_USE_REAL_ADAPTER="1"', flagged)
+        self.assertIn('noindex,nofollow', flagged)
+        self.assertIn('PREVIEW: not the live site', home_flagged)
+        self.assertIn('var FSHO={endpoint:""', home_flagged)
+        os.environ.pop('FSHO_USE_REAL_ADAPTER', None)
+        os.environ.pop('CONTEXT', None)
+
     def test_drafts_preview_included_live_and_production_skipped(self):
         self.add_drafts()
         self.build(live=False)

@@ -531,6 +531,7 @@ def build(site, pages, markets, redirects, live):
         return f'<label class="chk"><input type="checkbox" name="consent"{" required" if c.get("required") else ""}> <small>{c["text"]} <a href="/text-messaging-terms/">Text Terms</a> · <a href="/privacy/">Privacy</a></small></label>'
     def test_intake():
         ctx = deploy_context(live)
+        real_flag = '1' if os.environ.get('FSHO_USE_REAL_ADAPTER') == '1' else ''
         src = re.sub(r'\n\s*\n', '\n', open(os.path.join(B, 'two-stage.js'), encoding='utf-8').read().strip()).replace('</', '<\\/')
         return (
             '<section class="wrap pad" id="two-stage"><h1>Two-stage test intake</h1>'
@@ -570,7 +571,7 @@ def build(site, pages, markets, redirects, live):
             '#ts-trace li{margin:8px 0}'
             '@media(max-width:860px){#two-stage{padding-bottom:104px}}'
             '</style>'
-            f'<script>window.FSHO_DEPLOY_CONTEXT="{ctx}";</script><script>{src}</script></section>'
+            f'<script>window.FSHO_DEPLOY_CONTEXT="{ctx}";window.FSHO_USE_REAL_ADAPTER="{real_flag}";</script><script>{src}</script></section>'
         )
     def qualifier_form():
         cfg = {k: QC[k] for k in ('id', 'version', 'start', 'result', 'endings') if k in QC}

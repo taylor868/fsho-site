@@ -14,9 +14,11 @@ function run() {
   return { tag, adapter, session: flow.createFlow(adapter, tag) };
 }
 
-test("test mode cannot be enabled for production", () => {
-  assert.equal(flow.testModeAllowed("production", "?test=1"), false);
+test("test mode on production requires test=1", () => {
+  assert.equal(flow.testModeAllowed("production", "?test=1"), true);
+  assert.equal(flow.testModeAllowed("production", "?x=1&test=1"), true);
   assert.equal(flow.testModeAllowed("production", ""), false);
+  assert.equal(flow.testModeAllowed("production", "?test=2"), false);
   assert.equal(flow.testModeAllowed("local", ""), false);
   assert.equal(flow.testModeAllowed("deploy-preview", "?test=1"), true);
   assert.equal(flow.testModeAllowed("branch-deploy", "?x=1&test=1"), true);
@@ -488,7 +490,7 @@ test("the real adapter matches the draft call shapes and never uses the network"
   const blocked = flow.selectAdapter({
     adapter: "real",
     context: "production",
-    search: "?test=1",
+    search: "",
     transport() { calls += 1; throw new Error("network"); }
   });
   blocked.park({ name: "TEST LEAD", address: "100 Example Ave", phone: "5550100199", email: contact.email });
@@ -813,6 +815,36 @@ test("enrich returns the saved tier, sends {} when skipped, and retries one unav
   assert.equal(done.view.serverTier, "");
   assert.equal(done.view.tierPending, false);
   assert.equal(quiet.state.trace.some((row) => row.text.indexOf("No tier.") >= 0), true);
+});
+
+test("production with test=1 uses the baked real adapter", async () => {
+  assert.equal(flow.testModeAllowed("production", "?test=1"), true);
+  assert.equal(flow.testModeAllowed("production", ""), false);
+  const previousFlag = globalThis.FSHO_USE_REAL_ADAPTER;
+  const previousFetch = global.fetch;
+  const calls = [];
+  global.fetch = (url, init) => {
+    calls.push({ url, body: JSON.parse(init.body), credentials: init.credentials });
+    return { status: 200, body: { ok: true, status: "parked" } };
+  };
+  globalThis.FSHO_USE_REAL_ADAPTER = "1";
+  try {
+    const adapter = flow.chooseAdapter();
+    await adapter.park({ full_name: "Ada Lovelace", address_line: "1 Main St", phone: "5550100199", email: "ada@example.com" });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "/.netlify/functions/intake-producer");
+    assert.equal(calls[0].body.op, "park");
+    assert.equal(calls[0].credentials, "same-origin");
+    assert.equal(calls[0].body.client_ip, undefined);
+  } finally {
+    if (previousFlag === undefined) delete globalThis.FSHO_USE_REAL_ADAPTER;
+    else globalThis.FSHO_USE_REAL_ADAPTER = previousFlag;
+    global.fetch = previousFetch;
+  }
+  globalThis.FSHO_USE_REAL_ADAPTER = "";
+  const mock = flow.chooseAdapter();
+  assert.equal(Array.isArray(mock.log), true);
+  delete globalThis.FSHO_USE_REAL_ADAPTER;
 });
 
 test("producer mode posts to the function and does not sign in the browser", async () => {

@@ -2,7 +2,7 @@
 
 The public form stays off (`preview` true, `lead_form.enabled` false, empty endpoint). This page is a separate click-through at `/test-intake/?test=1`.
 
-Test mode is on only when the build context is `local`, `dev`, `deploy-preview`, or `branch-deploy`, and the URL has `?test=1`. A production build (`CONTEXT=production` or `gen.py --live`) bakes `production`, and `?test=1` does not turn it on.
+Test mode is on when the build context is `local`, `dev`, `deploy-preview`, `branch-deploy`, or `production`, and the URL has `?test=1`. A production build (`CONTEXT=production` or `gen.py --live`) bakes `production`. Without `?test=1` the page shows "Test mode is off." Preview, the banner, noindex, and the homepage form are unchanged.
 
 The test page does not call Supabase, Zapier, WhatConverts, CRM, or Slack. The mock adapter is the default and only records. The address field is a plain text input. There is no Google Maps or Places autocomplete. The page script has no network call of its own. A real adapter exists beside the mock and is used only when `adapter` is `"real"`, the build context is non-production, and the caller passes a transport. Its base URL is the placeholder `https://placeholder.invalid/functions/v1`. There is no HMAC key and no Zap token in the source. `sig` is left empty because the Netlify function that holds the key signs the envelope.
 
@@ -107,7 +107,7 @@ A claim response of `status: "late_hot"` with `tier: "hot"` is a normal Hot clai
 
 ## Producer
 
-`netlify/functions/intake-producer.js` is the server-side signer. The browser calls it only when `CONFIG.use_real_adapter` is true or `FSHO_USE_REAL_ADAPTER` is `"1"`. The default remains the mock, which never calls the network. The function reads `INTAKE_HMAC_KEY_V1`, `INTAKE_HMAC_KID`, `INTAKE_EDGE_BASE_URL`, and `INTAKE_ZAP_HOOK_URL` from the environment. `INTAKE_COOKIE_KEY` is optional. Those values are not hardcoded or returned.
+`netlify/functions/intake-producer.js` is the server-side signer. The browser calls it only when `CONFIG.use_real_adapter` is true or the build env `FSHO_USE_REAL_ADAPTER` is `1`. `gen.py` bakes that flag into `window.FSHO_USE_REAL_ADAPTER`. When it is unset, the page keeps the mock. The default remains the mock, which never calls the network. The function reads `INTAKE_HMAC_KEY_V1`, `INTAKE_HMAC_KID`, `INTAKE_EDGE_BASE_URL`, and `INTAKE_ZAP_HOOK_URL` from the environment. `INTAKE_COOKIE_KEY` is optional. Those values are not hardcoded or returned.
 
 Signatures use the fixed `canonicalLines` order from `edge/envelope.ts`: `v`, `kid`, `route`, `channel`, `intake_id`, `event_id`, `stage`, `ts`, `exp`, `payload_sha256`. The reference copies are `docs/CALL-SHAPES.md`, `edge/envelope.ts`, `edge/intake-park/handler.ts`, and `edge/intake-reserve/index.ts`.
 
