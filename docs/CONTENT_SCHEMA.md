@@ -33,7 +33,10 @@ content/
 | `lead_form.endpoint` | string | Serverless endpoint URL (only used when enabled). |
 | `gtm_id` | string | e.g. `GTM-WWPBQGDZ`. |
 | `clickcease_id` | string | Empty until supplied. |
-| `tracking` | bool | Loads GTM + ClickCease after window load. Default false. |
+| `tracking` | bool | Loads GTM + ClickCease after window load. Default false. Independent of WhatConverts. Leave false. |
+| `whatconverts.enabled` | bool | **true.** When true, each public page gets the official WhatConverts standard snippet for profile 176490. Does not enable `tracking`, `lead_form`, ClickCease, or the test form. |
+| `whatconverts.profile_id` | string | `176490` only. |
+| `whatconverts.script_host` | string | `//s.ksrndkehqnwntyxlhgto.com` only. The profile URL stays protocol-relative. |
 | `nav[]` | `{label, href}` | Header nav and footer "Company" column. |
 | `footer.about` | HTML | Footer blurb. |
 | `footer.company_extra[]` | `{label, href}` | Extra links after nav in footer. |
@@ -92,7 +95,15 @@ Body: blocks separated by blank lines. A block starting with `<` or `{{` is pass
 
 Shortcodes: `{{qualifier}}` `{{situations}}` `{{steps}}` `{{comparison}}` `{{videos}}` `{{testimonials}}` `{{reviews}}` `{{trust}}` `{{faq}}` `{{faq:5}}` (first N) `{{cta}}` `{{cta:Custom heading}}` `{{states}}` (links to every market that this build includes) `{{step2_form}}` `{{qualifier_form}}` `{{phone}}`. Unknown shortcodes fail the build.
 
-`{{cta}}` uses this page's `cta_label` when set, otherwise `site.json` `cta.heading`. `{{cta:Custom heading}}` still wins. Market pages pass `cta_label` the same way.
+`{{cta}}` uses this page's `cta_label` when set, otherwise `site.json` `cta.heading`. `{{cta:Custom heading}}` still wins. Market pages pass `cta_label` the same way. The button label stays `cta.button`. The button and the sticky "Get Offer" control use `#offer` when that page renders the hero form (home, situation, and every market page) and `/#offer` on every other page, including legal pages, `/thank-you/`, `/step-2/`, and the 404. That opens the homepage form. The generator does not add a form to those pages.
+
+When `whatconverts.enabled` is true, every generated public page gets this in `<head>`, immediately after the viewport meta:
+
+```html
+<script>var $wc_load=function(a){return JSON.parse(JSON.stringify(a))},$wc_leads=$wc_leads||{doc:{url:$wc_load(document.URL),ref:$wc_load(document.referrer),search:$wc_load(location.search),hash:$wc_load(location.hash)}};</script><script src="//s.ksrndkehqnwntyxlhgto.com/176490.js" defer></script>
+```
+
+The inline script is the official snapshot and runs as the parser reaches it, before `176490.js`. `defer` is the only addition to the official profile tag, so that file does not block first paint. Omitted: `/test-intake/` (noindex test harness) and the meta-refresh redirect stubs. `tracking` is still the GTM and ClickCease switch.
 
 `draft` (pages and markets):
 - The key is exactly `draft`. The only allowed value is boolean `true`.

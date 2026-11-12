@@ -101,7 +101,8 @@ Done (preview is off; the homepage two-stage form posts through intake-producer 
 6. **404 page** (#61): `dist/404.html`.
 7. **Form 1 fields in schema** (#18). Real Form 6 fields (#16) still wait until confirmed.
 8. **Static reviews** (#45): `reviews[]` + `{{reviews}}`. No quotes invented.
-9. **Per-page CTA wiring** (#6) and optional `canonical` override (#29).
+9. **Per-page CTA wiring** (#6) and optional `canonical` override (#29). Pages without the hero form send the cash-offer button and the sticky Get Offer control to `/#offer`. Pages with the form keep `#offer`.
+- **WhatConverts profile 176490** is on for generated public pages. The official inline snapshot is in the head; `176490.js` is deferred. `tracking` (GTM and ClickCease) stays false. `/test-intake/` and redirect stubs are excluded.
 
 Still open:
 

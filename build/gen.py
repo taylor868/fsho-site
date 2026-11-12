@@ -126,6 +126,40 @@ def ld_script(obj):
     raw = json.dumps(obj, ensure_ascii=False, separators=(',', ':')).replace('</', '<\\/')
     return '<script type="application/ld+json">' + raw + '</script>'
 
+# Official WhatConverts standard snippet (Tracking > Tracking Code), profile 176490.
+# The inline script is copied as WhatConverts ships it so the landing URL and referrer
+# are snapshotted while the HTML parses. defer on the profile file keeps 176490.js off
+# the first-paint path; it still runs after that snapshot.
+WC_PROFILE = '176490'
+WC_HOST = '//s.ksrndkehqnwntyxlhgto.com'
+WC_INIT_JS = (
+    'var $wc_load=function(a){return JSON.parse(JSON.stringify(a))},'
+    '$wc_leads=$wc_leads||{doc:{url:$wc_load(document.URL),ref:$wc_load(document.referrer),'
+    'search:$wc_load(location.search),hash:$wc_load(location.hash)}};'
+)
+
+def check_whatconverts(site, E):
+    wc = site.get('whatconverts')
+    src = 'content/site.json'
+    if not isinstance(wc, dict):
+        E.append(f'{src}: missing "whatconverts" object')
+        return
+    if not isinstance(wc.get('enabled'), bool):
+        E.append(f'{src}: whatconverts.enabled must be true or false')
+    if wc.get('profile_id') != WC_PROFILE:
+        E.append(f'{src}: whatconverts.profile_id must be {WC_PROFILE}')
+    if wc.get('script_host') != WC_HOST:
+        E.append(f'{src}: whatconverts.script_host must be {WC_HOST}')
+
+def whatconverts_snippet(site):
+    """Empty unless the official profile is explicitly enabled. Never emits another host or id."""
+    wc = site.get('whatconverts')
+    if not isinstance(wc, dict) or wc.get('enabled') is not True:
+        return ''
+    if wc.get('profile_id') != WC_PROFILE or wc.get('script_host') != WC_HOST:
+        return ''
+    return '<script>' + WC_INIT_JS + '</script><script src="' + WC_HOST + '/' + WC_PROFILE + '.js" defer></script>'
+
 def decorate_imgs(html_text, idx):
     """Add width/height (and alt, when the tag has none) for images listed in media.json."""
     def repl(m):
@@ -463,6 +497,7 @@ def check(site, pages, markets, redirects, errs):
     W = []
     for k in ['company', 'phone', 'tel', 'domain', 'brand', 'nav', 'footer', 'trust_badges', 'faq', 'situations', 'steps', 'comparison', 'testimonials', 'cta']:
         if k not in site: E.append(f'content/site.json: missing "{k}"')
+    check_whatconverts(site, E)
     for c in ('orange', 'navy'):
         if not re.fullmatch(r'#[0-9A-Fa-f]{6}', str(site.get('brand', {}).get(c, ''))): E.append(f'content/site.json: brand.{c} must be #RRGGBB')
     if not re.fullmatch(r'\+1\d{10}', str(site.get('tel', ''))): E.append('content/site.json: tel must be +1XXXXXXXXXX')
@@ -687,8 +722,9 @@ def build(site, pages, markets, redirects, live):
             bits.append(f'<blockquote class="testi">“{t["quote"]}”<cite>{cite}</cite></blockquote>')
         return ''.join(bits)
     def faqh(items, n=99): return '<div class="faq">' + ''.join(f'<details><summary>{f["q"]}</summary><p>{f["a"]}</p></details>' for f in items[:n]) + '</div>'
-    def cta(h=None):
-        c = S['cta']; return f'<section class="band"><div class="wrap"><h2>{h or c["heading"]}</h2><p>{c["text"]}</p><a class="btn btn-o" href="#offer">{c["button"]}</a> <a class="btn btn-w" href="tel:{TEL}">Call {PH}</a></div></section>'
+    def cta(h=None, href='#offer'):
+        # href is #offer on pages that render the hero form, and /#offer everywhere else.
+        c = S['cta']; return f'<section class="band"><div class="wrap"><h2>{h or c["heading"]}</h2><p>{c["text"]}</p><a class="btn btn-o" href="{href}">{c["button"]}</a> <a class="btn btn-w" href="tel:{TEL}">Call {PH}</a></div></section>'
     def public_intake():
         ctx, real_flag, src = two_stage_assets()
         return (
@@ -720,7 +756,7 @@ def build(site, pages, markets, redirects, live):
     shown_markets = [m for m in markets if include_drafts or not m.get('draft')]
     states = '<div class="states">' + ''.join(f'<a href="/{m["slug"]}/">{m["state"]}</a>' for m in shown_markets) + '</div>'
 
-    def shortcodes(body, faq_items, cta_label=None):
+    def shortcodes(body, faq_items, cta_label=None, offer_href='#offer'):
         def rep(m):
             k, _, arg = m.group(1).partition(':')
             if k == 'qualifier': return f'<div class="qual">{S["qualifier"]}</div>'
@@ -732,7 +768,7 @@ def build(site, pages, markets, redirects, live):
             if k == 'reviews': return reviewsh(S.get('reviews') or [])
             if k == 'trust': return trust
             if k == 'faq': return faqh(faq_items, int(arg) if arg else 99)
-            if k == 'cta': return cta(arg or cta_label or None)
+            if k == 'cta': return cta(arg or cta_label or None, offer_href)
             if k == 'states': return states
             if k == 'step2_form': return step2()
             if k == 'qualifier_form': return qualifier_form()
@@ -785,7 +821,9 @@ def build(site, pages, markets, redirects, live):
         if faq_ld:
             scripts += ld_script({"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
                 {"@type": "Question", "name": html.unescape(f["q"]), "acceptedAnswer": {"@type": "Answer", "text": html.unescape(f["a"])}} for f in faq_ld]})
-        doc = f'''<!doctype html><html lang="en"><head>{robots}<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{esc(title)}</title><meta name="description" content="{esc(desc)}"><link rel="icon" href="/favicon.png"><link rel="canonical" href="{esc(canon)}">{''.join(og)}<style>{CSS}</style>
+        # /test-intake/ is the noindex harness, not a public page. Redirect stubs are written later and stay excluded.
+        wc = '' if path.rstrip('/') == '/test-intake' else whatconverts_snippet(S)
+        doc = f'''<!doctype html><html lang="en"><head>{robots}<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{wc}<title>{esc(title)}</title><meta name="description" content="{esc(desc)}"><link rel="icon" href="/favicon.png"><link rel="canonical" href="{esc(canon)}">{''.join(og)}<style>{CSS}</style>
 {scripts}</head><body>{banner}
 <header class="top"><div class="wrap hd"><a href="/" class="logo"><img src="{S["logo"]}" alt="{logo_alt}" fetchpriority="high"></a><nav>{navl}</nav><a class="btn btn-call" href="tel:{TEL}">📞 {PH}</a></div><nav class="mnav" aria-label="Sections"><a href="/how-it-works/">How It Works</a><a href="/reviews/">Reviews</a><a href="/faq/">FAQ</a></nav></header>
 <main>{body}</main>
@@ -805,11 +843,14 @@ def build(site, pages, markets, redirects, live):
             skipped += 1; continue
         if p.get('draft'): drafts_in += 1
         path = f'/{p["slug"]}/' if p['slug'] else '/'
-        file_rel, offer = None, '#offer'
+        # Home and situation templates render the hero form (id="offer"). Basic pages do not,
+        # so the cash-offer button and the sticky Get Offer control go to the homepage form.
+        file_rel = None
+        offer = '#offer' if p['template'] in ('home', 'situation') else '/#offer'
         if p['slug'] == '404':
-            path, file_rel, offer = '/404.html', '404.html', '/#offer'
+            path, file_rel = '/404.html', '404.html'
         faq_items = p.get('faq') or S['faq']
-        body = md(shortcodes(p['body'], faq_items, p.get('cta_label')))
+        body = md(shortcodes(p['body'], faq_items, p.get('cta_label'), offer))
         if p['template'] in ('home', 'situation'):
             body = hero(p['hero_headline'], p['hero_sub'], intake=True) + body
         page(path, p['title'], p.get('meta_description') or '', body, bool(p.get('noindex', False) or p.get('draft')),
@@ -828,9 +869,10 @@ def build(site, pages, markets, redirects, live):
         local_html = f'<div class="ph">{note}</div>' if note else ''
         body = (hero(m['headline'], m['hero_sub'], intake=True) + f'<section class="wrap pad"><div class="qual">{S["qualifier"]}</div><h2 class="c">Common reasons {s} homeowners call us</h2>{sits}{cities}</section>'
                 + f'<section class="alt"><div class="wrap pad"><h2 class="c">How it works in {s}</h2>{steps}</div></section>'
-                + f'<section class="wrap pad">{testis(m.get("testimonials") or S["testimonials"])}{local_html}</section>' + cta(m.get('cta_label')))
+                + f'<section class="wrap pad">{testis(m.get("testimonials") or S["testimonials"])}{local_html}</section>' + cta(m.get('cta_label'), '#offer'))
         page(path, m['title'], m['meta_description'], body, bool(m.get('noindex', False) or m.get('draft')),
-             canonical=m.get('canonical') or None, og_title=m.get('og_title') or None, og_image=m.get('og_image') or None)
+             canonical=m.get('canonical') or None, og_title=m.get('og_title') or None, og_image=m.get('og_image') or None,
+             offer_href='#offer')
         built += 1
         if not m.get('noindex') and not m.get('draft'): urls.append(path)
 

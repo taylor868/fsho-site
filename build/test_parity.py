@@ -160,6 +160,14 @@ class ParityTests(unittest.TestCase):
         self.assertIn('pointerdown', home)
         self.assertIsNone(re.search(r'<script[^>]+src="https://www\.googletagmanager\.com/gtm\.js', home))
         self.assertIn('tracking:false', home)
+        self.assertIn('clickcease:""', home)
+        self.assertNotIn('<script src="https://www.clickcease.com', home)
+        self.assertTrue(site['whatconverts']['enabled'])
+        self.assertEqual(site['whatconverts']['profile_id'], '176490')
+        self.assertEqual(site['whatconverts']['script_host'], '//s.ksrndkehqnwntyxlhgto.com')
+        self.assertEqual(site['clickcease_id'], '')
+        self.assertIn('<script src="//s.ksrndkehqnwntyxlhgto.com/176490.js" defer></script>', home)
+        self.assertLess(home.index('var $wc_load=function'), home.index('176490.js'))
         self.assertIn('t.id==="ts-form"', home)
         self.assertIn('forms are off', home)
         robots = (Path(gen.OUT) / 'robots.txt').read_text(encoding='utf-8')
@@ -730,6 +738,140 @@ cta_label: "Page specific heading"
         self.assertIn('not available on the live site', prod_test)
         self.assertIn('Fair and Simple Home Offer</title>', prod)
         self.assertNotIn('&amp;', re.search(r'<title>.*?</title>', prod).group(0))
+
+    def test_offer_href_follows_the_hero_form(self):
+        self.build(live=False)
+        out = Path(gen.OUT)
+        form_pages = [
+            out / 'index.html',
+            out / 'how-it-works' / 'index.html',
+            out / 'contact-us' / 'index.html',
+            out / 'stop-foreclosure' / 'index.html',
+        ]
+        for market in (self.root / 'content' / 'markets').glob('*.json'):
+            slug = json.loads(market.read_text(encoding='utf-8'))['slug']
+            form_pages.append(out / slug / 'index.html')
+        self.assertEqual(len(form_pages), 43)
+        cash = re.compile(r'<a class="btn btn-o" href="([^"]+)">Get My Fair Cash Offer</a>')
+        sticky = re.compile(r'<a class="sticky s2b" href="([^"]+)">Get Offer</a>')
+        for path in form_pages:
+            html = path.read_text(encoding='utf-8')
+            self.assertEqual(html.count('id="offer"'), 1, path)
+            self.assertEqual(html.count('id="ts-form"'), 1, path)
+            self.assertEqual(sticky.findall(html), ['#offer'], path)
+            self.assertEqual(cash.findall(html), ['#offer'], path)
+            self.assertNotIn('href="/#offer"', html, path)
+            self.assertIn('Sell your house as-is · No fees · No repairs', html, path)
+        home = (out / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('<h1>Sell your house fast, for a fair price, on your timeline.</h1>', home)
+        self.assertIn('Brett C.', home)
+        self.assertIn('Fair &amp; Simple Cash Offer', home)
+        self.assertIn('Our Market-Sale Option', home)
+        self.assertIn('Traditional Listing', home)
+        no_form = {
+            'faq': out / 'faq' / 'index.html',
+            'our-company': out / 'our-company' / 'index.html',
+            'reviews': out / 'reviews' / 'index.html',
+            'service-areas': out / 'service-areas' / 'index.html',
+            'privacy': out / 'privacy' / 'index.html',
+            'terms': out / 'terms-conditions' / 'index.html',
+            'sms': out / 'text-messaging-terms' / 'index.html',
+            'thank-you': out / 'thank-you' / 'index.html',
+            'step-2': out / 'step-2' / 'index.html',
+            '404': out / '404.html',
+            'test-intake': out / 'test-intake' / 'index.html',
+        }
+        band_pages = {'faq', 'our-company', 'reviews', 'service-areas', '404'}
+        for name, path in no_form.items():
+            html = path.read_text(encoding='utf-8')
+            self.assertNotIn('id="offer"', html, name)
+            self.assertNotIn('data-public="1"', html, name)
+            self.assertEqual(sticky.findall(html), ['/#offer'], name)
+            self.assertNotIn('href="#offer"', html, name)
+            if name == 'test-intake':
+                continue
+            self.assertNotIn('id="ts-form"', html, name)
+            if name in band_pages:
+                self.assertEqual(cash.findall(html), ['/#offer'], name)
+            else:
+                self.assertEqual(cash.findall(html), [], name)
+        faq = no_form['faq'].read_text(encoding='utf-8')
+        self.assertIn('What types of properties do you buy?', faq)
+        self.assertIn('<h1>Straight answers about selling for cash.</h1>', faq)
+
+    def test_whatconverts_profile_is_enabled_on_public_pages(self):
+        init = (
+            '<script>var $wc_load=function(a){return JSON.parse(JSON.stringify(a))},'
+            '$wc_leads=$wc_leads||{doc:{url:$wc_load(document.URL),ref:$wc_load(document.referrer),'
+            'search:$wc_load(location.search),hash:$wc_load(location.hash)}};</script>'
+        )
+        tag = '<script src="//s.ksrndkehqnwntyxlhgto.com/176490.js" defer></script>'
+        pair = init + tag
+        self.build(live=False)
+        out = Path(gen.OUT)
+        pages, redirects = [], []
+        for path in out.rglob('*.html'):
+            text = path.read_text(encoding='utf-8')
+            rel = str(path.relative_to(out))
+            if 'class="sticky"' in text:
+                pages.append((rel, text))
+            else:
+                redirects.append((rel, text))
+        self.assertEqual(len(pages), 54)
+        self.assertEqual(len(redirects), 16)
+        for rel, text in pages:
+            if rel == 'test-intake/index.html':
+                self.assertNotIn('$wc_load', text, rel)
+                self.assertNotIn('176490', text, rel)
+                self.assertNotIn('ksrndkehqnwntyxlhgto', text, rel)
+                continue
+            self.assertEqual(text.count(pair), 1, rel)
+            self.assertLess(text.index(pair), text.index('<style>'), rel)
+            self.assertLess(text.index(init), text.index(tag), rel)
+            self.assertNotIn('<script src="//s.ksrndkehqnwntyxlhgto.com/176490.js"></script>', text, rel)
+            self.assertNotIn('https://s.ksrndkehqnwntyxlhgto.com', text, rel)
+            self.assertIn('tracking:false', text, rel)
+            self.assertIn('clickcease:""', text, rel)
+            self.assertNotIn('<script src="https://www.clickcease.com', text, rel)
+            self.assertIsNone(re.search(r'<script[^>]+src="https://www\.googletagmanager\.com/gtm\.js', text), rel)
+        for rel, text in redirects:
+            self.assertIn('Moved here', text, rel)
+            self.assertNotIn('$wc_load', text, rel)
+            self.assertNotIn('176490', text, rel)
+            self.assertNotIn('ksrndkehqnwntyxlhgto', text, rel)
+
+        original = json.loads((ROOT / 'content' / 'site.json').read_text(encoding='utf-8'))
+        data, path = self.site()
+        data['whatconverts']['enabled'] = False
+        self.save_site(data, path)
+        self.build(live=False)
+        home = (Path(gen.OUT) / 'index.html').read_text(encoding='utf-8')
+        faq = (Path(gen.OUT) / 'faq' / 'index.html').read_text(encoding='utf-8')
+        self.assertNotIn('$wc_load', home)
+        self.assertNotIn('176490', home)
+        self.assertNotIn('176490', faq)
+        self.assertIn('href="#offer"', home)
+        self.assertIn('href="/#offer"', faq)
+        self.assertIn('tracking:false', home)
+        self.assertFalse(data['lead_form']['enabled'])
+
+        data = json.loads(json.dumps(original))
+        data['whatconverts']['profile_id'] = '999999'
+        self.save_site(data, path)
+        errors, _warns = self.check()
+        self.assertTrue(any('profile_id must be 176490' in e for e in errors), errors)
+
+        data = json.loads(json.dumps(original))
+        data['whatconverts']['script_host'] = 'https://s.ksrndkehqnwntyxlhgto.com'
+        self.save_site(data, path)
+        errors, _warns = self.check()
+        self.assertTrue(any('script_host must be //s.ksrndkehqnwntyxlhgto.com' in e for e in errors), errors)
+
+        data = json.loads(json.dumps(original))
+        data['whatconverts']['enabled'] = 'yes'
+        self.save_site(data, path)
+        errors, _warns = self.check()
+        self.assertTrue(any('whatconverts.enabled must be true or false' in e for e in errors), errors)
 
 
 if __name__ == '__main__':

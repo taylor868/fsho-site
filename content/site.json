@@ -23,6 +23,12 @@
   "gtm_id": "GTM-WWPBQGDZ",
   "clickcease_id": "",
   "tracking": false,
+  "whatconverts": {
+    "enabled": true,
+    "profile_id": "176490",
+    "script_host": "//s.ksrndkehqnwntyxlhgto.com",
+    "_note": "Official standard snippet for profile 176490. The inline script snapshots the landing URL and referrer while HTML parses. 176490.js is deferred so it does not block first paint. Does not enable tracking (GTM and ClickCease), lead_form, or the public test form. Redirect stubs and /test-intake/ do not get the snippet."
+  },
   "nav": [
     {
       "label": "How It Works",
