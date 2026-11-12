@@ -528,7 +528,7 @@ test("the real adapter matches the draft call shapes and never uses the network"
     if (url.endsWith("/park")) return { status: 200, body: { ok: true, status: "parked", intake_id: "intake-1", geocode_status: "ok" } };
     return { status: 200, body: { ok: true, status: "saved" } };
   };
-  const adapter = flow.createRealAdapter({ transport, uuid, now: () => 1700000000, signer: { client_ip: "203.0.113.7" } });
+  const adapter = flow.createRealAdapter({ transport, uuid, now: () => 1700000000, signer: { client_ip: "203.0.113.7" }, isTest: true });
   const track = { lead_id: "lead-1", gclid: "G-FIRST", gbraid: "GB1", wbraid: "WB1", fbclid: "FB1", utm_source: "google", utm_medium: "cpc", utm_campaign: "sell", utm_term: "cash", utm_content: "ad", utm_id: "u1" };
   const parked = await adapter.park(Object.assign({ name: "TEST LEAD", address: "100 Example Ave", phone: "(555) 010-0199", email: contact.email }, track));
   assert.equal(adapter.intakeId, "intake-from-mint");
@@ -848,6 +848,7 @@ test("production with test=1 uses the baked real adapter", async () => {
     assert.equal(calls[0].body.op, "park");
     assert.equal(calls[0].credentials, "same-origin");
     assert.equal(calls[0].body.client_ip, undefined);
+    assert.equal(calls[0].body.is_test, false);
   } finally {
     if (previousFlag === undefined) delete globalThis.FSHO_USE_REAL_ADAPTER;
     else globalThis.FSHO_USE_REAL_ADAPTER = previousFlag;
@@ -857,6 +858,39 @@ test("production with test=1 uses the baked real adapter", async () => {
   const mock = flow.chooseAdapter();
   assert.equal(Array.isArray(mock.log), true);
   delete globalThis.FSHO_USE_REAL_ADAPTER;
+});
+
+test("public park sends is_test false and the test page sends true", async () => {
+  async function park(isTest) {
+    const calls = [];
+    const adapter = flow.createRealAdapter({
+      mode: "producer",
+      isTest: isTest,
+      baseUrl: "/.netlify/functions/intake-producer",
+      transport(url, init) {
+        calls.push(JSON.parse(init.body));
+        return { status: 200, body: { ok: true, status: "parked" } };
+      }
+    });
+    await adapter.park({ full_name: "Ada Lovelace", address_line: "1 Main St", phone: "5550100199", email: "ada@example.com" });
+    return calls[0];
+  }
+  const pub = await park(false);
+  assert.equal(pub.is_test, false);
+  assert.equal(pub.op, "park");
+  const testPage = await park(true);
+  assert.equal(testPage.is_test, true);
+  const seen = [];
+  const direct = flow.createRealAdapter({
+    signer: { client_ip: "203.0.113.7" },
+    transport(url, init) {
+      seen.push(JSON.parse(init.body));
+      if (url.endsWith("/mint")) return { status: 200, body: { ok: true, intake_id: "i", session_binding: "s", kid: "k" } };
+      return { status: 200, body: { ok: true, status: "parked" } };
+    }
+  });
+  await direct.park({ name: "Ada Lovelace", address: "1 Main St", phone: "5550100199", email: "ada@example.com" });
+  assert.equal(seen.find((row) => row.payload).payload.is_test, false);
 });
 
 test("producer mode posts to the function and does not sign in the browser", async () => {

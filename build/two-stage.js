@@ -716,7 +716,8 @@
             full_name: row.full_name || row.name || "",
             address_line: row.address_line || row.address || "",
             phone: row.phone || "",
-            email: row.email || ""
+            email: row.email || "",
+            is_test: options.isTest === true
           }));
         },
         answer: function (req) {
@@ -755,7 +756,7 @@
       get sessionBinding() { return ids.binding; },
       park: function (row) {
         row = row || {};
-        var payload = Object.assign(tracking(row), { is_test: true });
+        var payload = Object.assign(tracking(row), { is_test: options.isTest === true });
         var full = String(row.full_name || row.name || "").slice(0, 160);
         var line = String(row.address_line || row.address || "").slice(0, 200);
         if (full) payload.full_name = full;
@@ -876,13 +877,15 @@
     };
   }
 
-  function chooseAdapter() {
+  function chooseAdapter(options) {
+    options = options || {};
     var real = CONFIG.use_real_adapter === true;
     try { if (String(globalThis.FSHO_USE_REAL_ADAPTER || "") === "1") real = true; } catch (e) {}
     var net = globalThis.fetch;
     if (!real || typeof net !== "function") return createMockAdapter();
     return createRealAdapter({
       mode: "producer",
+      isTest: options.isTest === true,
       baseUrl: CONFIG.producer_path,
       transport: function (url, init) {
         var opts = {};
@@ -898,7 +901,10 @@
     if (config.adapter !== "real") return createMockAdapter();
     if (!testModeAllowed(config.context || "", config.search || "")) return createMockAdapter();
     if (typeof config.transport !== "function") return createMockAdapter();
-    return createRealAdapter(config);
+    var real = {};
+    Object.keys(config).forEach(function (key) { real[key] = config[key]; });
+    real.isTest = true;
+    return createRealAdapter(real);
   }
 
   return {
@@ -932,10 +938,11 @@ function boot(api) {
   var app = document.getElementById("ts-app");
   if (!app) return;
   var publicForm = app.getAttribute("data-public") === "1";
+  var testOn = false;
   if (!publicForm) {
     if (!off) return;
-    var on = api.testModeAllowed(globalThis.FSHO_DEPLOY_CONTEXT || "", location.search);
-    if (!on) { off.hidden = false; return; }
+    testOn = api.testModeAllowed(globalThis.FSHO_DEPLOY_CONTEXT || "", location.search);
+    if (!testOn) { off.hidden = false; return; }
   }
   app.hidden = false;
   var form = document.getElementById("ts-form");
@@ -950,7 +957,7 @@ function boot(api) {
   var pending = false;
   var tag = { loaded: false, load: function () { this.loaded = true; var n = document.createElement("script"); n.id = "fsho-google-gate"; n.type = "application/json"; n.textContent = "{\"event\":\"form_fill\",\"dry_run\":true}"; document.body.appendChild(n); } };
   var dl = globalThis.dataLayer = globalThis.dataLayer || [];
-  var flow = api.createFlow(api.chooseAdapter(), tag, {
+  var flow = api.createFlow(api.chooseAdapter({ isTest: testOn }), tag, {
     search: location.search,
     localStorage: safeStore(localStorage),
     sessionStorage: safeStore(sessionStorage),

@@ -300,12 +300,15 @@ async function handle(event, deps) {
     if (line.length < 3 || line.length > 200) fields.push("address_line");
     if (phone.length < 10 || phone.length > 11) fields.push("phone");
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 200) fields.push("email");
+    if (input.is_test != null && typeof input.is_test !== "boolean") fields.push("is_test");
     if (fields.length) return respond(env, state, 400, { ok: false, status: "bad_input", fields });
     payload.full_name = full;
     payload.address_line = line;
     payload.phone = phone;
     payload.email = email;
-    payload.is_test = true;
+    // intake-park stores is_test only when the boolean is true (p.is_test === true).
+    // false, including when the client omits the flag, is a real lead.
+    payload.is_test = input.is_test === true;
     state.contact = { full_name: full, phone, email, address_line: line };
   } else if (op === "answer") {
     const fields = [];

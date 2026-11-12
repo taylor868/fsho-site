@@ -169,6 +169,7 @@ async function main() {
   assert.equal(park.body.payload.gclid, "click-a");
   assert.equal(park.body.payload.address_line, "1 Main St");
   assert.equal(park.body.payload.full_name, "Ada Lovelace");
+  assert.equal(park.body.payload.is_test, false);
   assert.equal(park.body.envelope.stage, "partial");
   expectSig(park.body.envelope, park.body.payload);
   assert.deepEqual(Object.keys(park.body).sort(), ["envelope", "payload", "session_binding"]);
@@ -365,6 +366,53 @@ async function main() {
   });
   assert.equal(keptPark.statusCode, 200);
   assert.equal(cookieMints, 0);
+
+  const flagged = [];
+  const testLead = await producer.handle(event("park", {
+    full_name: "Ada Lovelace",
+    address_line: "1 Main St",
+    phone: "5550100199",
+    email: "ada@example.com",
+    is_test: true
+  }), {
+    env, now: () => 1700000000000,
+    fetch: async (url, init) => {
+      flagged.push(JSON.parse(init.body));
+      if (String(url).endsWith("/mint")) return json(200, { ok: true, intake_id: INTAKE, session_binding: BINDING, kid: KID });
+      return json(200, { ok: true, status: "parked" });
+    }
+  });
+  assert.equal(testLead.statusCode, 200);
+  assert.equal(flagged.find((row) => row.payload).payload.is_test, true);
+  expectSig(flagged.find((row) => row.payload).envelope, flagged.find((row) => row.payload).payload);
+
+  const explicitReal = [];
+  const realLead = await producer.handle(event("park", {
+    full_name: "Ada Lovelace",
+    address_line: "1 Main St",
+    phone: "5550100199",
+    email: "ada@example.com",
+    is_test: false
+  }), {
+    env, now: () => 1700000000000,
+    fetch: async (url, init) => {
+      explicitReal.push(JSON.parse(init.body));
+      if (String(url).endsWith("/mint")) return json(200, { ok: true, intake_id: INTAKE, session_binding: BINDING, kid: KID });
+      return json(200, { ok: true, status: "parked" });
+    }
+  });
+  assert.equal(realLead.statusCode, 200);
+  assert.equal(explicitReal.find((row) => row.payload).payload.is_test, false);
+
+  const badFlag = await producer.handle(event("park", {
+    full_name: "Ada Lovelace",
+    address_line: "1 Main St",
+    phone: "5550100199",
+    email: "ada@example.com",
+    is_test: "yes"
+  }), deps);
+  assert.equal(badFlag.statusCode, 400);
+  assert.deepEqual(JSON.parse(badFlag.body).fields, ["is_test"]);
 
   logs.restore();
   console.log("producer tests passed");

@@ -70,7 +70,7 @@ cta_label: "Ready to see your options?"      # optional; default heading for {{c
 noindex: false                               # true = always noindex + left out of sitemap
 sitemap: true                                # optional, false = left out of sitemap
 # draft: true                                # optional; omit the line when published (never write draft: false)
-# canonical: "https://fairandsimplehomeoffer.com/faq/"  # optional absolute https URL
+# canonical: "https://fsho.co/faq/"  # optional absolute https URL
 # og_title: "FAQ"                            # optional; defaults to title
 # og_image: "/logo.webp"                     # optional path or https URL; file must be in media.json
 faq:                                         # optional; overrides site.json faq for {{faq}} and FAQPage JSON-LD

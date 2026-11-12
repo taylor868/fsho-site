@@ -54,6 +54,9 @@ MAX_IMG = 200 * 1024
 PREVIEW_CTX = {'deploy-preview', 'branch-deploy', 'dev'}  # Netlify CONTEXT values that are draft deploys
 IMG_SRC = re.compile(r'<img\b[^>]*?\bsrc\s*=\s*(["\'])([^"\']+)\1', re.I)
 FORM1_NAMES = {'address': 1, 'first': 2, 'phone': 2, 'email': 2}  # names the hero form and step-2 handoff require
+# Stay out of sitemap.xml even if noindex or sitemap frontmatter changes.
+# Absolute URLs use site.json "domain" (the canonical origin). Never a deploy or preview hostname.
+SITEMAP_SKIP = {'test-intake', 'step-2', 'thank-you'}
 
 def esc(s):
     return str(s).replace('&', '&amp;').replace('"', '&quot;').replace('<', '&lt;').replace('>', '&gt;')
@@ -762,7 +765,7 @@ def build(site, pages, markets, redirects, live):
              canonical=p.get('canonical') or None, og_title=p.get('og_title') or None, og_image=p.get('og_image') or None,
              faq_ld=faq_ld_items(p.get('body'), p.get('faq'), S.get('faq')), file_rel=file_rel, offer_href=offer)
         built += 1
-        if p.get('sitemap', True) and not p.get('noindex') and not p.get('draft') and p['slug'] != '404': urls.append('/' if not p['slug'] else f'/{p["slug"]}/')
+        if p.get('sitemap', True) and not p.get('noindex') and not p.get('draft') and p['slug'] not in SITEMAP_SKIP and p['slug'] != '404': urls.append('/' if not p['slug'] else f'/{p["slug"]}/')
     for m in markets:
         if m.get('draft') and not include_drafts:
             skipped += 1; continue
