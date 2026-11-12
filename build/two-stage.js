@@ -339,11 +339,17 @@
         return e && e.event === "seller_form_completed" && e.transaction_id === state.leadId;
       });
     }
+    function notifyReservedPixels(leadId) {
+      var hook = globalThis.FSHOPixels;
+      if (!hook || typeof hook.onReserved !== "function") return;
+      try { hook.onReserved(leadId); } catch (e) {}
+    }
     function fireConversion() {
       if (state.conversionFired || seenConversion()) { state.conversionFired = true; return; }
       state.conversionFired = true;
       pushPublic(dataLayer, { event: "seller_form_completed", transaction_id: state.leadId });
       note(state, "conversion", "seller_form_completed once. transaction_id is the lead id.");
+      if (config.publicForm) notifyReservedPixels(state.leadId);
     }
     function fireExit(branch) {
       var event = exitEvent(branch, state.answers);
@@ -1027,7 +1033,8 @@ function boot(api) {
     search: location.search,
     localStorage: safeStore(localStorage),
     sessionStorage: safeStore(sessionStorage),
-    dataLayer: dl
+    dataLayer: dl,
+    publicForm: publicForm
   });
   function box(node, copy) {
     node.replaceChildren();

@@ -160,6 +160,126 @@ def whatconverts_snippet(site):
         return ''
     return '<script>' + WC_INIT_JS + '</script><script src="' + WC_HOST + '/' + WC_PROFILE + '.js" defer></script>'
 
+# Approved pixels. IDs are locked. tracking stays false so the footer demo does not
+# load a second gtm.js or stat.js. cccontrack.js is not in the head: it records a
+# conversion when it loads. pixels.js injects it after a reserved public completion.
+GTM_ID = 'GTM-WWPBQGDZ'
+ADS_CALL_SEND_TO = 'AW-16781895992/YrLzCKa9g4sdELjSncI-'
+META_PIXEL_ID = '959620977142967'
+OPENAI_PIXEL_ID = 'AMsRexCaeaxScDiV9SGJcP'
+OPENAI_SRC = 'https://bzrcdn.openai.com/sdk/oaiq.min.js'
+CC_PRECONNECT = 'https://www.clickcease.com'
+CC_DNS = '//www.clickcease.com'
+CC_MONITOR = 'https://www.clickcease.com/monitor/stat.js'
+CC_CONVERSION = 'https://www.clickcease.com/monitor/cccontrack.js'
+CC_STATS_IMG = 'https://monitor.clickcease.com/stats/stats.aspx'
+
+def check_pixels(site, E):
+    src = 'content/site.json'
+    px = site.get('pixels')
+    if not isinstance(px, dict):
+        E.append(f'{src}: missing "pixels" object')
+        return
+    if not isinstance(px.get('enabled'), bool):
+        E.append(f'{src}: pixels.enabled must be true or false')
+    if site.get('gtm_id') != GTM_ID:
+        E.append(f'{src}: gtm_id must be {GTM_ID}')
+    if px.get('gtm_id') != GTM_ID:
+        E.append(f'{src}: pixels.gtm_id must be {GTM_ID}')
+    if px.get('ads_call_send_to') != ADS_CALL_SEND_TO:
+        E.append(f'{src}: pixels.ads_call_send_to must be {ADS_CALL_SEND_TO}')
+    if px.get('meta_pixel_id') != META_PIXEL_ID:
+        E.append(f'{src}: pixels.meta_pixel_id must be {META_PIXEL_ID}')
+    if px.get('openai_pixel_id') != OPENAI_PIXEL_ID:
+        E.append(f'{src}: pixels.openai_pixel_id must be {OPENAI_PIXEL_ID}')
+
+def pixels_on(site):
+    px = site.get('pixels')
+    if not isinstance(px, dict) or px.get('enabled') is not True:
+        return False
+    if site.get('gtm_id') != GTM_ID or px.get('gtm_id') != GTM_ID:
+        return False
+    if px.get('ads_call_send_to') != ADS_CALL_SEND_TO:
+        return False
+    if px.get('meta_pixel_id') != META_PIXEL_ID or px.get('openai_pixel_id') != OPENAI_PIXEL_ID:
+        return False
+    return True
+
+def clickcease_visitor():
+    return (
+        '<script>var script=document.createElement("script");'
+        'script.async=true;script.type="text/javascript";'
+        'var target="' + CC_MONITOR + '";'
+        'script.src=target;var elem=document.head;elem.appendChild(script);'
+        '</script>'
+        '<noscript><a href="https://www.clickcease.com" rel="nofollow">'
+        '<img src="' + CC_STATS_IMG + '" alt="ClickCease"></a></noscript>'
+    )
+
+def meta_pixel(pid):
+    return (
+        "<script>!function(f,b,e,v,n,t,s)"
+        "{if(f.fbq)return;n=f.fbq=function(){n.callMethod?"
+        "n.callMethod.apply(n,arguments):n.queue.push(arguments)};"
+        "if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';"
+        "n.queue=[];t=b.createElement(e);t.async=!0;"
+        "t.src=v;s=b.getElementsByTagName(e)[0];"
+        "s.parentNode.insertBefore(t,s)}(window,document,'script',"
+        "'https://connect.facebook.net/en_US/fbevents.js');"
+        "fbq('init', '" + pid + "');"
+        "fbq('track', 'PageView');"
+        "</script>"
+        '<noscript><img height="1" width="1" style="display:none" alt="" '
+        'src="https://www.facebook.com/tr?id=' + pid + '&amp;ev=PageView&amp;noscript=1"></noscript>'
+    )
+
+def openai_pixel(pid):
+    return (
+        '<script>(function(w,d,s,u){'
+        'if(w.oaiq)return;'
+        'var q=function(){q.q.push(arguments)};'
+        'q.q=[];w.oaiq=q;'
+        'var js=d.createElement(s);js.async=true;js.src=u;'
+        'var f=d.getElementsByTagName(s)[0];'
+        'f.parentNode.insertBefore(js,f);'
+        '})(window,document,"script","' + OPENAI_SRC + '");'
+        'oaiq("init", { pixelId: "' + pid + '" });'
+        '</script>'
+    )
+
+def approved_head(site):
+    """ClickCease visitor, Meta PageView, and OpenAI init. No conversion on parse."""
+    if not pixels_on(site):
+        return ''
+    px = site['pixels']
+    return (
+        '<link rel="preconnect" href="' + CC_PRECONNECT + '">'
+        '<link rel="dns-prefetch" href="' + CC_DNS + '">'
+        + clickcease_visitor()
+        + meta_pixel(px['meta_pixel_id'])
+        + openai_pixel(px['openai_pixel_id'])
+    )
+
+def gtm_noscript(site):
+    if not pixels_on(site):
+        return ''
+    return (
+        '<noscript><iframe src="https://www.googletagmanager.com/ns.html?id='
+        + site['gtm_id']
+        + '" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>'
+    )
+
+def pixels_script(site):
+    if not pixels_on(site):
+        return ''
+    px = site['pixels']
+    cfg = json.dumps({
+        'adsCallSendTo': px['ads_call_send_to'],
+        'clickceaseConversion': CC_CONVERSION,
+    }, separators=(',', ':'), ensure_ascii=True)
+    src = open(os.path.join(B, 'pixels.js'), encoding='utf-8').read().strip().replace('</', '<\\/')
+    return '<script>window.FSHO_PIXELS=' + cfg + ';\n' + src + '</script>'
+
 def decorate_imgs(html_text, idx):
     """Add width/height (and alt, when the tag has none) for images listed in media.json."""
     def repl(m):
@@ -498,6 +618,7 @@ def check(site, pages, markets, redirects, errs):
     for k in ['company', 'phone', 'tel', 'domain', 'brand', 'nav', 'footer', 'trust_badges', 'faq', 'situations', 'steps', 'comparison', 'testimonials', 'cta']:
         if k not in site: E.append(f'content/site.json: missing "{k}"')
     check_whatconverts(site, E)
+    check_pixels(site, E)
     for c in ('orange', 'navy'):
         if not re.fullmatch(r'#[0-9A-Fa-f]{6}', str(site.get('brand', {}).get(c, ''))): E.append(f'content/site.json: brand.{c} must be #RRGGBB')
     if not re.fullmatch(r'\+1\d{10}', str(site.get('tel', ''))): E.append('content/site.json: tel must be +1XXXXXXXXXX')
@@ -822,9 +943,13 @@ def build(site, pages, markets, redirects, live):
             scripts += ld_script({"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
                 {"@type": "Question", "name": html.unescape(f["q"]), "acceptedAnswer": {"@type": "Answer", "text": html.unescape(f["a"])}} for f in faq_ld]})
         # /test-intake/ is the noindex harness, not a public page. Redirect stubs are written later and stay excluded.
-        wc = '' if path.rstrip('/') == '/test-intake' else whatconverts_snippet(S)
-        doc = f'''<!doctype html><html lang="en"><head>{robots}<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{wc}<title>{esc(title)}</title><meta name="description" content="{esc(desc)}"><link rel="icon" href="/favicon.png"><link rel="canonical" href="{esc(canon)}">{''.join(og)}<style>{CSS}</style>
-{scripts}</head><body>{banner}
+        public = path.rstrip('/') != '/test-intake'
+        wc = whatconverts_snippet(S) if public else ''
+        extra = approved_head(S) if public else ''
+        gtm_ns = gtm_noscript(S) if public else ''
+        px = pixels_script(S) if public else ''
+        doc = f'''<!doctype html><html lang="en"><head>{robots}<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{wc}{extra}<title>{esc(title)}</title><meta name="description" content="{esc(desc)}"><link rel="icon" href="/favicon.png"><link rel="canonical" href="{esc(canon)}">{''.join(og)}<style>{CSS}</style>
+{scripts}</head><body>{gtm_ns}{px}{banner}
 <header class="top"><div class="wrap hd"><a href="/" class="logo"><img src="{S["logo"]}" alt="{logo_alt}" fetchpriority="high"></a><nav>{navl}</nav><a class="btn btn-call" href="tel:{TEL}">📞 {PH}</a></div><nav class="mnav" aria-label="Sections"><a href="/how-it-works/">How It Works</a><a href="/reviews/">Reviews</a><a href="/faq/">FAQ</a></nav></header>
 <main>{body}</main>
 <footer class="ft"><div class="wrap fg"><div><img src="{S["logo"]}" alt="" class="inv" loading="lazy"><p>{S["footer"]["about"]}</p><p><a href="tel:{TEL}">{PH}</a> · call or text</p></div>

@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const test = require("node:test");
 const flow = require("./two-stage.js");
+const pixels = require("./pixels.js");
 const producer = require("../netlify/functions/intake-producer.js");
 
 const contact = { name: "TEST LEAD", address: "100 Example Ave", phone: "5550100199", email: "test.lead@example.com" };
@@ -1681,4 +1682,136 @@ test("a new contact submit after a reserved intake shows enrich and can reserve"
     assert.equal(hooks.length, 2);
     assert.equal(ui.error.hidden, true);
   });
+});
+
+test("a reserved public completion notifies pixels once, and a failed reserve does not", () => {
+  const calls = [];
+  globalThis.FSHOPixels = { onReserved(id) { calls.push(id); } };
+  try {
+    const quiet = run();
+    quiet.session.submitContact(contact);
+    quiet.session.answer("type", "sfh");
+    quiet.session.answer("ownership", "sole_owner");
+    assert.deepEqual(calls, []);
+
+    const dataLayer = [];
+    const local = memory();
+    const sessionStore = memory();
+    const tag = { loaded: false, load() { this.loaded = true; } };
+    const condo = flow.createFlow(flow.createMockAdapter(), tag, {
+      localStorage: memory(), sessionStorage: memory(), dataLayer: [], publicForm: true
+    });
+    condo.submitContact(contact);
+    condo.answer("type", "condo");
+    assert.deepEqual(calls, []);
+    const again = flow.createFlow(flow.createMockAdapter(), tag, {
+      localStorage: memory(), sessionStorage: memory(), dataLayer: [], publicForm: true
+    });
+    again.submitContact(contact);
+    again.answer("type", "sfh");
+    again.adapter.reserve = () => ({ ok: false, status: "held" });
+    const held = again.answer("ownership", "sole_owner");
+    assert.equal(held.ok, false);
+    assert.deepEqual(calls, []);
+    const adapter = flow.createMockAdapter();
+    const pub = flow.createFlow(adapter, tag, {
+      localStorage: local, sessionStorage: sessionStore, dataLayer, publicForm: true
+    });
+    pub.submitContact(contact);
+    pub.answer("type", "sfh");
+    const hot = pub.answer("ownership", "sole_owner");
+    assert.equal(hot.ok, true);
+    assert.deepEqual(calls, [pub.state.leadId]);
+    pub.answer("occupancy", "owner");
+    assert.deepEqual(calls, [pub.state.leadId]);
+    const second = flow.createFlow(flow.createMockAdapter(), { loaded: false, load() { this.loaded = true; } }, {
+      localStorage: local, sessionStorage: sessionStore, dataLayer, publicForm: true
+    });
+    second.submitContact(contact);
+    second.answer("type", "multi_2_4");
+    second.answer("ownership", "all_agree");
+    assert.deepEqual(calls, [pub.state.leadId]);
+    globalThis.FSHOPixels = { onReserved() { throw new Error("pixel down"); } };
+    const noisy = flow.createFlow(flow.createMockAdapter(), tag, {
+      localStorage: memory(), sessionStorage: memory(), dataLayer: [], publicForm: true
+    });
+    noisy.submitContact(contact);
+    noisy.answer("type", "sfh");
+    const still = noisy.answer("ownership", "decision_maker");
+    assert.equal(still.ok, true);
+    assert.equal(still.view.branch, "hot");
+  } finally {
+    delete globalThis.FSHOPixels;
+  }
+});
+
+test("pixel conversions dedupe on lead id and click-to-call does not load gtag", () => {
+  const src = fs.readFileSync(path.join(__dirname, "pixels.js"), "utf8");
+  for (const needle of ["/step-2", "/thank-you", "pagePath", "location.pathname", "gtag/js", 'gtag("config"', "gtag('config'"]) {
+    assert.equal(src.includes(needle), false, needle);
+  }
+  const store = memory();
+  const fbqCalls = [];
+  const oaiqCalls = [];
+  const scripts = [];
+  const root = {
+    fbq: (...args) => fbqCalls.push(args),
+    oaiq: (...args) => oaiqCalls.push(args),
+    document: {
+      head: { appendChild(node) { scripts.push(node); } },
+      createElement() { return { async: false, type: "", src: "" }; }
+    }
+  };
+  const cfg = { adsCallSendTo: "AW-16781895992/YrLzCKa9g4sdELjSncI-", clickceaseConversion: "https://www.clickcease.com/monitor/cccontrack.js" };
+  const first = pixels.createTracker(cfg, { window: root, sessionStorage: store, setInterval() { return 1; }, clearInterval() {} });
+  first.onReserved("");
+  first.onReserved("lead-1");
+  first.onReserved("lead-1");
+  assert.equal(root.ccConVal, 0);
+  assert.equal(scripts.length, 1);
+  assert.equal(scripts[0].async, true);
+  assert.equal(scripts[0].src, cfg.clickceaseConversion);
+  assert.deepEqual(fbqCalls, [["track", "Lead", {}, { eventID: "lead-1" }]]);
+  assert.equal(oaiqCalls[0][0], "measure");
+  assert.equal(oaiqCalls[0][1], "lead_created");
+  assert.deepEqual(oaiqCalls[0][2], { type: "customer_action" });
+  assert.deepEqual(oaiqCalls[0][3], { event_id: "lead-1" });
+  assert.equal(oaiqCalls[1][1], "custom");
+  assert.equal(oaiqCalls[1][3].custom_event_name, "seller_form_completed");
+  assert.equal(oaiqCalls[1][3].event_id, "lead-1:seller_form_completed");
+  first.onReserved("lead-2");
+  assert.equal(fbqCalls.length, 2);
+  assert.equal(scripts.length, 1);
+  const reloaded = pixels.createTracker(cfg, { window: root, sessionStorage: store });
+  reloaded.onReserved("lead-1");
+  reloaded.onReserved("lead-2");
+  assert.equal(fbqCalls.length, 2);
+
+  const sent = [];
+  const page = { dataLayer: [] };
+  const queued = pixels.createTracker(cfg, {
+    window: page,
+    sessionStorage: memory(),
+    setInterval() { return 7; },
+    clearInterval() {}
+  });
+  const anchor = { getAttribute: (name) => name === "href" ? "tel:+19106366669" : "" };
+  queued.onClick({ target: { closest: (sel) => sel === "a" ? anchor : null } });
+  assert.deepEqual(page.dataLayer, [{ event: "click_to_call" }]);
+  assert.equal(JSON.stringify(page.dataLayer).includes("636-6669"), false);
+  assert.equal(typeof page.gtag, "undefined");
+  page.gtag = (command, name, payload) => sent.push([command, name, payload]);
+  queued.flush();
+  assert.deepEqual(sent, [["event", "conversion", {
+    send_to: "AW-16781895992/YrLzCKa9g4sdELjSncI-",
+    value: 1.0,
+    currency: "USD",
+    transport_type: "beacon"
+  }]]);
+  queued.onClick({ target: { closest: () => anchor } });
+  queued.flush();
+  assert.equal(sent.length, 2);
+  assert.equal(sent.some((row) => row[1] === "config" || row[0] === "config"), false);
+  queued.onClick({ target: { closest: () => ({ getAttribute: () => "/faq/" }) } });
+  assert.equal(page.dataLayer.length, 2);
 });

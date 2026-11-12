@@ -47,9 +47,9 @@ Status key:
 | 35 | Redirects (301) | Covered | `content/redirects.json` → forced Netlify rules + stubs. |
 | 36 | Scripts: GTM | Covered | `gtm_id`, loads after window load when `tracking: true`. |
 | 37 | Scripts: second GTM container (GTM-WWPZRDH) | Drop | Duplicate container; consolidate into one (confirm with Ads owner). |
-| 38 | Scripts: ClickCease | Covered | `clickcease_id` (empty, ID TBD). |
-| 39 | Scripts: GA4 | Covered | Via GTM (Carrot GA4 field was empty). |
-| 40 | Scripts: Google Ads tag AW-16781895992 / Meta Pixel | Covered | Via GTM, not hardcoded. Needs confirmation they exist in the container. |
+| 38 | Scripts: ClickCease | Covered | Official visitor snippet is in the head (`stat.js` plus the stats noscript image). `cccontrack.js` loads only after a reserved public `seller_form_completed`, with `ccConVal = 0`. `clickcease_id` stays empty so the footer demo does not load `stat.js` a second time. |
+| 39 | Scripts: GA4 | Covered | Via the existing GTM container. No second `gtag.js`. |
+| 40 | Scripts: Google Ads tag AW-16781895992 / Meta Pixel | Covered | No standalone `gtag.js` and no `gtag('config')`. A `tel:` tap sends `AW-16781895992/YrLzCKa9g4sdELjSncI-` only when `gtag` already exists. Meta Pixel `959620977142967` inits with PageView. `Lead` fires once per lead id on reserved public completion, not on `/step-2` or `/thank-you`. OpenAI Pixel `AMsRexCaeaxScDiV9SGJcP` inits in the head and measures `lead_created` plus custom `seller_form_completed` on that same path. |
 | 41 | Arbitrary header/footer script injection | Drop | Speed risk; changes go through GTM with approval. |
 | 42 | Call tracking / dynamic number swap | Schema | Live site swaps to (910) 227-3134 via JS. Add optional `tracking_phone` swap only if approved; default (910) 636-6669. |
 | 43 | Testimonials (text) | Covered | `site.json testimonials`; per-market overrides. |
@@ -102,7 +102,8 @@ Done (preview is off; the homepage two-stage form posts through intake-producer 
 7. **Form 1 fields in schema** (#18). Real Form 6 fields (#16) still wait until confirmed.
 8. **Static reviews** (#45): `reviews[]` + `{{reviews}}`. No quotes invented.
 9. **Per-page CTA wiring** (#6) and optional `canonical` override (#29). Pages without the hero form send the cash-offer button and the sticky Get Offer control to `/#offer`. Pages with the form keep `#offer`.
-- **WhatConverts profile 176490** is on for generated public pages. The official inline snapshot is in the head; `176490.js` is deferred. `tracking` (GTM and ClickCease) stays false. `/test-intake/` and redirect stubs are excluded.
+- **WhatConverts profile 176490** is on for generated public pages. The official inline snapshot is in the head; `176490.js` is deferred. `/test-intake/` and redirect stubs are excluded.
+- **Approved pixels** (ClickCease visitor monitoring, GTM noscript for `GTM-WWPBQGDZ`, Meta PageView, OpenAI init) are on those same public pages. `tracking` stays false so the footer demo does not load a second container. Conversions wait for a reserved public form completion. The Carrot footer JSON-LD, gclid writer, and google-site-verification meta are not included.
 
 Still open:
 
