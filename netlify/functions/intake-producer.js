@@ -217,6 +217,21 @@ function publicBody(edge) {
   return out;
 }
 
+function stampHotClaim(out, by) {
+  if (!out || typeof out !== "object" || out.ok === false) return out;
+  if (out.tier === "hot" || out.tier === "follow_up") return out;
+  if (out.status === "already_claimed" || out.status === "not_qualified" || out.status === "not_non_owner" || out.status === "bad_input") return out;
+  const priorityHot = out.priority_tier === "p1" || out.priority_tier === "p2" || out.priority_tier === "p3";
+  const openClaim = out.status == null || out.status === "" || out.status === "claimed";
+  const claimed = out.claimed !== false && (out.status === "claimed" || out.claimed === true);
+  if (!(priorityHot || (by === "promote" && claimed && openClaim))) return out;
+  out.tier = "hot";
+  out.claimed = true;
+  out.ok = true;
+  if (out.status == null || out.status === "") out.status = "claimed";
+  return out;
+}
+
 async function readEdge(res) {
   const status = res && res.status ? res.status : 0;
   let body = {};
@@ -329,6 +344,7 @@ async function handle(event, deps) {
     payload.enrichment = checked.enrichment;
   } else if (op === "reserve") {
     if (!state.contact) return respond(env, state, 400, { ok: false, status: "bad_input", fields: ["contact"] });
+    if (state.zap_sent === true) return respond(env, state, 200, { ok: true, status: "idempotent_replay" });
     payload = Object.assign({}, state.tracking);
   }
 
@@ -383,7 +399,10 @@ async function handle(event, deps) {
   }
   const extra = {};
   if (result.retry) extra["retry-after"] = result.retry;
-  return respond(env, state, result.status || 502, publicBody(result.body), extra);
+  let published = publicBody(result.body);
+  if (op === "claim" && (result.status || 0) === 200) published = stampHotClaim(published, input.by);
+  if (op === "claim" && published.status === "already_claimed" && state.zap_sent === true) published.reserved = true;
+  return respond(env, state, result.status || 502, published, extra);
 }
 
 function hookOk(hook) {

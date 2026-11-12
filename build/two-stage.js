@@ -117,6 +117,11 @@
         var res = { ok: true, status: "saved", priority_tier: tierOrNull(enrichment) };
         log.push({ op: "enrich", req: Object.assign({}, req, { enrichment: enrichment }), res: res });
         return res;
+      },
+      reserve: function (req) {
+        var res = { ok: true, status: "dispatch_intended_committed" };
+        log.push({ op: "reserve", req: req, res: res });
+        return res;
       }
     };
   }
@@ -364,7 +369,26 @@
     function retryOwnership() {
       state.stage = "q_ownership";
       state.googleTagFired = false;
+      state.sorry = null;
+      state.followup = null;
+      state.thanks = null;
       return { ok: false, error: "try_again", view: snapshot(state) };
+    }
+    function showClaimedThanks(alreadyReserved) {
+      state.branch = "stopped";
+      state.downstream = "staying_parked";
+      state.stage = "thanks";
+      state.sorry = null;
+      state.followup = null;
+      state.thanks = THANKS;
+      state.googleTagFired = false;
+      adapter.branch("stopped");
+      adapter.google(false);
+      adapter.downstream("staying_parked");
+      note(state, "google", "Google tag not loaded.");
+      note(state, "downstream", "Expected path: " + PATHS.staying_parked);
+      note(state, "thanks", alreadyReserved ? "Already claimed and already reserved. Thanks screen. No reserve and no Zap." : "Already claimed. Reserve succeeded. Thanks screen.");
+      return { ok: true, view: snapshot(state) };
     }
     function recordAnswer(question, value) {
       if (typeof adapter.answer !== "function") return { ok: true };
@@ -388,8 +412,12 @@
       if (res.priority_tier) { state.serverTier = res.priority_tier; state.tierPending = false; }
       else if (res.priority_tier === null) { state.serverTier = ""; state.tierPending = true; }
       if (res.status === "already_claimed") {
-        note(state, "server", "Server already claimed this lead. Stop. No reserve and no Zap.");
-        return "stopped";
+        if (res.reserved === true || state.reserveCommitted) {
+          note(state, "server", "Server already claimed this lead. Reserve already succeeded. Stop. No reserve and no Zap.");
+          return "stopped";
+        }
+        note(state, "server", "Server already claimed this lead. Reserve has not succeeded.");
+        return "reserve_again";
       }
       if (res.ok === false && (res.status === "not_qualified" || res.status === "not_non_owner" || res.status === "bad_input")) {
         note(state, "server", "Server said " + res.status + ". The client screen hint was " + hint + ". Following the server.");
@@ -406,11 +434,36 @@
       return serverBranch;
       });
     }
+    function reserveAccepted(res) {
+      if (!res || res.ok === false) return false;
+      if (typeof res.http === "number" && (res.http < 200 || res.http >= 300)) return false;
+      var status = String(res.status || "");
+      return status === "dispatch_intended_committed" || status === "idempotent_replay" || status === "reserved";
+    }
     function sendReserve() {
-      if (typeof adapter.reserve !== "function") return;
-      return chain(adapter.reserve(Object.assign(trackingFields(), { destination: "crm_create", stage: "final" })), function (res) {
-        res = res || {};
-        note(state, "reserve", res.ok === false ? "Reserve returned " + (res.status || "held") + "." : "Reserve committed. Owner token stays off this trace.");
+      if (typeof adapter.reserve !== "function") {
+        note(state, "reserve", "Reserve was not called.");
+        return false;
+      }
+      var pending;
+      try {
+        pending = adapter.reserve(Object.assign(trackingFields(), { destination: "crm_create", stage: "final" }));
+      } catch (e) {
+        note(state, "reserve", "Reserve did not finish.");
+        return false;
+      }
+      return settle(pending, function (res) {
+        var accepted = reserveAccepted(res);
+        if (accepted) {
+          state.reserveCommitted = true;
+          note(state, "reserve", "Reserve committed. Owner token stays off this trace.");
+        } else {
+          note(state, "reserve", "Reserve returned " + ((res && res.status) || "held") + ".");
+        }
+        return accepted;
+      }, function () {
+        note(state, "reserve", "Reserve did not finish.");
+        return false;
       });
     }
     function applyTier(res) {
@@ -569,34 +622,23 @@
             try { decidedClaim = decideClaim(hint, owner ? "promote" : "non_owner"); }
             catch (e) { return retryOwnership(); }
             return settle(decidedClaim, function (decided) {
-              if (decided === "hot") {
-                state.googleTagFired = true;
-                gate.load();
-                emit("ownership", { ownership: value, signal: conversionName(state.answers) });
-                finish("hot", "zap_hot", "Google tag fired after owner=yes. Dry-run did not request the tag script.");
-                return chain(sendReserve(), function () { return { ok: true, view: snapshot(state) }; });
+              if (decided === "hot" || decided === "reserve_again") {
+                return chain(sendReserve(), function (committed) {
+                  if (!committed) return retryOwnership();
+                  if (decided === "reserve_again") return showClaimedThanks(false);
+                  state.googleTagFired = true;
+                  gate.load();
+                  emit("ownership", { ownership: value, signal: conversionName(state.answers) });
+                  finish("hot", "zap_hot", "Google tag fired after owner=yes. Dry-run did not request the tag script.");
+                  return { ok: true, view: snapshot(state) };
+                });
               }
               if (decided === "quiet_non_owner") {
                 emit("ownership", { ownership: value, signal: "seller_form_disqualified", reason: "not_owner" });
                 finish("quiet_non_owner", "crm_follow_up", "Google tag not loaded.");
                 return { ok: true, view: snapshot(state) };
               }
-              if (decided === "stopped") {
-                state.branch = "stopped";
-                state.downstream = "staying_parked";
-                state.stage = "thanks";
-                state.sorry = null;
-                state.followup = null;
-                state.thanks = THANKS;
-                state.googleTagFired = false;
-                adapter.branch("stopped");
-                adapter.google(false);
-                adapter.downstream("staying_parked");
-                note(state, "google", "Google tag not loaded.");
-                note(state, "downstream", "Expected path: " + PATHS.staying_parked);
-                note(state, "thanks", "Already claimed. Thanks screen. No reserve and no Zap.");
-                return { ok: true, view: snapshot(state) };
-              }
+              if (decided === "stopped") return showClaimedThanks(true);
               return retryOwnership();
             }, retryOwnership);
           });
