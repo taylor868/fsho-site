@@ -49,7 +49,7 @@
   };
   var THANKS = {
     headline: "Thanks. We have your info.",
-    body: "Your answers are saved with this lead. That's everything we need for now."
+    body: "Thanks for filling out your info. Our team will reach out soon."
   };
   var QUESTIONS = {
     type: ["What kind of property is it?", [["sfh", "Single-family house"], ["townhouse", "Townhouse"], ["multi_2_4", "Multi-family (2-4 units)"], ["condo", "Condo"], ["mobile", "Mobile or manufactured home"], ["land", "Vacant land"]]],
