@@ -478,8 +478,9 @@
         var phone = contact && String(contact.phone || "").trim();
         var email = contact && String(contact.email || "").trim();
         if (!name || !address || !phone || !email) return { ok: false, error: "contact_required" };
-        state.contact = { name: name, address: address, phone: phone, email: email };
-        return chain(adapter.park(Object.assign(basePayload("contact"), { name: name, address: address, phone: phone, email: email, status: "parked" })), function (parked) {
+        var consent = contact.consent === true;
+        state.contact = { name: name, address: address, phone: phone, email: email, consent: consent };
+        return chain(adapter.park(Object.assign(basePayload("contact"), { name: name, address: address, phone: phone, email: email, consent: consent, status: "parked" })), function (parked) {
           if (parked && (parked.ok === false || (typeof parked.http === "number" && (parked.http < 200 || parked.http >= 300)))) {
             state.parked = false;
             state.stage = "contact";
@@ -717,7 +718,8 @@
             address_line: row.address_line || row.address || "",
             phone: row.phone || "",
             email: row.email || "",
-            is_test: options.isTest === true
+            is_test: options.isTest === true,
+            consent: row.consent === true
           }));
         },
         answer: function (req) {
@@ -764,6 +766,7 @@
         var phone = String(row.phone || "").replace(/\D/g, "");
         if (phone) payload.phone = phone;
         if (row.email) payload.email = row.email;
+        payload.consent = row.consent === true;
         signedIp(payload);
         return envelope("partial", payload).then(function (env) {
           return post("/intake-park/park", { envelope: env, session_binding: ids.binding, payload: payload });
@@ -1085,10 +1088,31 @@ function boot(api) {
   form.onsubmit = function (e) {
     e.preventDefault();
     var data = new FormData(form);
+    var box = form.querySelector('input[name="consent"]');
     runStep(function () {
-      return flow.submitContact({ name: data.get("name"), address: data.get("address"), phone: data.get("phone"), email: data.get("email") });
+      return flow.submitContact({ name: data.get("name"), address: data.get("address"), phone: data.get("phone"), email: data.get("email"), consent: !!(box && box.checked) });
     });
   };
+  applyConsentSize();
+  function applyConsentSize() {
+    var preview = false;
+    try { preview = String(globalThis.FSHO_CONSENT_PREVIEW || "") === "1"; } catch (err) {}
+    var size = "8";
+    if (preview) {
+      try {
+        var picked = new URLSearchParams(location.search).get("consent-size");
+        if (picked === "7" || picked === "7.5" || picked === "8") size = picked;
+      } catch (err) {}
+    }
+    var nodes = form.querySelectorAll("label.consent");
+    for (var i = 0; i < nodes.length; i++) nodes[i].setAttribute("data-consent-size", size);
+    if (!preview) return;
+    var picks = document.querySelectorAll("[data-consent-pick]");
+    for (var j = 0; j < picks.length; j++) {
+      if (picks[j].getAttribute("data-consent-pick") === size) picks[j].setAttribute("aria-current", "true");
+      else picks[j].removeAttribute("aria-current");
+    }
+  }
   armGtm(api.CONFIG.gtm_id || api.TRACKING.gtm_id);
   function armGtm(id) {
     if (!id || id === "GTM-PLACEHOLDER") return;

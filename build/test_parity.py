@@ -508,9 +508,11 @@ cta_label: "Page specific heading"
         self.assertNotIn('House address', home)
         self.assertIn('var FSHO={endpoint:""', home)
         ohio_form = (Path(gen.OUT) / 'sell-your-house-fast-in-ohio' / 'index.html').read_text(encoding='utf-8')
-        self.assertIn('<label>House address<input name="address" type="text" autocomplete="street-address" placeholder="123 Main St, City, State" required></label>', ohio_form)
-        self.assertIn('<div class="row"><label>First name<input name="first" type="text" autocomplete="given-name" required></label><label>Last name<input name="last" type="text" autocomplete="family-name"></label></div>', ohio_form)
-        self.assertIn('name="form_id" value="1"', ohio_form)
+        self.assertIn('data-public="1"', ohio_form)
+        self.assertIn('id="ts-form"', ohio_form)
+        self.assertNotIn('action="/step-2/"', ohio_form)
+        self.assertNotIn('name="form_id" value="1"', ohio_form)
+        self.assertNotIn('House address', ohio_form)
         cta = (Path(gen.OUT) / 'cta-page' / 'index.html').read_text(encoding='utf-8')
         self.assertIn('<h2>Page specific heading</h2>', cta)
         self.assertIn('<h2>Explicit heading</h2>', cta)
@@ -542,6 +544,148 @@ cta_label: "Page specific heading"
         self.save_site(data, path)
         errors, _warns = self.check()
         self.assertTrue(any('pair "broken" must be exactly two consecutive fields' in e for e in errors), errors)
+
+
+    def test_public_two_stage_consent_profiles_and_sotellus(self):
+        google = 'https://share.google/xhED38I3oGqYAQE21'
+        facebook = 'https://www.facebook.com/profile.php?id=61581144807978'
+        bbb = 'https://www.bbb.org/us/mi/rockford/profile/real-estate-investing/fair-and-simple-home-offer-0372-38321834'
+        bbb_reviews = bbb + '/customer-reviews'
+        link = 'target="_blank" rel="noopener noreferrer"'
+        disclosure = 'Consent isn\u2019t required to buy or sell'
+        self.build(live=False)
+        pages = {
+            'index.html': Path(gen.OUT) / 'index.html',
+            'how-it-works': Path(gen.OUT) / 'how-it-works' / 'index.html',
+            'contact-us': Path(gen.OUT) / 'contact-us' / 'index.html',
+            'stop-foreclosure': Path(gen.OUT) / 'stop-foreclosure' / 'index.html',
+            'north-carolina': Path(gen.OUT) / 'sell-your-house-fast-in-north-carolina' / 'index.html',
+        }
+        markets = list((self.root / 'content' / 'markets').glob('*.json'))
+        self.assertEqual(len(markets), 39)
+        for market in markets:
+            slug = json.loads(market.read_text(encoding='utf-8'))['slug']
+            pages[slug] = Path(gen.OUT) / slug / 'index.html'
+        phone = 'tel:+19106366669'
+        for name, path in pages.items():
+            html = path.read_text(encoding='utf-8')
+            self.assertIn('data-public="1"', html, name)
+            self.assertIn('id="ts-form"', html, name)
+            self.assertIn('is_test: options.isTest === true', html, name)
+            self.assertIn('chooseAdapter({ isTest: testOn })', html, name)
+            self.assertIn('window.FSHO_CONSENT_PREVIEW=""', html, name)
+            self.assertNotIn('action="/step-2/"', html, name)
+            self.assertNotIn('class="consent-sizes"', html, name)
+            self.assertIn(phone, html, name)
+            box = re.search(r'<label class="consent" data-consent-size="8"><input type="checkbox" name="consent">(.*?)</label>', html)
+            self.assertIsNotNone(box, name)
+            self.assertNotIn('required', box.group(0).split('</label>')[0].split('<small>')[0], name)
+            self.assertNotIn('checked', box.group(0).split('<small>')[0], name)
+            self.assertIn(disclosure, box.group(0), name)
+            self.assertIn('href="/text-messaging-terms/"', box.group(0), name)
+            self.assertIn('href="/privacy/"', box.group(0), name)
+            self.assertIn('font-size:7px', html, name)
+            self.assertIn('font-size:7.5px', html, name)
+            self.assertIn('font-size:8px', html, name)
+            self.assertIn(f'href="{google}" {link}', html, name)
+            self.assertIn(f'href="{facebook}" {link}', html, name)
+            self.assertIn(f'href="{bbb}" {link}', html, name)
+        quiet = {
+            'faq': Path(gen.OUT) / 'faq' / 'index.html',
+            'our-company': Path(gen.OUT) / 'our-company' / 'index.html',
+            'privacy': Path(gen.OUT) / 'privacy' / 'index.html',
+            'step-2': Path(gen.OUT) / 'step-2' / 'index.html',
+        }
+        for name, path in quiet.items():
+            html = path.read_text(encoding='utf-8')
+            self.assertNotIn('data-public="1"', html, name)
+            self.assertNotIn('id="ts-form"', html, name)
+        faq = quiet['faq'].read_text(encoding='utf-8')
+        company = quiet['our-company'].read_text(encoding='utf-8')
+        for html in (faq, company):
+            self.assertIn(f'href="{google}" {link}', html)
+            self.assertIn(f'href="{facebook}" {link}', html)
+            self.assertIn(f'href="{bbb}" {link}', html)
+        step2 = quiet['step-2'].read_text(encoding='utf-8')
+        self.assertIn('id="qf"', step2)
+        privacy = quiet['privacy'].read_text(encoding='utf-8')
+        terms = (Path(gen.OUT) / 'terms-conditions' / 'index.html').read_text(encoding='utf-8')
+        sms = (Path(gen.OUT) / 'text-messaging-terms' / 'index.html').read_text(encoding='utf-8')
+        help_line = 'email offer@fairandsimplehomeoffer.com.'
+        for html in (privacy, terms, sms):
+            self.assertNotIn('PLACEHOLDER', html)
+            self.assertNotIn('(888) 892-3602', html)
+            self.assertNotIn('info@fairandsimplehomeoffer.com', html)
+            self.assertNotIn('andrew@fairandsimplehomeoffer.com', html)
+            self.assertIn(help_line, html)
+            self.assertIn('href="/privacy/"', html)
+            self.assertIn('Google Analytics', html) if html is privacy else None
+        self.assertEqual(privacy.count(help_line), 1)
+        self.assertEqual(terms.count(help_line), 2)
+        self.assertEqual(sms.count(help_line), 2)
+        self.assertIn('using Google Analytics', privacy)
+        self.assertIn('Google Adwords tracking cookie', privacy)
+        self.assertIn('Google AdWords remarketing service', privacy)
+        self.assertIn('href="/contact-us/"', privacy)
+        self.assertIn('https://fsho.co/', terms)
+        self.assertNotIn('fairandsimplehomeoffer.com/', terms)
+        self.assertIn('href="tel:+19106366669">(910) 636-6669</a>', terms)
+        self.assertIn('Text Messaging Terms/ SMS Terms', sms)
+        self.assertNotIn('tel:+1888', terms)
+        reviews = (Path(gen.OUT) / 'reviews' / 'index.html').read_text(encoding='utf-8')
+        self.assertNotIn('id="ts-form"', reviews)
+        self.assertIn(f'href="{google}" {link}', reviews)
+        self.assertIn(f'href="{facebook}" {link}', reviews)
+        self.assertIn(f'href="{bbb}" {link}', reviews)
+        self.assertIn(f'href="{bbb_reviews}" {link}', reviews)
+        self.assertIn('fair-and-simple-home-offer', reviews)
+        self.assertEqual(len(re.findall(r'<iframe\b[^>]*sotellus\.com/widgets/stu-react-reviews-header', reviews)), 1)
+        self.assertEqual(len(re.findall(r'<iframe\b[^>]*sotellus\.com/widgets/stu-react-reviews-slider', reviews)), 1)
+        self.assertIn('title="Fair and Simple Home Offer review summary"', reviews)
+        self.assertIn('title="Fair and Simple Home Offer reviews"', reviews)
+        self.assertIn('loading="lazy"', reviews)
+        self.assertIn('height="480"', reviews)
+        self.assertIn('style="border:0"', reviews)
+        self.assertIsNone(re.search(r'<script[^>]+sotellus\.com', reviews))
+        self.assertIsNone(re.search(r'<script[^>]+src="https://www\.googletagmanager\.com/gtm\.js', reviews))
+        home = pages['index.html'].read_text(encoding='utf-8')
+        self.assertNotIn('sotellus.com', home)
+        test_page = (Path(gen.OUT) / 'test-intake' / 'index.html').read_text(encoding='utf-8')
+        self.assertNotIn('data-public="1"', test_page)
+        test_box = re.search(r'<label class="consent" data-consent-size="8"><input type="checkbox" name="consent">', test_page)
+        self.assertIsNotNone(test_box)
+        self.assertNotIn('required', test_box.group(0))
+        self.assertNotIn('checked', test_box.group(0))
+        self.assertIn(disclosure, test_page)
+
+        os.environ['CONTEXT'] = 'deploy-preview'
+        self.build(live=False)
+        home = (Path(gen.OUT) / 'index.html').read_text(encoding='utf-8')
+        contact = (Path(gen.OUT) / 'contact-us' / 'index.html').read_text(encoding='utf-8')
+        nc = (Path(gen.OUT) / 'sell-your-house-fast-in-north-carolina' / 'index.html').read_text(encoding='utf-8')
+        how = (Path(gen.OUT) / 'how-it-works' / 'index.html').read_text(encoding='utf-8')
+        for html in (home, contact):
+            self.assertIn('window.FSHO_CONSENT_PREVIEW="1"', html)
+            self.assertIn('class="consent-sizes"', html)
+            self.assertIn('data-consent-size="7"', html)
+            self.assertIn('data-consent-size="7.5"', html)
+            self.assertIn('data-consent-size="8"', html)
+            self.assertIn('href="?consent-size=7"', html)
+            self.assertIn('href="?consent-size=7.5"', html)
+            self.assertIn('href="?consent-size=8"', html)
+            self.assertEqual(len(re.findall(r'<input type="checkbox" name="consent"', html)), 1)
+        for html in (nc, how):
+            self.assertIn('window.FSHO_CONSENT_PREVIEW="1"', html)
+            self.assertIn('data-public="1"', html)
+            self.assertNotIn('class="consent-sizes"', html)
+            self.assertEqual(len(re.findall(r'<input type="checkbox" name="consent"', html)), 1)
+        os.environ['CONTEXT'] = 'production'
+        self.build(live=False)
+        prod = (Path(gen.OUT) / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('window.FSHO_CONSENT_PREVIEW=""', prod)
+        self.assertNotIn('class="consent-sizes"', prod)
+        self.assertIn('data-public="1"', prod)
+        self.assertIn('data-consent-size="8"', prod)
 
 
 if __name__ == '__main__':

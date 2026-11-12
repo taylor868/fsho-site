@@ -462,6 +462,9 @@ def check(site, pages, markets, redirects, errs):
     for c in ('orange', 'navy'):
         if not re.fullmatch(r'#[0-9A-Fa-f]{6}', str(site.get('brand', {}).get(c, ''))): E.append(f'content/site.json: brand.{c} must be #RRGGBB')
     if not re.fullmatch(r'\+1\d{10}', str(site.get('tel', ''))): E.append('content/site.json: tel must be +1XXXXXXXXXX')
+    consent = site.get('consent')
+    if not isinstance(consent, str) or 'Consent isn\u2019t required to buy or sell' not in consent or 'msg &amp; data rates' not in consent:
+        E.append('content/site.json: consent must keep the approved communication disclosure')
     for f in site.get('faq', []):
         if not f.get('q') or not f.get('a'): E.append('content/site.json: faq item needs q and a')
     check_form1(site, E)
@@ -536,6 +539,23 @@ def build(site, pages, markets, redirects, live):
         c = QC.get('consent', {})
         if not c.get('enabled'): return ''
         return f'<label class="chk"><input type="checkbox" name="consent"{" required" if c.get("required") else ""}> <small>{c["text"]} <a href="/text-messaging-terms/">Text Terms</a> · <a href="/privacy/">Privacy</a></small></label>'
+    def stage_boot(ctx, real_flag, src):
+        preview_flag = '1' if ctx == 'deploy-preview' else ''
+        return f'<script>window.FSHO_DEPLOY_CONTEXT="{ctx}";window.FSHO_USE_REAL_ADAPTER="{real_flag}";window.FSHO_CONSENT_PREVIEW="{preview_flag}";</script><script>{src}</script>'
+    def consent_label(size='8', live=True):
+        extra = '' if live else ' disabled tabindex="-1"'
+        name = ' name="consent"' if live else ''
+        return (f'<label class="consent" data-consent-size="{size}"><input type="checkbox"{name}{extra}>'
+                f'<small>{S.get("consent") or ""} <a href="/text-messaging-terms/">Text Terms</a> · <a href="/privacy/">Privacy</a></small></label>')
+    def consent_compare():
+        rows = []
+        for size in ('7', '7.5', '8'):
+            rows.append('<div class="consent-size">'
+                        f'<span class="consent-size-tag">{size}px</span>'
+                        + consent_label(size, False)
+                        + f'<a class="consent-pick" data-consent-pick="{size}" href="?consent-size={size}">Use {size} on the form</a></div>')
+        return ('<div class="consent-sizes"><p class="consent-sizes-note">Disclosure size on this preview. The form uses 8px until you pick one.</p>'
+                + ''.join(rows) + '</div>')
     def two_stage_assets():
         ctx = deploy_context(live)
         real_flag = '1' if os.environ.get('FSHO_USE_REAL_ADAPTER') == '1' else ''
@@ -553,6 +573,7 @@ def build(site, pages, markets, redirects, live):
             '<label>Property address<input name="address" autocomplete="street-address" required></label>'
             '<label>Phone<input name="phone" type="tel" autocomplete="tel" required></label>'
             '<label>Email<input name="email" type="email" autocomplete="email" required></label>'
+            + consent_label() +
             '<button class="btn btn-o" type="submit">Park this lead</button></form>'
             '<div id="ts-sorry"></div><div id="ts-followup"></div><div id="ts-thanks"></div><div id="ts-ask"></div>'
             '<h2 id="ts-trace-title">Step trace</h2><p id="ts-summary" data-google="not-loaded" data-downstream="" data-priority=""></p>'
@@ -579,9 +600,16 @@ def build(site, pages, markets, redirects, live):
             '#ts-summary{font-size:15px;line-height:1.4}'
             '#ts-trace{margin:8px 0 0;padding-left:1.2em}'
             '#ts-trace li{margin:8px 0}'
+            '#ts-form label.consent{display:flex;align-items:flex-start;gap:6px;margin:8px 0 0;padding:0;font-weight:400;font-size:8px;line-height:1.3;color:#667}'
+            '#ts-form label.consent[data-consent-size="7"]{font-size:7px}'
+            '#ts-form label.consent[data-consent-size="7.5"]{font-size:7.5px}'
+            '#ts-form label.consent[data-consent-size="8"]{font-size:8px}'
+            '#ts-form label.consent input{display:inline-block;width:12px;height:12px;min-height:0;margin:0;padding:0;border:0;border-radius:2px;flex:0 0 auto}'
+            '#ts-form label.consent small{font-size:1em;line-height:1.3;font-weight:400;color:inherit}'
+            '#ts-form label.consent a{color:#3d5166;font-weight:600;text-decoration:underline;text-underline-offset:1px}'
             '@media(max-width:860px){#two-stage{padding-bottom:104px}}'
             '</style>'
-            f'<script>window.FSHO_DEPLOY_CONTEXT="{ctx}";window.FSHO_USE_REAL_ADAPTER="{real_flag}";</script><script>{src}</script></section>'
+            f'{stage_boot(ctx, real_flag, src)}</section>'
         )
     def qualifier_form():
         cfg = {k: QC[k] for k in ('id', 'version', 'start', 'result', 'endings') if k in QC}
@@ -629,7 +657,15 @@ def build(site, pages, markets, redirects, live):
         return ('<form class="lead step2" action="/thank-you/" method="post" novalidate><input type="hidden" name="form_id" value="6"><input type="hidden" name="address"><input type="hidden" name="phone"><input type="hidden" name="email">\n'
                 '<div class="lead-h"><strong>Almost done: tell us about the house</strong><span>Optional details help us make a more accurate offer faster.</span></div>\n'
                 + f + f'<button class="btn btn-o">Submit Details</button><p class="fine">Prefer to talk? Call/text <a href="tel:{TEL}">{PH}</a></p></form>')
-    def testis(lst): return ''.join(f'<blockquote class="testi">“{t["quote"]}”<cite>{t["name"]}</cite></blockquote>' for t in lst)
+    def testis(lst):
+        bits = []
+        for t in lst:
+            quote = t['quote']
+            url = t.get('source_url') or ''
+            if url:
+                quote = f'<a href="{esc(url)}" target="_blank" rel="noopener noreferrer">{quote}</a>'
+            bits.append(f'<blockquote class="testi">“{quote}”<cite>{t["name"]}</cite></blockquote>')
+        return ''.join(bits)
     def reviewsh(lst):
         bits = []
         for t in lst:
@@ -641,8 +677,9 @@ def build(site, pages, markets, redirects, live):
     def faqh(items, n=99): return '<div class="faq">' + ''.join(f'<details><summary>{f["q"]}</summary><p>{f["a"]}</p></details>' for f in items[:n]) + '</div>'
     def cta(h=None):
         c = S['cta']; return f'<section class="band"><div class="wrap"><h2>{h or c["heading"]}</h2><p>{c["text"]}</p><a class="btn btn-o" href="#offer">{c["button"]}</a> <a class="btn btn-w" href="tel:{TEL}">Call {PH}</a></div></section>'
-    def public_intake():
+    def public_intake(compare=False):
         ctx, real_flag, src = two_stage_assets()
+        sizes = consent_compare() if compare and ctx == 'deploy-preview' else ''
         return (
             '<div class="lead" id="two-stage"><div id="ts-app" data-public="1"><form id="ts-form" action="#" method="post">'
             '<div class="lead-h"><strong>Get your fair cash offer</strong><span>Takes about 60 seconds. No obligation.</span></div>'
@@ -650,6 +687,7 @@ def build(site, pages, markets, redirects, live):
             '<label>Property address<input name="address" autocomplete="street-address" required></label>'
             '<label>Phone<input name="phone" type="tel" autocomplete="tel" required></label>'
             '<label>Email<input name="email" type="email" autocomplete="email" required></label>'
+            + consent_label() +
             '<button class="btn btn-o" type="submit">Get My Offer</button>'
             f'<p class="fine">Your info stays private. Or call/text <a href="tel:{TEL}">{PH}</a></p></form>'
             '<div id="ts-sorry"></div><div id="ts-followup"></div><div id="ts-thanks"></div><div id="ts-ask"></div>'
@@ -657,10 +695,10 @@ def build(site, pages, markets, redirects, live):
             '<h2 id="ts-trace-title" hidden>Step trace</h2>'
             '<p id="ts-summary" hidden data-google="not-loaded" data-downstream="" data-priority=""></p>'
             '<p id="ts-events" hidden></p><ol id="ts-trace" hidden></ol></div>'
-            f'<script>window.FSHO_DEPLOY_CONTEXT="{ctx}";window.FSHO_USE_REAL_ADAPTER="{real_flag}";</script><script>{src}</script></div>'
+            + sizes + stage_boot(ctx, real_flag, src) + '</div>'
         )
-    def hero(h, sub, intake=False):
-        panel = public_intake() if intake else form()
+    def hero(h, sub, intake=False, compare=False):
+        panel = public_intake(compare=compare) if intake else form()
         return f'<section class="hero" id="offer"><div class="wrap hg"><div><p class="eyebrow">{S["hero_eyebrow"]}</p><h1>{h}</h1><p class="lede">{sub}</p>{trust}</div>{panel}</div></section>'
     sits = '<div class="grid3">' + ''.join(f'<div class="card"><div class="ic">{x["icon"]}</div><h3>{x["title"]}</h3><p>{x["text"]}</p></div>' for x in S['situations']) + '</div>'
     steps = '<div class="grid3 steps">' + ''.join(f'<div class="card"><b>{x["n"]}</b><h3>{x["title"]}</h3><p>{x["text"]}</p></div>' for x in S['steps']) + '</div>'
@@ -760,7 +798,9 @@ def build(site, pages, markets, redirects, live):
             path, file_rel, offer = '/404.html', '404.html', '/#offer'
         faq_items = p.get('faq') or S['faq']
         body = md(shortcodes(p['body'], faq_items, p.get('cta_label')))
-        if p['template'] in ('home', 'situation'): body = hero(p['hero_headline'], p['hero_sub'], intake=(p.get('template') == 'home' and not p.get('slug'))) + body
+        if p['template'] in ('home', 'situation'):
+            compare = (p.get('template') == 'home' and not p.get('slug')) or p.get('slug') == 'contact-us'
+            body = hero(p['hero_headline'], p['hero_sub'], intake=True, compare=compare) + body
         page(path, p['title'], p.get('meta_description') or '', body, bool(p.get('noindex', False) or p.get('draft')),
              canonical=p.get('canonical') or None, og_title=p.get('og_title') or None, og_image=p.get('og_image') or None,
              faq_ld=faq_ld_items(p.get('body'), p.get('faq'), S.get('faq')), file_rel=file_rel, offer_href=offer)
@@ -773,7 +813,7 @@ def build(site, pages, markets, redirects, live):
         s = m['state']; path = f'/{m["slug"]}/'
         cities = ('<p class="c">Cities we buy in: ' + ', '.join(m['cities']) + '</p>') if m.get('cities') else ''
         local = m.get('local_note') or f'[PLACEHOLDER: add a real {s} deal / local market note, if one exists.]'
-        body = (hero(m['headline'], m['hero_sub']) + f'<section class="wrap pad"><div class="qual">{S["qualifier"]}</div><h2 class="c">Common reasons {s} homeowners call us</h2>{sits}{cities}</section>'
+        body = (hero(m['headline'], m['hero_sub'], intake=True) + f'<section class="wrap pad"><div class="qual">{S["qualifier"]}</div><h2 class="c">Common reasons {s} homeowners call us</h2>{sits}{cities}</section>'
                 + f'<section class="alt"><div class="wrap pad"><h2 class="c">How it works in {s}</h2>{steps}</div></section>'
                 + f'<section class="wrap pad">{testis(m.get("testimonials") or S["testimonials"])}<div class="ph">{local}</div></section>' + cta(m.get('cta_label')))
         page(path, m['title'], m['meta_description'], body, bool(m.get('noindex', False) or m.get('draft')),

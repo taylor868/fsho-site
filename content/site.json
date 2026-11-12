@@ -18,7 +18,7 @@
     "endpoint": "",
     "crm": "fsho-crm",
     "endpoint_planned": "/.netlify/functions/create-lead",
-    "_note": "The homepage hero is the two-stage form. It posts to /.netlify/functions/intake-producer when the build env FSHO_USE_REAL_ADAPTER is 1. This older endpoint stays empty, so market and situation heroes and the qualifier do not post. The create-lead function and honeypot are on branch cursor/carrot-lead-routing-f5f7 and are awaiting verified CRM mapping (campaign, assignee, source). Do not put a CRM token or mapping ids in this file."
+    "_note": "Public heroes (homepage, situation pages, and state landers) use the two-stage form. It posts to /.netlify/functions/intake-producer when the build env FSHO_USE_REAL_ADAPTER is 1. This older endpoint stays empty. The create-lead function and honeypot are on branch cursor/carrot-lead-routing-f5f7 and are awaiting verified CRM mapping (campaign, assignee, source). Do not put a CRM token or mapping ids in this file."
   },
   "gtm_id": "GTM-WWPBQGDZ",
   "clickcease_id": "",
@@ -73,8 +73,8 @@
     "copyright": "© 2026 Fair &amp; Simple Home Offer. Not a licensed real estate brokerage unless stated; we buy property as principals. Submitting a form does not obligate you to sell."
   },
   "trust_badges": [
-    "⭐ 5-star rated on Google &amp; Facebook",
-    "🛡️ A+ BBB rating",
+    "⭐ 5-star rated on <a href=\"https://share.google/xhED38I3oGqYAQE21\" target=\"_blank\" rel=\"noopener noreferrer\">Google</a> &amp; <a href=\"https://www.facebook.com/profile.php?id=61581144807978\" target=\"_blank\" rel=\"noopener noreferrer\">Facebook</a>",
+    "🛡️ <a href=\"https://www.bbb.org/us/mi/rockford/profile/real-estate-investing/fair-and-simple-home-offer-0372-38321834\" target=\"_blank\" rel=\"noopener noreferrer\">A+ BBB rating</a>",
     "👨‍👩‍👧 Family-owned since 2017",
     "💵 No fees or commissions"
   ],
@@ -179,11 +179,12 @@
   "testimonials": [
     {
       "quote": "One of the easiest processes I have done. Very quick and extremely friendly. Contacted me through every step of the process highly recommend these guys.",
-      "name": "Brett C."
+      "name": "Brett C.",
+      "source_url": "https://www.bbb.org/us/mi/rockford/profile/real-estate-investing/fair-and-simple-home-offer-0372-38321834/customer-reviews"
     }
   ],
   "reviews": [],
-  "_reviews_note": "Static reviews for {{reviews}}. Each item is {quote, name, source, date}. Paste real reviews with permission only. Do not invent any. No third-party widget.",
+  "_reviews_note": "Static reviews for {{reviews}}. Each item is {quote, name, source, date}. Paste real reviews with permission only. Do not invent any. /reviews/ also embeds the official SoTellUs header and slider iframes. No other third-party review script.",
   "video_ids": [
     "k3iyV-hwVSs",
     "pwZIyFiirKQ",
@@ -220,7 +221,7 @@
     },
     {
       "q": "Is this legit?",
-      "a": "Yes. Fair &amp; Simple Home Offer is operated by Andrew Collier LLC, holds an A+ BBB rating, and is 5-star rated on Google and Facebook. Always compare offers. We encourage it."
+      "a": "Yes. Fair &amp; Simple Home Offer is operated by Andrew Collier LLC, holds an <a href=\"https://www.bbb.org/us/mi/rockford/profile/real-estate-investing/fair-and-simple-home-offer-0372-38321834\" target=\"_blank\" rel=\"noopener noreferrer\">A+ BBB rating</a>, and is 5-star rated on <a href=\"https://share.google/xhED38I3oGqYAQE21\" target=\"_blank\" rel=\"noopener noreferrer\">Google</a> and <a href=\"https://www.facebook.com/profile.php?id=61581144807978\" target=\"_blank\" rel=\"noopener noreferrer\">Facebook</a>. Always compare offers. We encourage it."
     }
   ],
   "cta": {
@@ -273,7 +274,7 @@
       "step": 2
     }
   ],
-  "_form1_note": "Older hero form (Carrot Form 1) on market and situation pages. Labels, required, and step only. gclid/UTM hidden fields stay in the generator. Stays off while lead_form.enabled is false. The homepage hero uses the two-stage form instead.",
+  "_form1_note": "Older hero form (Carrot Form 1). Labels, required, and step only. Public heroes use the two-stage form and do not post to /step-2/. gclid/UTM hidden fields stay in the generator. Stays off while lead_form.enabled is false.",
   "step2_fields": [
     {
       "name": "condition",
