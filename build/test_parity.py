@@ -504,31 +504,33 @@ faq:
         contact = (Path(gen.OUT) / 'contact-us' / 'index.html').read_text(encoding='utf-8')
         own = (Path(gen.OUT) / 'own-faq' / 'index.html').read_text(encoding='utf-8')
 
-        def assert_parity(doc, expected):
-            blocks = [b for b in ld_blocks(doc) if b.get('@type') == 'FAQPage']
-            self.assertEqual(len(blocks), 1)
-            pairs = faq_pairs(doc)
-            main = blocks[0]['mainEntity']
-            self.assertEqual(len(pairs), len(main))
-            self.assertEqual(len(main), len(expected))
-            for (q, a), item, src in zip(pairs, main, expected):
-                self.assertEqual(q, src['q'])
-                self.assertEqual(a, src['a'])
-                self.assertEqual(item['@type'], 'Question')
-                self.assertEqual(item['name'], html_mod.unescape(q))
-                self.assertEqual(item['acceptedAnswer']['@type'], 'Answer')
-                self.assertEqual(item['acceptedAnswer']['text'], html_mod.unescape(a))
-            self.assertTrue(any(b.get('@type') == 'RealEstateAgent' for b in ld_blocks(doc)))
+        def faq_page_blocks(doc):
+            return [b for b in ld_blocks(doc) if b.get('@type') == 'FAQPage']
 
-        assert_parity(home, site['faq'][:5])
-        assert_parity(faq, site['faq'])
-        assert_parity(how, site['faq'])
-        self.assertEqual(len(faq_pairs(contact)), 0)
-        self.assertFalse(any(b.get('@type') == 'FAQPage' for b in ld_blocks(contact)))
-        assert_parity(own, [{'q': 'Own question?', 'a': 'Own &amp; answer'}])
-        legit = next(q for q in ld_blocks(faq)[1]['mainEntity'] if q['name'].startswith('Is this legit'))
+        for doc, name in ((home, 'home'), (how, 'how'), (contact, 'contact'), (own, 'own')):
+            self.assertEqual(faq_page_blocks(doc), [], name)
+        self.assertNotIn('Frequently asked questions', home)
+        self.assertNotIn('<div class="faq">', home)
+        self.assertNotIn('<div class="faq">', how)
+        self.assertIn('href="/faq/"', how)
+        self.assertEqual(faq_pairs(own), [('Own question?', 'Own &amp; answer')])
+        self.assertTrue(any(b.get('@type') == 'RealEstateAgent' for b in ld_blocks(home)))
+        self.assertTrue(any(b.get('@type') == 'RealEstateAgent' for b in ld_blocks(faq)))
+        blocks = faq_page_blocks(faq)
+        self.assertEqual(len(blocks), 1)
+        main = blocks[0]['mainEntity']
+        summaries = re.findall(r'<summary>(.*?)</summary>', faq)
+        self.assertEqual(len(summaries), 33)
+        self.assertEqual([item['name'] for item in main], [html_mod.unescape(q) for q in summaries])
+        for item in main:
+            self.assertEqual(item['@type'], 'Question')
+            self.assertEqual(item['acceptedAnswer']['@type'], 'Answer')
+            self.assertNotIn('5-star', item['acceptedAnswer']['text'])
+            self.assertNotIn('close on the date you choose', item['acceptedAnswer']['text'])
+        legit = next(q for q in main if q['name'].startswith('How can I tell a legitimate'))
         self.assertIn('Fair & Simple', legit['acceptedAnswer']['text'])
         self.assertNotIn('&amp;', legit['acceptedAnswer']['text'])
+        self.assertEqual(site['faq'], [])
 
     def test_canonical_and_og_are_escaped(self):
         self.write('content/pages/special.md', SPECIAL)
@@ -545,11 +547,13 @@ faq:
         self.assertIn('<meta name="twitter:title" content="OG and &quot;title&quot; &lt;x&gt;">', doc)
         self.assertNotIn('content="Tom & "Jerry"', doc)
         blocks = ld_blocks(doc)
-        faq = next(b for b in blocks if b['@type'] == 'FAQPage')
-        self.assertEqual(faq['mainEntity'][0]['acceptedAnswer']['text'], 'Own & answer </script><script>alert(1)')
-        raw = re.search(r'<script type="application/ld\+json">(\{"@context":"https://schema.org","@type":"FAQPage".*?)</script>', doc).group(1)
+        self.assertFalse(any(b.get('@type') == 'FAQPage' for b in blocks))
+        escaped = gen.ld_script({"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+            {"@type": "Question", "name": "Own question?", "acceptedAnswer": {"@type": "Answer", "text": "Own & answer </script><script>alert(1)"}}]})
+        raw = re.search(r'<script type="application/ld\+json">(\{"@context":"https://schema.org","@type":"FAQPage".*?)</script>', escaped).group(1)
         self.assertNotIn('</script>', raw)
         self.assertIn('<\\/script>', raw)
+        self.assertEqual(json.loads(raw)['mainEntity'][0]['acceptedAnswer']['text'], 'Own & answer </script><script>alert(1)')
         # Default page with no og_image uses summary and the title, still escaped.
         home = (Path(gen.OUT) / 'index.html').read_text(encoding='utf-8')
         self.assertIn('twitter:card" content="summary"', home)
@@ -717,10 +721,12 @@ cta_label: "Page specific heading"
             self.assertNotIn('id="ts-form"', html, name)
         faq = quiet['faq'].read_text(encoding='utf-8')
         company = quiet['our-company'].read_text(encoding='utf-8')
-        for html in (faq, company):
-            self.assertIn(f'href="{google}" {link}', html)
-            self.assertIn(f'href="{facebook}" {link}', html)
-            self.assertIn(f'href="{bbb}" {link}', html)
+        self.assertIn(f'href="{google}" {link}', company)
+        self.assertIn(f'href="{facebook}" {link}', company)
+        self.assertIn(f'href="{bbb}" {link}', company)
+        self.assertNotIn('5-star', faq)
+        self.assertIn('offer@fairandsimplehomeoffer.com', faq)
+        self.assertIn('tel:+19106366669', faq)
         step2 = quiet['step-2'].read_text(encoding='utf-8')
         self.assertNotIn('id="qf"', step2)
         self.assertNotIn('We got your info', step2)

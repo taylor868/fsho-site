@@ -111,15 +111,17 @@ def walk_text(obj, out):
     elif isinstance(obj, list):
         for v in obj: walk_text(v, out)
 
-def faq_ld_items(body, own, site_faq):
-    """FAQ items this page actually exposes: its own faq, or the site faq when it renders {{faq}}."""
-    own = [f for f in (own or []) if isinstance(f, dict) and f.get('q') and f.get('a')]
-    renders = re.findall(r'\{\{faq(?::(\d+))?\}\}', body or '')
-    if own: items = own
-    elif renders: items = [f for f in (site_faq or []) if isinstance(f, dict) and f.get('q') and f.get('a')]
-    else: return []
-    if renders and all(n for n in renders):
-        items = items[:max(int(n) for n in renders)]
+def faq_ld_items(body, slug):
+    """FAQPage JSON-LD only for /faq/, taken from the details on that page. Other pages do not get it."""
+    if slug != 'faq':
+        return []
+    items = []
+    for q, inner in re.findall(r'<details><summary>(.*?)</summary>(.*?)</details>', body or '', re.S):
+        qtext = html.unescape(re.sub(r'<[^>]+>', '', q)).strip()
+        atext = html.unescape(re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', inner)))
+        atext = re.sub(r'\s+([.,;:])', r'\1', atext).strip()
+        if qtext and atext:
+            items.append({'q': qtext, 'a': atext})
     return items
 
 def ld_script(obj):
@@ -980,7 +982,7 @@ def build(site, pages, markets, redirects, live):
             body = hero(p['hero_headline'], p['hero_sub'], intake=True) + body
         page(path, p['title'], p.get('meta_description') or '', body, bool(p.get('noindex', False) or p.get('draft')),
              canonical=p.get('canonical') or None, og_title=p.get('og_title') or None, og_image=p.get('og_image') or None,
-             faq_ld=faq_ld_items(p.get('body'), p.get('faq'), S.get('faq')), file_rel=file_rel, offer_href=offer)
+             faq_ld=faq_ld_items(body, p['slug']), file_rel=file_rel, offer_href=offer)
         built += 1
         if p.get('sitemap', True) and not p.get('noindex') and not p.get('draft') and p['slug'] not in SITEMAP_SKIP and p['slug'] != '404': urls.append('/' if not p['slug'] else f'/{p["slug"]}/')
     for m in markets:
@@ -993,7 +995,7 @@ def build(site, pages, markets, redirects, live):
         if note.startswith('[PLACEHOLDER'): note = ''
         local_html = f'<div class="ph">{note}</div>' if note else ''
         body = (hero(m['headline'], m['hero_sub'], intake=True) + f'<section class="wrap pad"><div class="qual">{S["qualifier"]}</div><h2 class="c">Common reasons {s} homeowners call us</h2>{sits}{cities}</section>'
-                + f'<section class="alt"><div class="wrap pad"><h2 class="c">How it works in {s}</h2>{steps}</div></section>'
+                + f'<section class="alt"><div class="wrap pad"><h2 class="c">How it works in {s}</h2>{steps}<p class="c"><a href="/faq/">Questions about selling? Read the FAQ.</a></p></div></section>'
                 + f'<section class="wrap pad">{testis(m.get("testimonials") or S["testimonials"])}{local_html}</section>' + cta(m.get('cta_label'), '#offer'))
         page(path, m['title'], m['meta_description'], body, bool(m.get('noindex', False) or m.get('draft')),
              canonical=m.get('canonical') or None, og_title=m.get('og_title') or None, og_image=m.get('og_image') or None,
