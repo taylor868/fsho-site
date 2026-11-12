@@ -524,6 +524,249 @@ async function main() {
   assert.equal(JSON.parse(unsent.body).reserved, undefined);
   assert.equal(JSON.parse(unsent.body).status, "already_claimed");
 
+  const INTAKE2 = "55555555-5555-4555-8555-555555555555";
+  const BINDING2 = "66666666-6666-4666-8666-666666666666";
+  const progressKey = Buffer.from(producer.cookieKey(env));
+  const freshContact = {
+    full_name: "Grace Hopper",
+    address_line: "2 New St",
+    phone: "5550100200",
+    email: "grace@example.com",
+    consent: true
+  };
+  const openProgress = {
+    intake_id: INTAKE,
+    session_binding: BINDING,
+    kid: KID,
+    tracking: { gclid: "click-a" },
+    contact: { full_name: "Ada Lovelace", phone: "5550100199", email: "ada@example.com", address_line: "1 Main St", consent: false }
+  };
+
+  let firstMints = 0;
+  const firstVisit = await producer.handle(event("park", {
+    full_name: "Ada Lovelace",
+    address_line: "1 Main St",
+    phone: "5550100199",
+    email: "ada@example.com"
+  }), {
+    env, now: () => 1700000000000,
+    fetch: async (url, init) => {
+      const body = JSON.parse(init.body);
+      if (String(url).endsWith("/mint")) {
+        firstMints += 1;
+        return json(200, { ok: true, intake_id: INTAKE, session_binding: BINDING, kid: KID });
+      }
+      assert.equal(String(url).endsWith("/park"), true);
+      assert.equal(body.envelope.intake_id, INTAKE);
+      assert.equal(body.session_binding, BINDING);
+      return json(200, { ok: true, status: "parked" });
+    }
+  });
+  assert.equal(firstVisit.statusCode, 200);
+  assert.equal(firstMints, 1);
+
+  let progressMints = 0;
+  let progressPark = null;
+  const progressParked = await producer.handle(event("park", {
+    full_name: "Ada Lovelace",
+    address_line: "1 Main St",
+    phone: "5550100199",
+    email: "ada@example.com",
+    gclid: "click-b"
+  }, sealWith(openProgress, progressKey)), {
+    env, now: () => 1700000000000,
+    fetch: async (url, init) => {
+      const body = JSON.parse(init.body);
+      if (String(url).endsWith("/mint")) {
+        progressMints += 1;
+        return json(200, { ok: true, intake_id: INTAKE2, session_binding: BINDING2, kid: KID });
+      }
+      progressPark = body;
+      return json(200, { ok: true, status: "parked" });
+    }
+  });
+  assert.equal(progressParked.statusCode, 200);
+  assert.equal(progressMints, 0);
+  assert.equal(progressPark.envelope.intake_id, INTAKE);
+  assert.equal(progressPark.session_binding, BINDING);
+  assert.equal(progressPark.payload.gclid, "click-a");
+
+  const hotClaimed = await producer.handle(event("claim", { by: "promote" }, sealWith(openProgress, progressKey)), {
+    env, now: () => 1700000000000,
+    fetch: async (url) => {
+      if (String(url).endsWith("/mint")) return json(500, { ok: false, status: "minted" });
+      if (String(url).endsWith("/claim")) return json(200, { ok: true, claimed: true, tier: "hot", status: "claimed", priority_tier: null });
+      return json(500, { ok: false });
+    }
+  });
+  assert.equal(hotClaimed.statusCode, 200);
+  assert.equal(JSON.parse(hotClaimed.body).status, "claimed");
+  assert.equal(JSON.parse(hotClaimed.body).reserved, undefined);
+  let afterHotMints = 0;
+  let afterHotPark = null;
+  const afterHot = await producer.handle(event("park", {
+    full_name: "Ada Lovelace",
+    address_line: "1 Main St",
+    phone: "5550100199",
+    email: "ada@example.com"
+  }, cookie(hotClaimed)), {
+    env, now: () => 1700000000000,
+    fetch: async (url, init) => {
+      const body = JSON.parse(init.body);
+      if (String(url).endsWith("/mint")) {
+        afterHotMints += 1;
+        return json(200, { ok: true, intake_id: INTAKE2, session_binding: BINDING2, kid: KID });
+      }
+      afterHotPark = body;
+      return json(200, { ok: true, status: "parked" });
+    }
+  });
+  assert.equal(afterHot.statusCode, 200);
+  assert.equal(afterHotMints, 0);
+  assert.equal(afterHotPark.envelope.intake_id, INTAKE);
+
+  let failedMints = 0;
+  let failedPark = null;
+  const failedReuse = await producer.handle(event("park", {
+    full_name: "Ada Lovelace",
+    address_line: "1 Main St",
+    phone: "5550100199",
+    email: "ada@example.com"
+  }, cookie(failed)), {
+    env, now: () => 1700000000000,
+    fetch: async (url, init) => {
+      const body = JSON.parse(init.body);
+      if (String(url).endsWith("/mint")) {
+        failedMints += 1;
+        return json(200, { ok: true, intake_id: INTAKE2, session_binding: BINDING2, kid: KID });
+      }
+      failedPark = body;
+      return json(200, { ok: true, status: "parked" });
+    }
+  });
+  assert.equal(failedReuse.statusCode, 200);
+  assert.equal(failedMints, 0);
+  assert.equal(failedPark.envelope.intake_id, INTAKE);
+
+  const marked = await producer.handle(event("claim", { by: "promote" }, sealWith(openProgress, progressKey)), {
+    env, now: () => 1700000000000,
+    fetch: async (url) => {
+      if (String(url).endsWith("/mint")) return json(500, { ok: false, status: "minted" });
+      if (String(url).endsWith("/claim")) return json(200, { ok: true, claimed: false, status: "already_claimed" });
+      return json(500, { ok: false });
+    }
+  });
+  assert.equal(marked.statusCode, 200);
+  assert.equal(JSON.parse(marked.body).reserved, undefined);
+  assert.equal(JSON.parse(marked.body).status, "already_claimed");
+  let claimedMints = 0;
+  let claimedPark = null;
+  const claimedParked = await producer.handle(event("park", freshContact, cookie(marked)), {
+    env, now: () => 1700000000000,
+    fetch: async (url, init) => {
+      const body = JSON.parse(init.body);
+      if (String(url).endsWith("/mint")) {
+        claimedMints += 1;
+        return json(200, { ok: true, intake_id: INTAKE2, session_binding: BINDING2, kid: KID });
+      }
+      claimedPark = body;
+      return json(200, { ok: true, status: "parked" });
+    }
+  });
+  assert.equal(claimedParked.statusCode, 200);
+  assert.equal(claimedMints, 1);
+  assert.equal(claimedPark.envelope.intake_id, INTAKE2);
+  assert.equal(claimedPark.session_binding, BINDING2);
+  assert.equal(claimedPark.payload.full_name, "Grace Hopper");
+  assert.equal(claimedPark.payload.consent, true);
+  assert.equal(claimedPark.payload.gclid, "click-a");
+
+  let badMints = 0;
+  const badFresh = await producer.handle(event("park", {
+    full_name: "",
+    address_line: "x",
+    phone: "1",
+    email: "nope"
+  }, deliveredJar), {
+    env, now: () => 1700000000000,
+    fetch: async () => { badMints += 1; return json(500, { ok: false }); }
+  });
+  assert.equal(badFresh.statusCode, 400);
+  assert.equal(badMints, 0);
+
+  let freshMints = 0;
+  let freshPark = null;
+  const fresh = await producer.handle(event("park", freshContact, deliveredJar), {
+    env, now: () => 1700000000000,
+    fetch: async (url, init) => {
+      const body = JSON.parse(init.body);
+      if (String(url).endsWith("/mint")) {
+        freshMints += 1;
+        return json(200, { ok: true, intake_id: INTAKE2, session_binding: BINDING2, kid: KID });
+      }
+      if (String(url).endsWith("/park")) {
+        freshPark = body;
+        return json(200, { ok: true, status: "parked" });
+      }
+      return json(500, { ok: false, status: "unexpected" });
+    }
+  });
+  assert.equal(fresh.statusCode, 200);
+  assert.equal(freshMints, 1);
+  assert.equal(freshPark.envelope.intake_id, INTAKE2);
+  assert.equal(freshPark.session_binding, BINDING2);
+  assert.equal(freshPark.payload.full_name, "Grace Hopper");
+  assert.equal(freshPark.payload.phone, "5550100200");
+  assert.equal(freshPark.payload.email, "grace@example.com");
+  assert.equal(freshPark.payload.address_line, "2 New St");
+  assert.equal(freshPark.payload.consent, true);
+  assert.equal(freshPark.payload.gclid, "click-a");
+  assert.notEqual(freshPark.envelope.intake_id, INTAKE);
+
+  const freshHooks = [];
+  const freshReserves = [];
+  const freshReserve = await producer.handle(event("reserve", { stage: "final", destination: "crm_create" }, cookie(fresh)), {
+    env, now: () => 1700000000000,
+    fetch: async (url, init) => {
+      const body = JSON.parse(init.body);
+      if (String(url).endsWith("/mint")) return json(500, { ok: false, status: "minted" });
+      if (url === HOOK) { freshHooks.push(body); return json(200, { ok: true }); }
+      if (String(url).endsWith("/reserve")) {
+        freshReserves.push(body);
+        return json(200, { ok: true, status: "dispatch_intended_committed", reservation_id: RES, reservation_generation: 1 });
+      }
+      return json(500, { ok: false });
+    }
+  });
+  assert.equal(freshReserve.statusCode, 200);
+  assert.equal(JSON.parse(freshReserve.body).status, "dispatch_intended_committed");
+  assertQuiet(freshReserve, logs);
+  assert.equal(freshReserves.length, 1);
+  assert.equal(freshReserves[0].envelope.intake_id, INTAKE2);
+  assert.equal(freshReserves[0].session_binding, BINDING2);
+  assert.equal(freshHooks.length, 1);
+  assert.equal(freshHooks[0].intake_id, INTAKE2);
+  assert.equal(freshHooks[0].full_name, "Grace Hopper");
+  assert.equal(freshHooks[0].phone, "5550100200");
+  assert.equal(freshHooks[0].email, "grace@example.com");
+  assert.equal(freshHooks[0].address_line, "2 New St");
+  assert.equal(freshHooks[0].consent, true);
+  assert.equal(freshHooks[0].session_binding, BINDING2);
+  assert.notEqual(freshHooks[0].owner_token, OWNER);
+  assert.equal(/^[0-9a-f-]{36}$/.test(freshHooks[0].owner_token), true);
+
+  let replayHooks = 0;
+  const replay = await producer.handle(event("reserve", { stage: "final" }, cookie(freshReserve)), {
+    env, now: () => 1700000000000,
+    fetch: async (url) => {
+      if (url === HOOK) replayHooks += 1;
+      return json(500, { ok: false });
+    }
+  });
+  assert.equal(replay.statusCode, 200);
+  assert.equal(JSON.parse(replay.body).status, "idempotent_replay");
+  assert.equal(replayHooks, 0);
+
   logs.restore();
   console.log("producer tests passed");
 }

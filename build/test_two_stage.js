@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const test = require("node:test");
 const flow = require("./two-stage.js");
+const producer = require("../netlify/functions/intake-producer.js");
 
 const contact = { name: "TEST LEAD", address: "100 Example Ave", phone: "5550100199", email: "test.lead@example.com" };
 
@@ -1471,7 +1472,8 @@ test("paint keeps a screen for hot, follow-up, declined, and thrown renders", as
     await clickThrough(ui, "multi_2_4", "all_agree");
     assert.equal(reservedClaims, 1);
     assert.match(nodeText(ui.thanks), /Thanks\. We have your info\./);
-    assert.match(nodeText(ui.thanks), /Your answers are saved with this lead\./);
+    assert.match(nodeText(ui.thanks), /Thanks for filling out your info\. Our team will reach out soon\./);
+    assert.doesNotMatch(nodeText(ui.thanks), /\blead\b/i);
     assert.equal(ui.error.hidden, true);
     assert.doesNotMatch(cardText(ui), /Optional 1 of 4/);
   });
@@ -1524,5 +1526,159 @@ test("paint keeps a screen for hot, follow-up, declined, and thrown renders", as
     assert.equal(ui.error.hidden, false);
     assert.equal(ui.error.textContent, "That step did not save. You can try again.");
     assert.notEqual(cardText(ui), "");
+  });
+});
+
+test("visitor thanks and follow-up copy do not call the person a lead", () => {
+  for (const copy of [flow.THANKS, flow.FOLLOW_UP, flow.NOT_FIT]) {
+    assert.doesNotMatch(copy.headline + " " + copy.body, /\blead\b/i);
+    assert.doesNotMatch(copy.headline + " " + copy.body, /this lead|the lead/i);
+  }
+  assert.equal(flow.THANKS.headline, "Thanks. We have your info.");
+  assert.equal(flow.THANKS.body, "Thanks for filling out your info. Our team will reach out soon.");
+  assert.equal(flow.FOLLOW_UP.headline, "Thanks. We'll follow up.");
+  assert.equal(flow.FOLLOW_UP.body, "We saved your info and will be in touch.");
+  const src = fs.readFileSync(path.join(__dirname, "two-stage.js"), "utf8");
+  assert.match(src, /Server already claimed this lead\. Reserve already succeeded\./);
+  assert.match(src, /transaction_id is the lead id\./);
+  const gen = fs.readFileSync(path.join(__dirname, "gen.py"), "utf8");
+  const publicSrc = gen.slice(gen.indexOf("def public_intake"), gen.indexOf("def hero"));
+  assert.doesNotMatch(publicSrc, /this lead|the lead/i);
+  assert.doesNotMatch(gen, /Park this lead|parks the lead/);
+});
+
+test("a new contact submit after a reserved intake shows enrich and can reserve", async () => {
+  const KEY = "dummy-hmac-key";
+  const KID = "kid-test";
+  const EDGE = "https://edge.example.test/functions/v1";
+  const HOOK = "https://hooks.example.test/catch";
+  const INTAKE_A = "11111111-1111-4111-8111-111111111111";
+  const INTAKE_B = "55555555-5555-4555-8555-555555555555";
+  const BIND_A = "22222222-2222-4222-8222-222222222222";
+  const BIND_B = "66666666-6666-4666-8666-666666666666";
+  const env = {
+    INTAKE_HMAC_KEY_V1: KEY,
+    INTAKE_HMAC_KID: KID,
+    INTAKE_EDGE_BASE_URL: EDGE,
+    INTAKE_ZAP_HOOK_URL: HOOK
+  };
+  const issued = [
+    { intake_id: INTAKE_A, session_binding: BIND_A },
+    { intake_id: INTAKE_B, session_binding: BIND_B }
+  ];
+  let mintCount = 0;
+  const reservedIds = new Set();
+  const hooks = [];
+  const parks = [];
+  function edgeJson(status, body) {
+    return { status, headers: { get() { return ""; } }, json: async () => body };
+  }
+  async function edge(url, init) {
+    const target = String(url);
+    if (/zapier\.com|fsho\.co|hooks\.zapier/i.test(target)) throw new Error("live call blocked");
+    const body = init && init.body ? JSON.parse(init.body) : {};
+    if (target === HOOK) {
+      hooks.push(body);
+      return edgeJson(200, { ok: true });
+    }
+    if (target.endsWith("/mint")) {
+      const row = issued[mintCount];
+      mintCount += 1;
+      if (!row) return edgeJson(500, { ok: false, status: "too_many_mints" });
+      return edgeJson(200, { ok: true, intake_id: row.intake_id, session_binding: row.session_binding, kid: KID });
+    }
+    if (target.endsWith("/park")) {
+      parks.push(body);
+      return edgeJson(200, { ok: true, status: "parked" });
+    }
+    if (target.endsWith("/answer")) return edgeJson(200, { ok: true, status: "saved" });
+    if (target.endsWith("/claim")) {
+      const id = body.envelope && body.envelope.intake_id;
+      if (reservedIds.has(id)) return edgeJson(200, { ok: true, claimed: false, status: "already_claimed" });
+      return edgeJson(200, { ok: true, claimed: true, tier: "hot", status: "claimed", priority_tier: null });
+    }
+    if (target.endsWith("/reserve")) {
+      reservedIds.add(body.envelope.intake_id);
+      return edgeJson(200, { ok: true, status: "dispatch_intended_committed", reservation_id: "44444444-4444-4444-8444-444444444444", reservation_generation: 1 });
+    }
+    if (target.endsWith("/enrich")) return edgeJson(200, { ok: true, status: "saved", priority_tier: "p3" });
+    return edgeJson(500, { ok: false, status: "unexpected" });
+  }
+  let jar = "";
+  const fetchImpl = async (url, init) => {
+    const result = await producer.handle({
+      httpMethod: "POST",
+      headers: { cookie: jar, "x-nf-client-connection-ip": "203.0.113.7", "content-type": "application/json" },
+      body: init.body
+    }, { env, fetch: edge, now: () => 1700000000000, retryMs: 0 });
+    const next = String(result.headers["set-cookie"] || "").split(";")[0];
+    if (next) jar = next;
+    return {
+      status: result.statusCode,
+      headers: { get() { return ""; } },
+      json: () => Promise.resolve(JSON.parse(result.body))
+    };
+  };
+  function setField(form, name, value) {
+    const input = queryAll(form, "button,input").find((node) => node.tagName === "input" && node.getAttribute("name") === name);
+    assert.ok(input, name);
+    input.value = value;
+  }
+  async function choose(ui, value) {
+    const button = findButton(ui.ask, value);
+    assert.ok(button, nodeText(ui.ask));
+    button.onclick();
+    await settleUi();
+  }
+
+  await withPublicForm(fetchImpl, async (ui) => {
+    await clickThrough(ui, "sfh", "sole_owner");
+    assert.equal(mintCount, 1);
+    assert.equal(parks.length, 1);
+    assert.equal(parks[0].envelope.intake_id, INTAKE_A);
+    assert.equal(hooks.length, 1);
+    assert.equal(hooks[0].intake_id, INTAKE_A);
+    assert.equal(hooks[0].full_name, contact.name);
+    assert.equal(ui.form.hidden, true);
+    assert.equal(nodeText(ui.thanks).trim(), "");
+    assert.match(nodeText(ui.ask), /Optional 1 of 4/);
+    assert.match(nodeText(ui.ask), /Who is living there\?/);
+    assert.equal(ui.error.hidden, true);
+  });
+
+  await withPublicForm(fetchImpl, async (ui) => {
+    setField(ui.form, "name", "Second Visitor");
+    setField(ui.form, "email", "second.visitor@example.com");
+    setField(ui.form, "phone", "5550100200");
+    setField(ui.form, "address", "200 Example Ave");
+    await clickThrough(ui, "sfh", "sole_owner");
+    assert.equal(mintCount, 2);
+    assert.equal(parks.length, 2);
+    assert.equal(parks[1].envelope.intake_id, INTAKE_B);
+    assert.notEqual(parks[1].envelope.intake_id, parks[0].envelope.intake_id);
+    assert.equal(parks[1].payload.full_name, "Second Visitor");
+    assert.equal(parks[1].payload.email, "second.visitor@example.com");
+    assert.equal(hooks.length, 2);
+    assert.equal(hooks[1].intake_id, INTAKE_B);
+    assert.equal(hooks[1].full_name, "Second Visitor");
+    assert.equal(hooks[1].email, "second.visitor@example.com");
+    assert.equal(hooks[1].phone, "5550100200");
+    assert.equal(nodeText(ui.thanks).trim(), "");
+    assert.match(nodeText(ui.ask), /Optional 1 of 4/);
+    assert.match(nodeText(ui.ask), /Who is living there\?/);
+    assert.equal(ui.error.hidden, true);
+    await choose(ui, "owner_occupied");
+    assert.match(nodeText(ui.ask), /What condition is the property in\?/);
+    await choose(ui, "good");
+    assert.match(nodeText(ui.ask), /Is it listed with an agent\?/);
+    await choose(ui, "not_listed");
+    assert.match(nodeText(ui.ask), /When do you need to sell\?/);
+    await choose(ui, "asap");
+    assert.match(nodeText(ui.thanks), /Thanks\. We have your info\./);
+    assert.match(nodeText(ui.thanks), /Thanks for filling out your info\. Our team will reach out soon\./);
+    assert.doesNotMatch(nodeText(ui.thanks), /\blead\b/i);
+    assert.doesNotMatch(nodeText(ui.follow), /\blead\b/i);
+    assert.equal(hooks.length, 2);
+    assert.equal(ui.error.hidden, true);
   });
 });

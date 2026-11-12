@@ -171,6 +171,25 @@ function banned(input) {
   return found;
 }
 
+function parkContact(input) {
+  const full = typeof input.full_name === "string" ? input.full_name.trim() : "";
+  const line = typeof input.address_line === "string" ? input.address_line.trim() : "";
+  const phone = String(input.phone || "").replace(/\D/g, "");
+  const email = typeof input.email === "string" ? input.email.trim() : "";
+  const fields = [];
+  if (!full || full.length > 160) fields.push("full_name");
+  if (line.length < 3 || line.length > 200) fields.push("address_line");
+  if (phone.length < 10 || phone.length > 11) fields.push("phone");
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 200) fields.push("email");
+  if (input.is_test != null && typeof input.is_test !== "boolean") fields.push("is_test");
+  if (input.consent != null && typeof input.consent !== "boolean") fields.push("consent");
+  return { fields, full, line, phone, email };
+}
+
+function intakeClosed(state) {
+  return !!(state && state.intake_id && (state.zap_sent === true || state.claim_status === "already_claimed"));
+}
+
 function enrichmentOf(input) {
   if (input == null) return { fields: ["enrichment"], enrichment: null };
   if (typeof input !== "object" || Array.isArray(input)) return { fields: ["enrichment"], enrichment: null };
@@ -288,6 +307,19 @@ async function handle(event, deps) {
     return minted;
   }
 
+  // A later contact submit on an intake that already reserved or was already claimed
+  // starts a new intake. An in-progress intake that has not been reserved stays put.
+  // Resume without a new park still uses the closed intake, so thanks can still show.
+  if (op === "park" && intakeClosed(state)) {
+    const tracked = trackingErrors(input);
+    const contact = parkContact(input);
+    if (!tracked.fields.length && !contact.fields.length) {
+      const previous = state.tracking;
+      const tracking = previous && typeof previous === "object" && !Array.isArray(previous) ? previous : {};
+      state = { tracking: tracking };
+    }
+  }
+
   if (!state.intake_id) {
     const minted = await mint();
     if (!state.intake_id) {
@@ -306,28 +338,18 @@ async function handle(event, deps) {
   let payload = Object.assign({}, state.tracking);
   if (needsIp) payload.client_ip = ip;
   if (op === "park") {
-    const full = typeof input.full_name === "string" ? input.full_name.trim() : "";
-    const line = typeof input.address_line === "string" ? input.address_line.trim() : "";
-    const phone = String(input.phone || "").replace(/\D/g, "");
-    const email = typeof input.email === "string" ? input.email.trim() : "";
-    const fields = [];
-    if (!full || full.length > 160) fields.push("full_name");
-    if (line.length < 3 || line.length > 200) fields.push("address_line");
-    if (phone.length < 10 || phone.length > 11) fields.push("phone");
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 200) fields.push("email");
-    if (input.is_test != null && typeof input.is_test !== "boolean") fields.push("is_test");
-    if (input.consent != null && typeof input.consent !== "boolean") fields.push("consent");
-    if (fields.length) return respond(env, state, 400, { ok: false, status: "bad_input", fields });
-    payload.full_name = full;
-    payload.address_line = line;
-    payload.phone = phone;
-    payload.email = email;
+    const contact = parkContact(input);
+    if (contact.fields.length) return respond(env, state, 400, { ok: false, status: "bad_input", fields: contact.fields });
+    payload.full_name = contact.full;
+    payload.address_line = contact.line;
+    payload.phone = contact.phone;
+    payload.email = contact.email;
     // intake-park stores is_test only when the boolean is true (p.is_test === true).
     // false, including when the client omits the flag, is a real lead.
     payload.is_test = input.is_test === true;
     // consent is not an edge column. Unknown park keys are ignored, except attribution and price_vs_value.
     payload.consent = input.consent === true;
-    state.contact = { full_name: full, phone, email, address_line: line, consent: payload.consent };
+    state.contact = { full_name: contact.full, phone: contact.phone, email: contact.email, address_line: contact.line, consent: payload.consent };
   } else if (op === "answer") {
     const fields = [];
     if (!QUESTIONS[input.question]) fields.push("question");
@@ -401,7 +423,10 @@ async function handle(event, deps) {
   if (result.retry) extra["retry-after"] = result.retry;
   let published = publicBody(result.body);
   if (op === "claim" && (result.status || 0) === 200) published = stampHotClaim(published, input.by);
-  if (op === "claim" && published.status === "already_claimed" && state.zap_sent === true) published.reserved = true;
+  if (op === "claim" && (result.status || 0) === 200 && published.status === "already_claimed") {
+    state.claim_status = "already_claimed";
+    if (state.zap_sent === true) published.reserved = true;
+  }
   return respond(env, state, result.status || 502, published, extra);
 }
 
