@@ -14,9 +14,9 @@ function run() {
   return { tag, adapter, session: flow.createFlow(adapter, tag) };
 }
 
-test("test mode on production requires test=1", () => {
-  assert.equal(flow.testModeAllowed("production", "?test=1"), true);
-  assert.equal(flow.testModeAllowed("production", "?x=1&test=1"), true);
+test("production never enables test mode, and other builds still need test=1", () => {
+  assert.equal(flow.testModeAllowed("production", "?test=1"), false);
+  assert.equal(flow.testModeAllowed("production", "?x=1&test=1"), false);
   assert.equal(flow.testModeAllowed("production", ""), false);
   assert.equal(flow.testModeAllowed("production", "?test=2"), false);
   assert.equal(flow.testModeAllowed("local", ""), false);
@@ -822,15 +822,15 @@ test("the public homepage flag is separate from test=1", () => {
   assert.equal(src.includes('data-public'), true);
   assert.equal(src.includes("fetch("), false);
   assert.equal(flow.testModeAllowed("production", ""), false);
-  assert.equal(flow.testModeAllowed("production", "?test=1"), true);
+  assert.equal(flow.testModeAllowed("production", "?test=1"), false);
   assert.equal(flow.CONFIG.use_real_adapter, false);
   assert.equal(flow.CONFIG.producer_path, "/.netlify/functions/intake-producer");
   assert.equal(flow.CONFIG.gtm_id, "GTM-WWPBQGDZ");
   assert.equal(flow.TRACKING.gtm_id, "GTM-WWPBQGDZ");
 });
 
-test("production with test=1 uses the baked real adapter", async () => {
-  assert.equal(flow.testModeAllowed("production", "?test=1"), true);
+test("production does not open the test form, and the real adapter flag still posts", async () => {
+  assert.equal(flow.testModeAllowed("production", "?test=1"), false);
   assert.equal(flow.testModeAllowed("production", ""), false);
   const previousFlag = globalThis.FSHO_USE_REAL_ADAPTER;
   const previousFetch = global.fetch;

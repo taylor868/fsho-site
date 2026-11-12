@@ -71,7 +71,8 @@
   };
 
   function testModeAllowed(context, search) {
-    if (context !== "deploy-preview" && context !== "branch-deploy" && context !== "dev" && context !== "local" && context !== "production") return false;
+    if (context === "production") return false;
+    if (context !== "deploy-preview" && context !== "branch-deploy" && context !== "dev" && context !== "local") return false;
     return /(?:^|[?&])test=1(?:&|$)/.test(String(search || ""));
   }
 
@@ -1093,26 +1094,6 @@ function boot(api) {
       return flow.submitContact({ name: data.get("name"), address: data.get("address"), phone: data.get("phone"), email: data.get("email"), consent: !!(box && box.checked) });
     });
   };
-  applyConsentSize();
-  function applyConsentSize() {
-    var preview = false;
-    try { preview = String(globalThis.FSHO_CONSENT_PREVIEW || "") === "1"; } catch (err) {}
-    var size = "8";
-    if (preview) {
-      try {
-        var picked = new URLSearchParams(location.search).get("consent-size");
-        if (picked === "7" || picked === "7.5" || picked === "8") size = picked;
-      } catch (err) {}
-    }
-    var nodes = form.querySelectorAll("label.consent");
-    for (var i = 0; i < nodes.length; i++) nodes[i].setAttribute("data-consent-size", size);
-    if (!preview) return;
-    var picks = document.querySelectorAll("[data-consent-pick]");
-    for (var j = 0; j < picks.length; j++) {
-      if (picks[j].getAttribute("data-consent-pick") === size) picks[j].setAttribute("aria-current", "true");
-      else picks[j].removeAttribute("aria-current");
-    }
-  }
   armGtm(api.CONFIG.gtm_id || api.TRACKING.gtm_id);
   function armGtm(id) {
     if (!id || id === "GTM-PLACEHOLDER") return;

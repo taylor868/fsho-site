@@ -1,8 +1,8 @@
 ---
 title: "Thank You | Fair & Simple Home Offer"
-meta_description: ""
+meta_description: "Call or text (910) 636-6669, or start the form on the homepage."
 template: basic
 noindex: true
 sitemap: false
 ---
-<section class="hero sm"><div class="wrap"><h1>Got it! We're reviewing your property.</h1><p class="lede">Expect a call or text from <a href="tel:+19106366669">(910) 636-6669</a> shortly. Want to go faster? Call us now.</p><p class="fine">(Local demo: no data was sent anywhere.)</p></div></section>
+<section class="hero sm"><div class="wrap"><h1>This page does not confirm a request.</h1><p class="lede">Nothing was submitted from here. Call or text <a href="tel:+19106366669">(910) 636-6669</a>, or <a href="/#offer">start the form</a>.</p></div></section>
