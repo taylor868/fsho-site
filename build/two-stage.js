@@ -930,9 +930,13 @@
 function boot(api) {
   var off = document.getElementById("ts-off");
   var app = document.getElementById("ts-app");
-  if (!off || !app) return;
-  var on = api.testModeAllowed(globalThis.FSHO_DEPLOY_CONTEXT || "", location.search);
-  if (!on) { off.hidden = false; return; }
+  if (!app) return;
+  var publicForm = app.getAttribute("data-public") === "1";
+  if (!publicForm) {
+    if (!off) return;
+    var on = api.testModeAllowed(globalThis.FSHO_DEPLOY_CONTEXT || "", location.search);
+    if (!on) { off.hidden = false; return; }
+  }
   app.hidden = false;
   var form = document.getElementById("ts-form");
   var ask = document.getElementById("ts-ask");
@@ -991,7 +995,7 @@ function boot(api) {
     ask.replaceChildren();
     ask.dataset.step = flow.state.stage === "enrich" ? api.ENRICH_STEPS[flow.state.enrichIndex] : "";
     var qid = flow.state.stage === "q_type" ? "type" : (flow.state.stage === "q_ownership" ? "ownership" : "");
-    if (flow.state.stage === "q_type") {
+    if (flow.state.stage === "q_type" && !publicForm) {
       var leave = document.createElement("button");
       leave.type = "button";
       leave.className = "bk";
@@ -1058,7 +1062,11 @@ function boot(api) {
       if (result && result.ok) form.hidden = true;
       paint();
       if (result && result.ok === false) {
-        if (result.error === "contact_required") summary.textContent = "Name, address, phone, and email are required.";
+        if (result.error === "contact_required") {
+          var need = "Name, address, phone, and email are required.";
+          if (publicForm) showError(need);
+          else summary.textContent = need;
+        }
         else showError("That step did not save. You can try again.");
       }
     }, function () {

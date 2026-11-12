@@ -1,8 +1,8 @@
 # Test mode
 
-The public form stays off (`preview` true, `lead_form.enabled` false, empty endpoint). This page is a separate click-through at `/test-intake/?test=1`.
+The homepage hero is the two-stage form. It submits through `/.netlify/functions/intake-producer` when the build env `FSHO_USE_REAL_ADAPTER` is `1`. `/test-intake/` is a separate click-through at `/test-intake/?test=1`. It stays `noindex` and out of the sitemap. `preview` is false, so a normal `python3 build/gen.py` build has no PREVIEW banner and is indexable. Slack and CRM TEST prefixes are unchanged.
 
-Test mode is on when the build context is `local`, `dev`, `deploy-preview`, `branch-deploy`, or `production`, and the URL has `?test=1`. A production build (`CONTEXT=production` or `gen.py --live`) bakes `production`. Without `?test=1` the page shows "Test mode is off." Preview, the banner, noindex, and the homepage form are unchanged.
+Test mode is on when the build context is `local`, `dev`, `deploy-preview`, `branch-deploy`, or `production`, and the URL has `?test=1`. A production build (`CONTEXT=production` or `gen.py --live`) bakes `production`. Without `?test=1` the test page shows "Test mode is off." The homepage form does not use that query. It boots from `data-public="1"` and uses the same real-adapter flag.
 
 The test page does not call Supabase, Zapier, WhatConverts, CRM, or Slack. The mock adapter is the default and only records. The address field is a plain text input. There is no Google Maps or Places autocomplete. The page script has no network call of its own. A real adapter exists beside the mock and is used only when `adapter` is `"real"`, the build context is non-production, and the caller passes a transport. Its base URL is the placeholder `https://placeholder.invalid/functions/v1`. There is no HMAC key and no Zap token in the source. `sig` is left empty because the Netlify function that holds the key signs the envelope.
 

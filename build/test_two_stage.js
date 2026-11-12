@@ -817,6 +817,18 @@ test("enrich returns the saved tier, sends {} when skipped, and retries one unav
   assert.equal(quiet.state.trace.some((row) => row.text.indexOf("No tier.") >= 0), true);
 });
 
+test("the public homepage flag is separate from test=1", () => {
+  const src = fs.readFileSync(path.join(__dirname, "two-stage.js"), "utf8");
+  assert.equal(src.includes('data-public'), true);
+  assert.equal(src.includes("fetch("), false);
+  assert.equal(flow.testModeAllowed("production", ""), false);
+  assert.equal(flow.testModeAllowed("production", "?test=1"), true);
+  assert.equal(flow.CONFIG.use_real_adapter, false);
+  assert.equal(flow.CONFIG.producer_path, "/.netlify/functions/intake-producer");
+  assert.equal(flow.CONFIG.gtm_id, "GTM-WWPBQGDZ");
+  assert.equal(flow.TRACKING.gtm_id, "GTM-WWPBQGDZ");
+});
+
 test("production with test=1 uses the baked real adapter", async () => {
   assert.equal(flow.testModeAllowed("production", "?test=1"), true);
   assert.equal(flow.testModeAllowed("production", ""), false);

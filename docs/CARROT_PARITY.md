@@ -92,7 +92,7 @@ Status key:
 
 ## Prioritized schema / gen.py changes
 
-Done (preview stays on, form stays disabled):
+Done (preview is off; the homepage two-stage form posts through intake-producer when FSHO_USE_REAL_ADAPTER is 1):
 
 2. **Drafts** (#9): `draft: true`, skipped in live/prod builds, included in preview builds. Home page cannot be draft.
 3. **SEO length checks + OG tags** (#27, #28, #31): warnings for title > 60 / meta > 155 and duplicate titles; `og_image` / `og_title`.

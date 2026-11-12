@@ -37,7 +37,7 @@ Fair, honest, simple. Write the way Andrew talks to a neighbor.
 - Every page gets a unique `title` of 60 characters or fewer and a `meta_description` of 155 or fewer. `--check` prints `WARN` when one runs long or a title is repeated. Shorten it before you publish. `WARN` does not fail the check; `ERROR` does.
 - Exactly one H1 per page. The hero headline is the H1 on home, situation, and market pages.
 - Never change an existing slug casually. If a page must be renamed or deleted, add a 301 to `content/redirects.json` from the old path to the new one, in the same change.
-- Leave `noindex` and `preview` alone. Cutover is Taylor's call.
+- `preview` is false. Taylor approved the public cutover. Do not turn it back on. Page-level `noindex` stays on `/test-intake/`, `/step-2/`, `/thank-you/`, and the 404.
 
 ## Workflow
 
@@ -56,7 +56,7 @@ Fair, honest, simple. Write the way Andrew talks to a neighbor.
 - **Legal:** privacy, terms, SMS terms, TCPA wording, licensing or "not a brokerage" lines, Fair Housing questions.
 - **Money claims:** prices, offer amounts, "we pay X%", closing-cost promises, timelines stated as guarantees.
 - **New services or areas:** buying condos, new states, or a second site (Motivated House Sellers).
-- Anything that would remove `noindex` or publish live.
+- Anything that would turn `preview` back on, or remove `noindex` from `/test-intake/`, `/step-2/`, `/thank-you/`, or the 404.
 
 When you escalate, say what Andrew wanted, why it needs approval, and a ready-to-approve draft of the change.
 

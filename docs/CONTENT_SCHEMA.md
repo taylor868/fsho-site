@@ -28,8 +28,8 @@ content/
 | `brand.orange` | `#RRGGBB` | Accent/CTA color. `#B8501C` is the darkened accessible version **pending approval** (original `#E67A45`). Swap here only. |
 | `brand.navy` | `#RRGGBB` | Primary text/heading color. |
 | `logo`, `favicon` | path | Files in `content/media/`, copied to site root. |
-| `preview` | bool | **true until cutover is approved.** Adds `noindex,nofollow` to every page, a red PREVIEW banner, `robots.txt Disallow: /`, and an `X-Robots-Tag` header. |
-| `lead_form.enabled` | bool | false = submit is blocked client-side, nothing is sent. Stays false on this branch. The create-lead function is on `cursor/carrot-lead-routing-f5f7`, awaiting verified CRM mapping (campaign, assignee, source). |
+| `preview` | bool | **false on the live site.** When true, adds `noindex,nofollow` to every page, a red PREVIEW banner, `robots.txt Disallow: /`, and an `X-Robots-Tag` header. Netlify production runs `python3 build/gen.py` with no `--live` flag, so this field is the public switch. |
+| `lead_form.enabled` | bool | false keeps the older market/situation hero and the qualifier from posting. The homepage uses the two-stage form and `/.netlify/functions/intake-producer` when `FSHO_USE_REAL_ADAPTER` is `1`. The create-lead function is on `cursor/carrot-lead-routing-f5f7`, awaiting verified CRM mapping (campaign, assignee, source). |
 | `lead_form.endpoint` | string | Serverless endpoint URL (only used when enabled). |
 | `gtm_id` | string | e.g. `GTM-WWPBQGDZ`. |
 | `clickcease_id` | string | Empty until supplied. |
@@ -51,7 +51,7 @@ content/
 | `video_ids[]` | string | YouTube IDs; click-to-load thumbnails. |
 | `faq[]` | `{q, a}` | Site-wide FAQ. |
 | `cta` | `{heading, text, button}` | Bottom call-to-action band default. |
-| `form1_fields[]` | `{name, label, type, required, step, autocomplete?, placeholder?, pair?}` | Hero form (Carrot Form 1). `type` is `text`, `tel`, or `email`. `required` is a boolean. `step` is `1` (property) or `2` (contact). Two consecutive fields may share `pair` (the first/last name row). Must include `address` (step 1) and `first`, `phone`, `email` (step 2). gclid/UTM hidden fields stay in the generator. The form stays off while `lead_form.enabled` is false. |
+| `form1_fields[]` | `{name, label, type, required, step, autocomplete?, placeholder?, pair?}` | Older hero form (Carrot Form 1) on market and situation pages. `type` is `text`, `tel`, or `email`. `required` is a boolean. `step` is `1` (property) or `2` (contact). Two consecutive fields may share `pair` (the first/last name row). Must include `address` (step 1) and `first`, `phone`, `email` (step 2). gclid/UTM hidden fields stay in the generator. That form stays off while `lead_form.enabled` is false. The homepage hero is the two-stage form. |
 | `step2_fields[]` | `{name, label, type: select\|textarea, options[]}` | Step 2 form. Placeholder until the real Carrot Form 6 fields are confirmed. |
 
 ## content/pages/&lt;slug&gt;.md
@@ -83,7 +83,8 @@ faq:                                         # optional; overrides site.json faq
 ```
 
 Templates:
-- `home` / `situation`: hero with headline, sub, trust badges and the 2-step lead form (`id="offer"`), then the body.
+- `home`: hero with headline, sub, trust badges, and the two-stage lead form (`id="offer"`, `data-public="1"`), then the body. It posts to `/.netlify/functions/intake-producer` when `FSHO_USE_REAL_ADAPTER` is `1`.
+- `situation`: hero with headline, sub, trust badges and the older 2-step lead form (`id="offer"`), then the body. That form stays off while `lead_form.enabled` is false.
 - `basic`: body only (body usually starts with its own `<section class="hero sm">`).
 - `market`: generated from `content/markets/*.json`, not from .md files.
 

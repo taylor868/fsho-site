@@ -2,7 +2,11 @@
 """FSHO static site generator. Reads content/, writes dist/.
 Usage: python build/gen.py            build into dist/
        python build/gen.py --check    validate content only (non-zero exit on errors; WARN lines do not fail)
-       python build/gen.py --live     build without preview guards (noindex/banner/form lock) -- cutover only
+       python build/gen.py --live     force a build without preview guards when site.json preview is still true
+
+Preview guards (noindex, the PREVIEW banner, robots.txt Disallow: /, and X-Robots-Tag)
+follow content/site.json "preview". Netlify production runs `python3 build/gen.py` with
+no --live flag, so a public build requires "preview": false in that file.
 
 Drafts: a page or market with `draft: true` is built in preview builds and skipped in
 live/prod builds. Preview builds are a normal gen.py run while site.json preview is true,
@@ -521,7 +525,7 @@ def build(site, pages, markets, redirects, live):
     JS = re.sub(r'tracking:(true|false)', 'tracking:' + ('true' if S.get('tracking') else 'false'), JS)
     JS = re.sub(r'gtm:"[^"]*",clickcease:""', 'gtm:"%s",clickcease:"%s"' % (S.get('gtm_id', ''), S.get('clickcease_id', '')), JS)
     if not lead_on and not preview:
-        JS = 'document.addEventListener("submit",function(e){e.preventDefault();e.stopImmediatePropagation();alert("Preview only, forms are off. Nothing was sent.")},true);' + JS
+        JS = 'document.addEventListener("submit",function(e){var t=e.target;if(!t||t.id==="ts-form")return;e.preventDefault();e.stopImmediatePropagation();alert("Preview only, forms are off. Nothing was sent.")},true);' + JS
     navl = ''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S['nav'])
     trust = '<ul class="trust">' + ''.join(f'<li>{t}</li>' for t in S['trust_badges']) + '</ul>'
     QC = S.get('_qualifier') or {}
@@ -529,13 +533,16 @@ def build(site, pages, markets, redirects, live):
         c = QC.get('consent', {})
         if not c.get('enabled'): return ''
         return f'<label class="chk"><input type="checkbox" name="consent"{" required" if c.get("required") else ""}> <small>{c["text"]} <a href="/text-messaging-terms/">Text Terms</a> · <a href="/privacy/">Privacy</a></small></label>'
-    def test_intake():
+    def two_stage_assets():
         ctx = deploy_context(live)
         real_flag = '1' if os.environ.get('FSHO_USE_REAL_ADAPTER') == '1' else ''
         src = re.sub(r'\n\s*\n', '\n', open(os.path.join(B, 'two-stage.js'), encoding='utf-8').read().strip()).replace('</', '<\\/')
+        return ctx, real_flag, src
+    def test_intake():
+        ctx, real_flag, src = two_stage_assets()
         return (
             '<section class="wrap pad" id="two-stage"><h1>Two-stage test intake</h1>'
-            '<p class="fine">Test mode only. The public form stays off. Nothing on this page is sent.</p>'
+            '<p class="fine">Test mode only. Needs ?test=1. This page stays noindex.</p>'
             '<p id="ts-off" hidden>Test mode is off. Production builds cannot enable it, and other builds need ?test=1.</p>'
             '<div id="ts-app" hidden><form id="ts-form" action="#" method="post">'
             '<div class="lead-h"><strong>Stage 1</strong><span>Name, property, phone, and email. This only parks the lead.</span></div>'
@@ -631,7 +638,27 @@ def build(site, pages, markets, redirects, live):
     def faqh(items, n=99): return '<div class="faq">' + ''.join(f'<details><summary>{f["q"]}</summary><p>{f["a"]}</p></details>' for f in items[:n]) + '</div>'
     def cta(h=None):
         c = S['cta']; return f'<section class="band"><div class="wrap"><h2>{h or c["heading"]}</h2><p>{c["text"]}</p><a class="btn btn-o" href="#offer">{c["button"]}</a> <a class="btn btn-w" href="tel:{TEL}">Call {PH}</a></div></section>'
-    def hero(h, sub): return f'<section class="hero" id="offer"><div class="wrap hg"><div><p class="eyebrow">{S["hero_eyebrow"]}</p><h1>{h}</h1><p class="lede">{sub}</p>{trust}</div>{form()}</div></section>'
+    def public_intake():
+        ctx, real_flag, src = two_stage_assets()
+        return (
+            '<div class="lead" id="two-stage"><div id="ts-app" data-public="1"><form id="ts-form" action="#" method="post">'
+            '<div class="lead-h"><strong>Get your fair cash offer</strong><span>Takes about 60 seconds. No obligation.</span></div>'
+            '<label>Name<input name="name" autocomplete="name" required></label>'
+            '<label>Property address<input name="address" autocomplete="street-address" required></label>'
+            '<label>Phone<input name="phone" type="tel" autocomplete="tel" required></label>'
+            '<label>Email<input name="email" type="email" autocomplete="email" required></label>'
+            '<button class="btn btn-o" type="submit">Get My Offer</button>'
+            f'<p class="fine">Your info stays private. Or call/text <a href="tel:{TEL}">{PH}</a></p></form>'
+            '<div id="ts-sorry"></div><div id="ts-followup"></div><div id="ts-thanks"></div><div id="ts-ask"></div>'
+            '<p id="ts-error" hidden role="alert"></p>'
+            '<h2 id="ts-trace-title" hidden>Step trace</h2>'
+            '<p id="ts-summary" hidden data-google="not-loaded" data-downstream="" data-priority=""></p>'
+            '<p id="ts-events" hidden></p><ol id="ts-trace" hidden></ol></div>'
+            f'<script>window.FSHO_DEPLOY_CONTEXT="{ctx}";window.FSHO_USE_REAL_ADAPTER="{real_flag}";</script><script>{src}</script></div>'
+        )
+    def hero(h, sub, intake=False):
+        panel = public_intake() if intake else form()
+        return f'<section class="hero" id="offer"><div class="wrap hg"><div><p class="eyebrow">{S["hero_eyebrow"]}</p><h1>{h}</h1><p class="lede">{sub}</p>{trust}</div>{panel}</div></section>'
     sits = '<div class="grid3">' + ''.join(f'<div class="card"><div class="ic">{x["icon"]}</div><h3>{x["title"]}</h3><p>{x["text"]}</p></div>' for x in S['situations']) + '</div>'
     steps = '<div class="grid3 steps">' + ''.join(f'<div class="card"><b>{x["n"]}</b><h3>{x["title"]}</h3><p>{x["text"]}</p></div>' for x in S['steps']) + '</div>'
     cp = S['comparison']
@@ -730,7 +757,7 @@ def build(site, pages, markets, redirects, live):
             path, file_rel, offer = '/404.html', '404.html', '/#offer'
         faq_items = p.get('faq') or S['faq']
         body = md(shortcodes(p['body'], faq_items, p.get('cta_label')))
-        if p['template'] in ('home', 'situation'): body = hero(p['hero_headline'], p['hero_sub']) + body
+        if p['template'] in ('home', 'situation'): body = hero(p['hero_headline'], p['hero_sub'], intake=(p.get('template') == 'home' and not p.get('slug'))) + body
         page(path, p['title'], p.get('meta_description') or '', body, bool(p.get('noindex', False) or p.get('draft')),
              canonical=p.get('canonical') or None, og_title=p.get('og_title') or None, og_image=p.get('og_image') or None,
              faq_ld=faq_ld_items(p.get('body'), p.get('faq'), S.get('faq')), file_rel=file_rel, offer_href=offer)
