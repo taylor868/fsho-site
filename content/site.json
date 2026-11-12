@@ -126,7 +126,7 @@
     {
       "n": 3,
       "title": "Close on your timeline",
-      "text": "Pick the date. We coordinate with a reputable title company. Cash in as little as 10–14 business days in most cases."
+      "text": "We coordinate with a reputable title company. Cash in as little as 10–14 business days in most cases."
     }
   ],
   "comparison": {
@@ -177,40 +177,8 @@
     "pwZIyFiirKQ",
     "vSytu6IDw6s"
   ],
-  "faq": [
-    {
-      "q": "What types of properties do you buy?",
-      "a": "Single-family houses and multi-family properties (2–4 units), in any condition: inherited homes, houses with liens or judgments, homes needing repairs, vacant houses, properties behind on taxes, and hoarder houses. We do not buy mobile/manufactured homes, condos, townhouses, apartments, or vacant land."
-    },
-    {
-      "q": "How much will you offer?",
-      "a": "Every property is reviewed by a person, not an algorithm. A cash offer is typically below full retail value because we take on repairs, closing costs, and risk. If a cash offer isn't your best option, we'll also show you a market-sale option that may net you more."
-    },
-    {
-      "q": "How fast can you close?",
-      "a": "Usually 10–14 business days in most scenarios. If you need more time, we close on the date you choose."
-    },
-    {
-      "q": "Are there fees or commissions?",
-      "a": "No commissions or hidden fees on our cash offer, and we cover closing costs."
-    },
-    {
-      "q": "Can selling stop a foreclosure?",
-      "a": "Often, if there is enough time before the sale date. <a href=\"/stop-foreclosure/\">Read the options</a>. We are not attorneys; for legal advice, talk with a foreclosure attorney or a HUD-approved housing counselor."
-    },
-    {
-      "q": "Do I have to clean or make repairs?",
-      "a": "No. Sell as-is. Leave what you don't want; we handle cleanup."
-    },
-    {
-      "q": "What does no-obligation mean?",
-      "a": "You're free to say no. There's no cost to get an offer and no pressure to accept it."
-    },
-    {
-      "q": "Is this legit?",
-      "a": "Yes. Fair &amp; Simple Home Offer is operated by Andrew Collier LLC, holds an <a href=\"https://www.bbb.org/us/mi/rockford/profile/real-estate-investing/fair-and-simple-home-offer-0372-38321834\" target=\"_blank\" rel=\"noopener noreferrer\">A+ BBB rating</a>, and is 5-star rated on <a href=\"https://share.google/xhED38I3oGqYAQE21\" target=\"_blank\" rel=\"noopener noreferrer\">Google</a> and <a href=\"https://www.facebook.com/profile.php?id=61581144807978\" target=\"_blank\" rel=\"noopener noreferrer\">Facebook</a>. Always compare offers. We encourage it."
-    }
-  ],
+  "faq": [],
+  "_faq_note": "The public FAQ is only content/pages/faq.md. Do not put a FAQ block back on other pages. FAQPage JSON-LD is emitted only for /faq/.",
   "cta": {
     "heading": "Ready to see your options?",
     "text": "Get a no-obligation offer. Talk to a real person, not a call center.",
