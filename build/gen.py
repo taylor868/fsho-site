@@ -537,7 +537,23 @@ def build(site, pages, markets, redirects, live):
     if not lead_on and not preview:
         JS = 'document.addEventListener("submit",function(e){var t=e.target;if(!t||t.id==="ts-form")return;e.preventDefault();e.stopImmediatePropagation();alert("Preview only, forms are off. Nothing was sent.")},true);' + JS
     navl = ''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S['nav'])
-    trust = '<ul class="trust">' + ''.join(f'<li>{t}</li>' for t in S['trust_badges']) + '</ul>'
+    def trust_list(items):
+        # Official logo links share one centered row. Each text chip is its own
+        # centered row, so a wide hero column cannot sit a chip beside the logos.
+        parts, logos = [], []
+        def flush():
+            if logos:
+                parts.append('<li class="trust-logos">' + ''.join(logos) + '</li>')
+                logos.clear()
+        for t in items:
+            if 'class="badge"' in t:
+                logos.append(t)
+            else:
+                flush()
+                parts.append(f'<li>{t}</li>')
+        flush()
+        return '<ul class="trust">' + ''.join(parts) + '</ul>'
+    trust = trust_list(S['trust_badges'])
     QC = S.get('_qualifier') or {}
     def consent_box():
         c = QC.get('consent', {})
