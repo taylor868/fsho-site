@@ -42,6 +42,66 @@ faq:
 {{cta:Explicit & "heading"}}
 '''
 
+# Public ad landing pages. Not in the header nav. Indexable, with the homepage form.
+AD_LANDINGS = (
+    {
+        'slug': 'sell-your-house-as-is',
+        'h1': 'Selling a house as is',
+        'title': 'Sell Your House As-Is | Fair & Simple Home Offer',
+        'meta': 'Sell your house as-is, in its current condition. No repairs or cleaning to ask for a no-obligation offer. Call (910) 636-6669.',
+        'only': 'What as-is does not promise',
+    },
+    {
+        'slug': 'companies-that-buy-houses',
+        'h1': 'Companies who buy houses',
+        'title': 'Companies Who Buy Houses | Fair & Simple Home Offer',
+        'meta': 'Comparing companies that buy houses? See what that sale means, what to look for, and how Fair and Simple works. Call (910) 636-6669.',
+        'only': 'what to look for',
+    },
+    {
+        'slug': 'sell-your-house-fast',
+        'h1': 'Selling your house fast',
+        'title': 'Sell Your House Fast | Fair & Simple Home Offer',
+        'meta': 'Selling your house fast can be a simple process, on a date you choose. No obligation to accept an offer. Call (910) 636-6669.',
+        'only': 'not a copy of the homepage',
+    },
+    {
+        'slug': 'selling-a-house-in-pre-foreclosure',
+        'h1': 'Selling a house in pre-foreclosure',
+        'title': 'Selling in Pre-Foreclosure | Fair & Simple Home Offer',
+        'meta': 'Behind on payments, with time to look at options? Read about selling a house in pre-foreclosure. We are not attorneys. Call (910) 636-6669.',
+        'only': 'This is the earlier stage',
+    },
+    {
+        'slug': 'selling-a-house-in-divorce',
+        'h1': 'Selling a house in a divorce',
+        'title': 'Selling a House in Divorce | Fair & Simple Home Offer',
+        'meta': 'Selling a house in a divorce can be one way to move on. We do not take sides, and we are not attorneys. Call (910) 636-6669.',
+        'only': 'We do not split proceeds',
+    },
+    {
+        'slug': 'selling-an-inherited-house',
+        'h1': 'Selling an inherited house',
+        'title': 'Selling an Inherited House | Fair & Simple Home Offer',
+        'meta': 'Inherited a house you do not want to keep? Ask about an as-is offer without a cleanup first. Call (910) 636-6669.',
+        'only': 'A house you received, not a project you planned',
+    },
+    {
+        'slug': 'selling-a-house-in-probate',
+        'h1': 'Selling a house in probate',
+        'title': 'Selling a House in Probate | Fair & Simple Home Offer',
+        'meta': 'Probate is the court process. We can talk about the house, and we do not give legal advice. Call (910) 636-6669.',
+        'only': 'Probate is the court process',
+    },
+    {
+        'slug': 'selling-a-house-with-tenants',
+        'h1': 'Selling a house with tenants',
+        'title': 'Selling a House With Tenants | Fair & Simple Home Offer',
+        'meta': 'Selling a house with tenants still living there. We do not promise they will leave. Call (910) 636-6669.',
+        'only': 'We do not evict tenants',
+    },
+)
+
 
 def ld_blocks(doc):
     return [json.loads(raw) for raw in re.findall(r'<script type="application/ld\+json">(.*?)</script>', doc)]
@@ -140,7 +200,7 @@ class ParityTests(unittest.TestCase):
         env.pop('FSHO_USE_REAL_ADAPTER', None)
         proc = subprocess.run([sys.executable, 'build/gen.py', '--check'], cwd=ROOT, env=env, capture_output=True, text=True)
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertIn('OK: 15 pages, 39 markets, 16 redirects', proc.stdout)
+        self.assertIn('OK: 23 pages, 39 markets, 16 redirects', proc.stdout)
         for name in ('california', 'connecticut', 'massachusetts', 'mississippi', 'north-carolina', 'pennsylvania', 'rhode-island', 'washington'):
             self.assertIn(f'content/markets/{name}.json: title is ', proc.stdout)
         self.assertNotIn('ERROR', proc.stdout)
@@ -595,6 +655,14 @@ cta_label: "Page specific heading"
             'contact-us': Path(gen.OUT) / 'contact-us' / 'index.html',
             'stop-foreclosure': Path(gen.OUT) / 'stop-foreclosure' / 'index.html',
             'north-carolina': Path(gen.OUT) / 'sell-your-house-fast-in-north-carolina' / 'index.html',
+            'sell-your-house-as-is': Path(gen.OUT) / 'sell-your-house-as-is' / 'index.html',
+            'companies-that-buy-houses': Path(gen.OUT) / 'companies-that-buy-houses' / 'index.html',
+            'sell-your-house-fast': Path(gen.OUT) / 'sell-your-house-fast' / 'index.html',
+            'selling-a-house-in-pre-foreclosure': Path(gen.OUT) / 'selling-a-house-in-pre-foreclosure' / 'index.html',
+            'selling-a-house-in-divorce': Path(gen.OUT) / 'selling-a-house-in-divorce' / 'index.html',
+            'selling-an-inherited-house': Path(gen.OUT) / 'selling-an-inherited-house' / 'index.html',
+            'selling-a-house-in-probate': Path(gen.OUT) / 'selling-a-house-in-probate' / 'index.html',
+            'selling-a-house-with-tenants': Path(gen.OUT) / 'selling-a-house-with-tenants' / 'index.html',
         }
         markets = list((self.root / 'content' / 'markets').glob('*.json'))
         self.assertEqual(len(markets), 39)
@@ -776,10 +844,12 @@ cta_label: "Page specific heading"
             out / 'contact-us' / 'index.html',
             out / 'stop-foreclosure' / 'index.html',
         ]
+        for spec in AD_LANDINGS:
+            form_pages.append(out / spec['slug'] / 'index.html')
         for market in (self.root / 'content' / 'markets').glob('*.json'):
             slug = json.loads(market.read_text(encoding='utf-8'))['slug']
             form_pages.append(out / slug / 'index.html')
-        self.assertEqual(len(form_pages), 43)
+        self.assertEqual(len(form_pages), 51)
         cash = re.compile(r'<a class="btn btn-o" href="([^"]+)">Get My Fair Cash Offer</a>')
         sticky = re.compile(r'<a class="sticky s2b" href="([^"]+)">Get Offer</a>')
         for path in form_pages:
@@ -845,7 +915,7 @@ cta_label: "Page specific heading"
                 pages.append((rel, text))
             else:
                 redirects.append((rel, text))
-        self.assertEqual(len(pages), 54)
+        self.assertEqual(len(pages), 62)
         self.assertEqual(len(redirects), 16)
         for rel, text in pages:
             if rel == 'test-intake/index.html':
@@ -1042,6 +1112,123 @@ cta_label: "Page specific heading"
         self.save_site(data, path)
         errors, _warns = self.check()
         self.assertTrue(any('gtm_id must be GTM-WWPBQGDZ' in e for e in errors), errors)
+
+    def test_ad_landing_pages_are_unique_indexable_and_public(self):
+        self.build(live=False)
+        out = Path(gen.OUT)
+        home = (out / 'index.html').read_text(encoding='utf-8')
+        stop = (out / 'stop-foreclosure' / 'index.html').read_text(encoding='utf-8')
+        sitemap = (out / 'sitemap.xml').read_text(encoding='utf-8')
+        nav_hrefs = {item['href'] for item in json.loads((self.root / 'content' / 'site.json').read_text(encoding='utf-8'))['nav']}
+        self.assertIn('<h1>Stop Foreclosure</h1>', stop)
+        self.assertIn('If you are behind, you still have choices', stop)
+        self.assertIn('href="/selling-a-house-in-pre-foreclosure/"', stop)
+        self.assertIn('<h1>Sell your house fast, for a fair price, on your timeline.</h1>', home)
+        self.assertNotIn('Sell your house fast, for a fair cash offer, on your timeline.', home)
+        self.assertIn('Brett C.', home)
+        header = re.search(r'<header class="top">.*?</header>', home, re.S).group(0)
+        mains = {}
+        titles, metas, h1s = [], [], []
+        form = '<div id="ts-app" data-public="1"><form id="ts-form" action="#" method="post">'
+        gtm_ns = (
+            '<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-WWPBQGDZ" '
+            'height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>'
+        )
+        for spec in AD_LANDINGS:
+            slug = spec['slug']
+            href = f'/{slug}/'
+            self.assertNotIn(href, nav_hrefs, slug)
+            self.assertNotIn(f'href="{href}"', header, slug)
+            html = (out / slug / 'index.html').read_text(encoding='utf-8')
+            mains[slug] = re.search(r'<main>(.*)</main>', html, re.S).group(1)
+            self.assertNotIn('name="robots" content="noindex,nofollow"', html, slug)
+            self.assertIn(f'<loc>https://fsho.co{href}</loc>', sitemap, slug)
+            self.assertIn(f'<link rel="canonical" href="https://fsho.co{href}">', html, slug)
+            self.assertEqual(re.findall(r'<h1>(.*?)</h1>', html), [spec['h1']], slug)
+            title = re.search(r'<title>(.*?)</title>', html).group(1)
+            desc = re.search(r'<meta name="description" content="([^"]*)"', html).group(1)
+            self.assertEqual(title, gen.link_preview(spec['title']), slug)
+            self.assertEqual(html_mod.unescape(desc), gen.link_preview(spec['meta']), slug)
+            self.assertLessEqual(len(spec['title']), 60, slug)
+            self.assertLessEqual(len(spec['meta']), 155, slug)
+            self.assertNotIn('&amp;', title, slug)
+            titles.append(title)
+            metas.append(html_mod.unescape(desc))
+            h1s.append(spec['h1'])
+            self.assertIn(form, html, slug)
+            self.assertEqual(html.count('id="offer"'), 1, slug)
+            self.assertEqual(html.count('id="two-stage"'), 1, slug)
+            self.assertEqual(html.count('id="ts-form"'), 1, slug)
+            self.assertIn('>Get My Offer</button>', html, slug)
+            self.assertIn('href="#offer">Get Offer</a>', html, slug)
+            self.assertIn('tel:+19106366669', html, slug)
+            self.assertIn('(910) 636-6669', html, slug)
+            self.assertIn('/.netlify/functions/intake-producer', html, slug)
+            self.assertIn('data-public="1"', html, slug)
+            self.assertNotIn('action="/step-2/"', html, slug)
+            self.assertNotIn('name="form_id" value="1"', html, slug)
+            self.assertNotIn('name="gclid"', html, slug)
+            self.assertNotIn('Test mode only', html, slug)
+            visible = re.sub(r'<script\b[^>]*>.*?</script>', '', mains[slug], flags=re.S)
+            visible = re.sub(r'<style\b[^>]*>.*?</style>', '', visible, flags=re.S)
+            self.assertNotIn('Brett C.', visible, slug)
+            self.assertNotIn('Sell your house fast, for a fair cash offer', html, slug)
+            self.assertNotIn('3–6 months', html, slug)
+            for bad in ('lorem', 'tbd', 'placeholder', 'todo', 'fixme'):
+                self.assertNotIn(bad, visible.lower(), '%s %s' % (slug, bad))
+            self.assertIn('<body>' + gtm_ns, html, slug)
+            self.assertEqual(html.count('ns.html?id=GTM-WWPBQGDZ'), 1, slug)
+            self.assertNotIn('googletagmanager.com/gtag/js', html, slug)
+            self.assertNotIn("gtag('config'", html, slug)
+            self.assertNotIn('google-site-verification', html, slug)
+            self.assertNotIn('fairandsimplehomeoffer.com', html, slug)
+            self.assertIn('https://www.clickcease.com/monitor/stat.js', html, slug)
+            self.assertNotIn('<script src="https://www.clickcease.com/monitor/cccontrack.js"', html, slug)
+            self.assertIn("fbq('track', 'PageView');", html, slug)
+            self.assertIn('oaiq("init", { pixelId: "AMsRexCaeaxScDiV9SGJcP" });', html, slug)
+            self.assertIn('window.FSHO_PIXELS=', html, slug)
+            self.assertIn('<script src="//s.ksrndkehqnwntyxlhgto.com/176490.js" defer></script>', html, slug)
+            self.assertIn('tracking:false', html, slug)
+            self.assertIn('clickcease:""', html, slug)
+            agent = next(b for b in ld_blocks(html) if b.get('@type') == 'RealEstateAgent')
+            self.assertEqual(agent['url'], 'https://fsho.co/', slug)
+            self.assertEqual(agent['name'], 'Fair and Simple Home Offer', slug)
+            faqs = faq_pairs(html)
+            self.assertGreaterEqual(len(faqs), 2, slug)
+            self.assertLessEqual(len(faqs), 4, slug)
+            self.assertTrue(any(b.get('@type') == 'FAQPage' for b in ld_blocks(html)), slug)
+            self.assertEqual(len(faqs), len(next(b for b in ld_blocks(html) if b.get('@type') == 'FAQPage')['mainEntity']), slug)
+        self.assertEqual(len(set(titles)), 8)
+        self.assertEqual(len(set(metas)), 8)
+        self.assertEqual(len(set(h1s)), 8)
+        self.assertNotIn(home_h1(home), h1s)
+        self.assertNotIn('Stop Foreclosure', h1s)
+        for spec in AD_LANDINGS:
+            for other, main in mains.items():
+                if other == spec['slug']:
+                    self.assertIn(spec['only'], main, spec['slug'])
+                else:
+                    self.assertNotIn(spec['only'], main, '%s leaked into %s' % (spec['slug'], other))
+        pre = mains['selling-a-house-in-pre-foreclosure']
+        divorce = mains['selling-a-house-in-divorce']
+        probate = mains['selling-a-house-in-probate']
+        inherited = mains['selling-an-inherited-house']
+        tenants = mains['selling-a-house-with-tenants']
+        for main in (pre, divorce, probate):
+            self.assertIn('We are not attorneys', main)
+        self.assertIn('hud.gov/counseling', pre)
+        self.assertIn('href="/stop-foreclosure/"', pre)
+        self.assertNotIn('<h1>Stop Foreclosure</h1>', pre)
+        self.assertIn('href="/selling-a-house-in-probate/"', inherited)
+        self.assertIn('href="/selling-an-inherited-house/"', probate)
+        self.assertIn('We do not evict tenants', tenants)
+        self.assertIn('do not promise the tenants will leave', tenants)
+        self.assertNotIn('we will evict', tenants.lower())
+        self.assertNotIn('<h1>Sell your house fast, for a fair price, on your timeline.</h1>', mains['sell-your-house-fast'])
+
+
+def home_h1(html):
+    return re.search(r'<h1>(.*?)</h1>', html).group(1)
 
 
 if __name__ == '__main__':
