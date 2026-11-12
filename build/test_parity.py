@@ -360,6 +360,9 @@ draft: false
             {'file': 'logo.webp', 'alt': 'Fair & Simple Home Offer', 'width': width, 'height': height},
             {'file': 'andrew-family-768.webp', 'alt': 'Andrew Collier with his wife and baby', 'width': 768, 'height': 720},
             {'file': 'andrew-family-400.webp', 'alt': 'Andrew Collier with his wife and baby', 'width': 400, 'height': 375},
+            {'file': 'google-ratings.webp', 'alt': '5-star rated on Google', 'width': 195, 'height': 91},
+            {'file': 'bbb-white.webp', 'alt': 'A+ BBB rating', 'width': 160, 'height': 112},
+            {'file': 'fb-white.webp', 'alt': '5-star rated on Facebook', 'width': 100, 'height': 46},
         ])
         self.assertEqual((width, height), (320, 122))
 
@@ -674,6 +677,12 @@ cta_label: "Page specific heading"
         home = pages['index.html'].read_text(encoding='utf-8')
         nc_html = pages['north-carolina'].read_text(encoding='utf-8')
         self.assertNotIn('sotellus.com', home)
+        self.assertIn('alt="5-star rated on Google"', home)
+        self.assertIn('alt="A+ BBB rating"', home)
+        self.assertIn('alt="5-star rated on Facebook"', home)
+        self.assertIn('Family-owned since 2017', home)
+        self.assertIn('No fees or commissions', home)
+        self.assertIn('.trust{list-style:none;padding:0;margin:16px 0 0;display:flex;flex-wrap:wrap;justify-content:center;align-items:center', home)
         for html in (home, nc_html):
             self.assertIn('multi-family properties (2–4 units)', html)
             self.assertNotIn('class="ph"', html)
