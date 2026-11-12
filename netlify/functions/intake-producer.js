@@ -301,6 +301,7 @@ async function handle(event, deps) {
     if (phone.length < 10 || phone.length > 11) fields.push("phone");
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 200) fields.push("email");
     if (input.is_test != null && typeof input.is_test !== "boolean") fields.push("is_test");
+    if (input.consent != null && typeof input.consent !== "boolean") fields.push("consent");
     if (fields.length) return respond(env, state, 400, { ok: false, status: "bad_input", fields });
     payload.full_name = full;
     payload.address_line = line;
@@ -309,7 +310,9 @@ async function handle(event, deps) {
     // intake-park stores is_test only when the boolean is true (p.is_test === true).
     // false, including when the client omits the flag, is a real lead.
     payload.is_test = input.is_test === true;
-    state.contact = { full_name: full, phone, email, address_line: line };
+    // consent is not an edge column. Unknown park keys are ignored, except attribution and price_vs_value.
+    payload.consent = input.consent === true;
+    state.contact = { full_name: full, phone, email, address_line: line, consent: payload.consent };
   } else if (op === "answer") {
     const fields = [];
     if (!QUESTIONS[input.question]) fields.push("question");
@@ -361,7 +364,8 @@ async function handle(event, deps) {
         full_name: state.contact.full_name,
         phone: state.contact.phone,
         email: state.contact.email,
-        address_line: state.contact.address_line
+        address_line: state.contact.address_line,
+        consent: state.contact.consent === true
       });
       let hook = await postHook(doFetch, env.INTAKE_ZAP_HOOK_URL, hookBody);
       if (!hookOk(hook)) hook = await postHook(doFetch, env.INTAKE_ZAP_HOOK_URL, hookBody);

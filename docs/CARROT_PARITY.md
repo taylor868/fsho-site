@@ -54,9 +54,9 @@ Status key:
 | 42 | Call tracking / dynamic number swap | Schema | Live site swaps to (910) 227-3134 via JS. Add optional `tracking_phone` swap only if approved; default (910) 636-6669. |
 | 43 | Testimonials (text) | Covered | `site.json testimonials`; per-market overrides. |
 | 44 | Video testimonials (YouTube) | Covered | `video_ids[]`, click-to-load thumbnails (no iframes on load). |
-| 45 | Reviews widget (Google/Facebook) | Covered | Optional `reviews[]` `{quote, name, source, date}` rendered by `{{reviews}}` as static HTML. No third-party script. The list stays empty until a real review is pasted with permission. |
+| 45 | Reviews widget (Google/Facebook) | Covered | Optional `reviews[]` stays static. `/reviews/` also embeds the official SoTellUs header and slider iframes (no extra third-party script). |
 | 46 | FAQs | Covered | `site.json faq` + per-page `faq` override. |
-| 47 | Trust badges / "As Seen On" ribbon | Covered | `trust_badges[]` text. Logo ribbon dropped (unsubstantiated "#1" claim also dropped). |
+| 47 | Trust badges / "As Seen On" ribbon | Covered | `trust_badges[]` link out to the Google, Facebook, and BBB profiles. Logo ribbon dropped (unsubstantiated "#1" claim also dropped). |
 | 48 | Market/state pages (39) | Covered | `content/markets/<slug>.json`. |
 | 49 | Duplicate "for-cash-in" + "-2" state pages | Covered | Consolidated; 301s in `redirects.json`. |
 | 50 | City pages | Schema | `cities[]` renders a line now; add `content/cities/<slug>.json` + `template: city` linked from its state, only with real local content. |
@@ -69,7 +69,7 @@ Status key:
 | 57 | Popups / exit-intent / sticky bars | Covered (sticky) / Drop (popups) | Mobile sticky Call/Offer bar built in; no popups. |
 | 58 | Live chat widget | Drop | Not used; heavy third-party script. |
 | 59 | A/B split testing | Drop | Not used; revisit via Ads experiments if needed. |
-| 60 | Legal pages (privacy, terms, SMS terms) | Covered | Pages exist; **verbatim legal text still placeholder** (needs copy from live/counsel). |
+| 60 | Legal pages (privacy, terms, SMS terms) | Covered | Verbatim old-site copy on `/privacy/`, `/terms-conditions/`, and `/text-messaging-terms/`. Website line is https://fsho.co/. Phone is (910) 636-6669. SMS help email is offer@fairandsimplehomeoffer.com. |
 | 61 | 404 page | Covered | `content/pages/404.md` builds to `dist/404.html` (noindex) with a home link and a get-offer CTA. `dist/_redirects` ends with `/* /404.html 404`. |
 | 62 | Multiple sites (FSHO + Motivated House Sellers) | Schema + Sentinel | Add `sites/<site>/content/` support (`gen.py --site`); Sentinel site switcher. Second site out of scope until asked. |
 | 63 | User roles (owner/editor) | Sentinel | Sentinel console login/roles (Andrew = editor, Taylor = publisher). |

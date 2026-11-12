@@ -22,7 +22,7 @@ Fair, honest, simple. Write the way Andrew talks to a neighbor.
 - No unverified claims ("#1", "best in the state"). Use only testimonials and reviews that are real and used with permission. Never invent one.
 - Fair Housing: never describe or target buyers or sellers by race, color, religion, sex, disability, familial status, or national origin, and never describe neighborhoods that way. Describe the house and the situation, not the people.
 - The phone number is always **(910) 636-6669** (`tel:+19106366669`). Don't change it unless Taylor explicitly approves.
-- Keep "We do not buy…" qualifiers accurate (no condos, mobile homes, land, or listed homes) unless Andrew confirms a change.
+- Keep "We do not buy…" qualifiers accurate (no condos, townhouses, mobile homes, apartments, or vacant land). Listed homes are not a form rejection. Do not say owned-less-than-7-years is a hard no.
 
 ## Performance rules (the site must stay Usain-Bolt fast)
 

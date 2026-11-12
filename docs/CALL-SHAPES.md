@@ -101,7 +101,7 @@ Canonical paths are `/functions/v1/intake-park/park`, `/answer` and `/claim`. Th
                "phone":"10 or 11 digits", "email":"…",
                "address_line":"1109 N Highland St, Arlington, VA 22201",
                "line1"?:"…", "city"?:"…", "state"?:"VA", "postal"?:"12345[-6789]",
-               "client_ip":"203.0.113.10", "is_test"?: false,
+               "client_ip":"203.0.113.10", "is_test"?: false, "consent"?: false,
                "gclid"?:"…", "gbraid"?:"…", "wbraid"?:"…", "fbclid"?:"…", "utm_source"?:"…", …, "lead_id"?:"…", "enrichment"?: {…} } }
 ```
 
@@ -112,6 +112,7 @@ Canonical paths are `/functions/v1/intake-park/park`, `/answer` and `/claim`. Th
 | `address_line` | **required**, 3–200 chars, the visitor's single address line. Stored as `address_raw`. Geocoded with Geocodio `q=<address_line>`. |
 | `line1`, `city`, `state`, `postal` | optional, validated when sent (`state` 2 letters, upper-cased; `postal` `12345` or `12345-6789`) |
 | `client_ip` | **required** (see section 0) |
+| `consent` | boolean the site sends. Not an edge column. Unknown park keys are ignored, so this does not fail park. Unchecked is `false`. |
 
 **Parsed parts.** When the geocode status is `ok`, the edge parses Geocodio's `formatted_address` (`"<line1>, <city>, <ST> <zip>"`) and stores `address_line1`, `city`, `state` and `postal`. It fills **only** the parts the visitor did not send, and malformed parts are dropped. No parts are stored on `low_accuracy`, `no_match`, `failed`, `capped` or `timeout`; `address_raw` is always kept. The CRM insert (315b) uses `address_line1`, falling back to `address_raw`.
 

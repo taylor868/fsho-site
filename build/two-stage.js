@@ -71,7 +71,8 @@
   };
 
   function testModeAllowed(context, search) {
-    if (context !== "deploy-preview" && context !== "branch-deploy" && context !== "dev" && context !== "local" && context !== "production") return false;
+    if (context === "production") return false;
+    if (context !== "deploy-preview" && context !== "branch-deploy" && context !== "dev" && context !== "local") return false;
     return /(?:^|[?&])test=1(?:&|$)/.test(String(search || ""));
   }
 
@@ -478,8 +479,9 @@
         var phone = contact && String(contact.phone || "").trim();
         var email = contact && String(contact.email || "").trim();
         if (!name || !address || !phone || !email) return { ok: false, error: "contact_required" };
-        state.contact = { name: name, address: address, phone: phone, email: email };
-        return chain(adapter.park(Object.assign(basePayload("contact"), { name: name, address: address, phone: phone, email: email, status: "parked" })), function (parked) {
+        var consent = contact.consent === true;
+        state.contact = { name: name, address: address, phone: phone, email: email, consent: consent };
+        return chain(adapter.park(Object.assign(basePayload("contact"), { name: name, address: address, phone: phone, email: email, consent: consent, status: "parked" })), function (parked) {
           if (parked && (parked.ok === false || (typeof parked.http === "number" && (parked.http < 200 || parked.http >= 300)))) {
             state.parked = false;
             state.stage = "contact";
@@ -717,7 +719,8 @@
             address_line: row.address_line || row.address || "",
             phone: row.phone || "",
             email: row.email || "",
-            is_test: options.isTest === true
+            is_test: options.isTest === true,
+            consent: row.consent === true
           }));
         },
         answer: function (req) {
@@ -764,6 +767,7 @@
         var phone = String(row.phone || "").replace(/\D/g, "");
         if (phone) payload.phone = phone;
         if (row.email) payload.email = row.email;
+        payload.consent = row.consent === true;
         signedIp(payload);
         return envelope("partial", payload).then(function (env) {
           return post("/intake-park/park", { envelope: env, session_binding: ids.binding, payload: payload });
@@ -1085,8 +1089,9 @@ function boot(api) {
   form.onsubmit = function (e) {
     e.preventDefault();
     var data = new FormData(form);
+    var box = form.querySelector('input[name="consent"]');
     runStep(function () {
-      return flow.submitContact({ name: data.get("name"), address: data.get("address"), phone: data.get("phone"), email: data.get("email") });
+      return flow.submitContact({ name: data.get("name"), address: data.get("address"), phone: data.get("phone"), email: data.get("email"), consent: !!(box && box.checked) });
     });
   };
   armGtm(api.CONFIG.gtm_id || api.TRACKING.gtm_id);

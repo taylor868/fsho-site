@@ -16,5 +16,23 @@
     "alt": "Andrew Collier with his wife and baby",
     "width": 400,
     "height": 375
+  },
+  {
+    "file": "google-ratings.webp",
+    "alt": "5-star rated on Google",
+    "width": 195,
+    "height": 91
+  },
+  {
+    "file": "bbb-white.webp",
+    "alt": "A+ BBB rating",
+    "width": 160,
+    "height": 112
+  },
+  {
+    "file": "fb-white.webp",
+    "alt": "5-star rated on Facebook",
+    "width": 100,
+    "height": 46
   }
 ]

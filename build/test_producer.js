@@ -170,6 +170,7 @@ async function main() {
   assert.equal(park.body.payload.address_line, "1 Main St");
   assert.equal(park.body.payload.full_name, "Ada Lovelace");
   assert.equal(park.body.payload.is_test, false);
+  assert.equal(park.body.payload.consent, false);
   assert.equal(park.body.envelope.stage, "partial");
   expectSig(park.body.envelope, park.body.payload);
   assert.deepEqual(Object.keys(park.body).sort(), ["envelope", "payload", "session_binding"]);
@@ -233,7 +234,8 @@ async function main() {
   expectSig(reserve.body.envelope, reserve.body.payload);
   assert.deepEqual(Object.keys(reserve.body).sort(), ["destination", "envelope", "lease_seconds", "owner_token", "payload", "session_binding"]);
   const hook = calls.find((row) => row.url === HOOK);
-  assert.deepEqual(Object.keys(hook.body).sort(), ["address_line", "email", "full_name", "intake_id", "owner_token", "phone", "reservation_generation", "reservation_id", "session_binding"]);
+  assert.deepEqual(Object.keys(hook.body).sort(), ["address_line", "consent", "email", "full_name", "intake_id", "owner_token", "phone", "reservation_generation", "reservation_id", "session_binding"]);
+  assert.equal(hook.body.consent, false);
   assert.equal(hook.body.intake_id, INTAKE);
   assert.equal(hook.body.reservation_id, RES);
   assert.equal(hook.body.reservation_generation, 2);
@@ -403,6 +405,36 @@ async function main() {
   });
   assert.equal(realLead.statusCode, 200);
   assert.equal(explicitReal.find((row) => row.payload).payload.is_test, false);
+  assert.equal(explicitReal.find((row) => row.payload).payload.consent, false);
+
+  const agreed = [];
+  const agreedLead = await producer.handle(event("park", {
+    full_name: "Ada Lovelace",
+    address_line: "1 Main St",
+    phone: "5550100199",
+    email: "ada@example.com",
+    consent: true
+  }), {
+    env, now: () => 1700000000000,
+    fetch: async (url, init) => {
+      agreed.push(JSON.parse(init.body));
+      if (String(url).endsWith("/mint")) return json(200, { ok: true, intake_id: INTAKE, session_binding: BINDING, kid: KID });
+      return json(200, { ok: true, status: "parked" });
+    }
+  });
+  assert.equal(agreedLead.statusCode, 200);
+  assert.equal(agreed.find((row) => row.payload).payload.consent, true);
+  expectSig(agreed.find((row) => row.payload).envelope, agreed.find((row) => row.payload).payload);
+
+  const badConsent = await producer.handle(event("park", {
+    full_name: "Ada Lovelace",
+    address_line: "1 Main St",
+    phone: "5550100199",
+    email: "ada@example.com",
+    consent: "yes"
+  }), deps);
+  assert.equal(badConsent.statusCode, 400);
+  assert.deepEqual(JSON.parse(badConsent.body).fields, ["consent"]);
 
   const badFlag = await producer.handle(event("park", {
     full_name: "Ada Lovelace",
