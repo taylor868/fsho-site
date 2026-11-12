@@ -27,7 +27,15 @@
     "enabled": true,
     "profile_id": "176490",
     "script_host": "//s.ksrndkehqnwntyxlhgto.com",
-    "_note": "Official standard snippet for profile 176490. The inline script snapshots the landing URL and referrer while HTML parses. 176490.js is deferred so it does not block first paint. Does not enable tracking (GTM and ClickCease), lead_form, or the public test form. Redirect stubs and /test-intake/ do not get the snippet."
+    "_note": "Official standard snippet for profile 176490. The inline script snapshots the landing URL and referrer while HTML parses. 176490.js is deferred so it does not block first paint. Does not enable tracking, lead_form, or the public test form. Redirect stubs and /test-intake/ do not get the snippet. ClickCease, Meta, OpenAI, and the GTM noscript are the pixels block."
+  },
+  "pixels": {
+    "enabled": true,
+    "gtm_id": "GTM-WWPBQGDZ",
+    "ads_call_send_to": "AW-16781895992/YrLzCKa9g4sdELjSncI-",
+    "meta_pixel_id": "959620977142967",
+    "openai_pixel_id": "AMsRexCaeaxScDiV9SGJcP",
+    "_note": "Approved snippets. tracking stays false and clickcease_id stays empty so the footer demo does not load a second gtm.js or stat.js. ClickCease visitor monitoring is in the head. cccontrack.js loads only after a reserved public seller_form_completed, because that script records a conversion when it loads. The no-JS conversions image is not in the HTML: it would count a page view, and the form cannot finish without JS. Meta Lead and OpenAI lead_created / seller_form_completed fire on that same reserve path, once per lead id. They do not fire because the path is /step-2 or /thank-you. No second gtag.js and no gtag config."
   },
   "nav": [
     {

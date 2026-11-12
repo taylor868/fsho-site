@@ -26,7 +26,7 @@ Fair, honest, simple. Write the way Andrew talks to a neighbor.
 
 ## Performance rules (the site must stay Usain-Bolt fast)
 
-- Add no new scripts, widgets, iframes, chat bubbles, popups, review embeds, or other third-party code without Taylor's approval. WhatConverts profile 176490 is the approved snippet and is on. Keep the inline snapshot ahead of `176490.js`. Do not turn `tracking` on and do not enable ClickCease.
+- Add no new scripts, widgets, iframes, chat bubbles, popups, review embeds, or other third-party code without Taylor's approval. WhatConverts profile 176490 is on. Keep the inline snapshot ahead of `176490.js`. ClickCease visitor monitoring, the GTM-WWPBQGDZ noscript iframe, Meta Pixel 959620977142967 (PageView on load), and OpenAI Pixel AMsRexCaeaxScDiV9SGJcP (init on load) are on. Their conversions fire only after a reserved public form completion. Do not turn `tracking` on. Do not add a second gtag.js, a gtag config, the Carrot footer JSON-LD, the gclid footer script, or a google-site-verification meta.
 - Images must be WebP, under 200 KB, and sized close to how they display. Convert uploads yourself.
 - No web fonts. The site uses system fonts.
 - Keep pages lean: reuse shortcodes, and don't paste the same block three times. Videos stay click-to-load.
@@ -51,7 +51,7 @@ Fair, honest, simple. Write the way Andrew talks to a neighbor.
 
 ## Refuse or escalate to Taylor (don't just do it)
 
-- **Tracking:** GTM, ClickCease, GA4, Ads tags, pixels, call-tracking numbers, and any WhatConverts profile other than the installed 176490 snippet. Leave `tracking` false.
+- **Tracking:** any new container, pixel, call-tracking number, or WhatConverts profile other than the installed 176490 snippet and the approved pixels block. Leave `tracking` false. Do not add a second gtag.js.
 - **Forms and lead routing:** form fields (they live in `site.json` as `form1_fields` and `step2_fields`), where leads go, the endpoint, SMS or CRM settings, consent text.
 - **Legal:** privacy, terms, SMS terms, TCPA wording, licensing or "not a brokerage" lines, Fair Housing questions.
 - **Money claims:** prices, offer amounts, "we pay X%", closing-cost promises, timelines stated as guarantees.
