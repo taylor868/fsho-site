@@ -169,13 +169,7 @@
     ],
     "note": "*Typical industry figures; your costs may differ."
   },
-  "testimonials": [
-    {
-      "quote": "One of the easiest processes I have done. Very quick and extremely friendly. Contacted me through every step of the process highly recommend these guys.",
-      "name": "Brett C.",
-      "source_url": "https://www.bbb.org/us/mi/rockford/profile/real-estate-investing/fair-and-simple-home-offer-0372-38321834/customer-reviews"
-    }
-  ],
+  "testimonials": [],
   "reviews": [],
   "_reviews_note": "Static reviews for {{reviews}}. Each item is {quote, name, source, date}. Paste real reviews with permission only. Do not invent any. /reviews/ also embeds the official SoTellUs header and slider iframes. No other third-party review script.",
   "video_ids": [
