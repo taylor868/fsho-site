@@ -71,6 +71,24 @@ class ParityTests(unittest.TestCase):
             os.environ['CONTEXT'] = self._ctx
         self.tmp.cleanup()
 
+    def assert_unused_test_page(self, page):
+        self.assertIn("<title>This page isn't in use | Fair and Simple Home Offer</title>", page)
+        self.assertIn("<h1>This page isn't in use.</h1>", page)
+        self.assertIn(
+            "This page isn't used anymore. Call or text "
+            '<a href="tel:+19106366669">(910) 636-6669</a>, or '
+            '<a href="/#offer">start the form on the homepage</a>.',
+            page,
+        )
+        self.assertIn('<p class="fine">If you want an offer, use the homepage form or call us.</p>', page)
+        self.assertNotIn('not available on the live site', page)
+        self.assertNotIn('Two-stage test intake', page)
+        self.assertNotIn('The live site does not turn the test form on.', page)
+
+    def assert_ownership_label(self, page):
+        self.assertIn('["decision_maker", "I\'m an heir, executor, or have power of attorney"]', page)
+        self.assertNotIn("I'm an heir, executor, or POA", page)
+
     def write(self, rel, text):
         path = self.root / rel
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -194,7 +212,7 @@ class ParityTests(unittest.TestCase):
         self.build(live=False)
         page = (Path(gen.OUT) / 'test-intake' / 'index.html').read_text(encoding='utf-8')
         self.assertNotIn('id="ts-form"', page)
-        self.assertIn('not available on the live site', page)
+        self.assert_unused_test_page(page)
         self.assertIn('tracking:false', page)
         self.assertNotIn('id="fsho-google-gate"', page)
         self.assertIn('noindex,nofollow', page)
@@ -212,7 +230,7 @@ class ParityTests(unittest.TestCase):
         live_page = (Path(gen.OUT) / 'test-intake' / 'index.html').read_text(encoding='utf-8')
         live_home = (Path(gen.OUT) / 'index.html').read_text(encoding='utf-8')
         self.assertNotIn('id="ts-form"', live_page)
-        self.assertIn('not available on the live site', live_page)
+        self.assert_unused_test_page(live_page)
         self.assertIn('noindex,nofollow', live_page)
         self.assertIn('data-public="1"', live_home)
         self.assertNotIn('PREVIEW:', live_home)
@@ -225,7 +243,7 @@ class ParityTests(unittest.TestCase):
         home = (Path(gen.OUT) / 'index.html').read_text(encoding='utf-8')
         self.assertNotIn('id="ts-form"', page)
         self.assertNotIn('window.FSHO_USE_REAL_ADAPTER', page)
-        self.assertIn('not available on the live site', page)
+        self.assert_unused_test_page(page)
         self.assertIn('noindex,nofollow', page)
         self.assertNotIn('/test-intake/', (Path(gen.OUT) / 'sitemap.xml').read_text(encoding='utf-8'))
         self.assertNotIn('PREVIEW:', home)
@@ -579,6 +597,8 @@ cta_label: "Page specific heading"
             html = path.read_text(encoding='utf-8')
             self.assertIn('data-public="1"', html, name)
             self.assertIn('id="ts-form"', html, name)
+            self.assertIn('["decision_maker", "I\'m an heir, executor, or have power of attorney"]', html, name)
+            self.assertNotIn("I'm an heir, executor, or POA", html, name)
             self.assertIn('is_test: options.isTest === true', html, name)
             self.assertIn('chooseAdapter({ isTest: testOn })', html, name)
             self.assertNotIn('FSHO_CONSENT_PREVIEW', html, name)
@@ -716,8 +736,14 @@ cta_label: "Page specific heading"
         self.assertIn('data-consent-size="8"', home)
         self.assertIn('data-public="1"', home)
         self.assertIn('id="ts-form"', preview_test)
-        self.assertIn('Test mode only', preview_test)
+        self.assertIn("<title>This page isn't in use | Fair and Simple Home Offer</title>", preview_test)
+        self.assertIn("<h1>This page isn't in use.</h1>", preview_test)
+        self.assertIn('Test mode only. Needs ?test=1. This page stays noindex.', preview_test)
+        self.assertNotIn("This page isn't used anymore.", preview_test)
+        self.assertNotIn('not available on the live site', preview_test)
         self.assertIn('noindex,nofollow', preview_test)
+        self.assert_ownership_label(home)
+        self.assert_ownership_label(preview_test)
         os.environ['CONTEXT'] = 'production'
         self.build(live=False)
         prod = (Path(gen.OUT) / 'index.html').read_text(encoding='utf-8')
@@ -726,8 +752,9 @@ cta_label: "Page specific heading"
         self.assertNotIn('consent-sizes', prod)
         self.assertIn('data-public="1"', prod)
         self.assertIn('data-consent-size="8"', prod)
+        self.assert_ownership_label(prod)
         self.assertNotIn('id="ts-form"', prod_test)
-        self.assertIn('not available on the live site', prod_test)
+        self.assert_unused_test_page(prod_test)
         self.assertIn('Fair and Simple Home Offer</title>', prod)
         self.assertNotIn('&amp;', re.search(r'<title>.*?</title>', prod).group(0))
 
