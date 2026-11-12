@@ -53,7 +53,7 @@
   };
   var QUESTIONS = {
     type: ["What kind of property is it?", [["sfh", "Single-family house"], ["townhouse", "Townhouse"], ["multi_2_4", "Multi-family (2-4 units)"], ["condo", "Condo"], ["mobile", "Mobile or manufactured home"], ["land", "Vacant land"]]],
-    ownership: ["Are you the owner, or can you make the decision to sell?", [["sole_owner", "Yes, I'm the only owner"], ["all_agree", "Yes, and all owners agree"], ["decision_maker", "I'm an heir, executor, or POA"], ["no", "No, or not everyone agrees"]]],
+    ownership: ["Are you the owner, or can you make the decision to sell?", [["sole_owner", "Yes, I'm the only owner"], ["all_agree", "Yes, and all owners agree"], ["decision_maker", "I'm an heir, executor, or have power of attorney"], ["no", "No, or not everyone agrees"]]],
     occupancy: ["Who is living there?", [["owner_occupied", "I live there"], ["tenant_occupied", "A tenant lives there"], ["vacant", "It's vacant"], ["unknown", "Not sure"]]],
     condition: ["What condition is the property in?", [["excellent", "Excellent"], ["good", "Good"], ["fair", "Fair"], ["needs_work", "Needs work"], ["major_repairs", "Major repairs"]]],
     listed: ["Is it listed with an agent?", [["not_listed", "Not listed"], ["listed_under_90", "Listed under 90 days"], ["listed_over_90", "Listed 90 days or more"], ["expired", "Listing expired"]]],
