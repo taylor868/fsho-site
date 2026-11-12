@@ -1,11 +1,21 @@
 ---
 title: "Stop Foreclosure | Fair & Simple Home Offer"
-meta_description: "Facing foreclosure? Know your options."
+meta_description: "Behind on payments? Know your options, including an as-is cash offer on your timeline. Call (910) 636-6669."
 template: situation
-hero_headline: "Behind on payments? Know your options before the auction date."
-hero_sub: "We may be able to buy your house quickly, often before the foreclosure sale, so you can move on. Call early; time matters."
+hero_headline: "Stop Foreclosure"
+hero_sub: "Know your options and avoid foreclosure."
+cta_label: "Want to talk through your options?"
 noindex: false
+faq:
+  - q: "Can I sell my house fast to stop foreclosure?"
+    a: "Selling quickly is often one way to avoid a foreclosure sale when time is short. We can usually close in 10–14 business days in most scenarios. If you need more time, we close on the date you choose. You can sell as-is, with no repairs. A sale helps only when there is enough time before the sale date and the numbers work. It is not a guarantee that foreclosure stops, and we do not promise an outcome for your credit. We are not attorneys. For legal advice, talk with a foreclosure attorney or a HUD-approved housing counselor at <a href=\"https://www.hud.gov/counseling\">hud.gov/counseling</a>."
 ---
-<section class="wrap pad"><div class="card"><h2>Your options may include</h2><ul class="ck"><li>A fast as-is cash sale to us</li><li>A market sale with our team, if time allows</li><li>Talking to your lender about a loan modification or repayment plan</li><li>Free guidance from a HUD-approved housing counselor (hud.gov)</li></ul><p class="fine">We are not attorneys or financial advisors. Results depend on your timeline and situation.</p></div></section>
+<section class="wrap pad"><h2>If you are behind, you still have choices</h2><p>Missed payments, or a lender talking about foreclosure, is a hard place to be. It is also more common than it feels. There is no shame in it, and you do not have to sort it out alone.</p><p>A sale is one option. It is not the only one, and it does not fit every timeline. We will tell you plainly if we are not the right fit.</p></section>
+
+<section class="alt"><div class="wrap pad"><h2 class="c">Options people in this spot usually look at</h2><div class="grid2"><div class="card"><h3>Talk with your lender</h3><p>Ask about a repayment plan, forbearance, or a loan modification. We are not your lender, and we cannot change the loan for you.</p></div><div class="card"><h3>Talk with a housing counselor</h3><p>HUD-approved counselors offer free guidance. Start at <a href="https://www.hud.gov/counseling">hud.gov/counseling</a>. For legal questions, talk with a foreclosure attorney. We are not attorneys or housing counselors.</p></div><div class="card"><h3>A cash offer, as-is</h3><p>We can make a no-obligation cash offer on the house as it sits. No repairs, no cleaning, and no agent commission on our cash offer. You pick the closing date.</p></div><div class="card"><h3>A market sale, if time allows</h3><p>If the sale date is far enough out, we can also show you a market-sale option that may net more. That path usually takes longer. We show you both and you decide.</p></div></div><p class="fine">What happens depends on your sale date, what is owed, and whether the numbers work. Selling does not guarantee that a foreclosure stops, and it does not guarantee what happens to your credit.</p></div></section>
+
+<section class="wrap pad"><h2>What working with us looks like</h2><div class="grid2"><div class="card"><h3>Real people</h3><p>You talk with us, not a call center. Call or text <a href="tel:+19106366669">(910) 636-6669</a>, or use the form on this page. There is no cost to ask, and no obligation to sell.</p></div><div class="card"><h3>The lender, if you sell</h3><p>If you accept an offer, the title company sends the payoff to your lender at closing. We can help coordinate that. We cannot make the lender pause the case, and the closing has to land before the sale date for a sale to matter.</p></div><div class="card"><h3>As-is, on your timeline</h3><p>Leave the repairs. We can usually close in 10–14 business days in most scenarios. If you need more time, we close on the date you choose. Speed and price trade off, and we will say so.</p></div><div class="card"><h3>Learn the options first</h3><p>See which of these fit your dates and your loan, then decide if a conversation would help. Call or text, or use the form. Asking does not cost anything.</p></div></div><p style="display:flex;flex-wrap:wrap;gap:12px;align-items:center"><a class="btn btn-o" href="#offer">Get a no-obligation offer</a> <a class="btn btn-call" href="tel:+19106366669">Call or text (910) 636-6669</a></p></section>
+
+<section class="alt"><div class="wrap pad"><h2 class="c">A common question</h2>{{faq}}</div></section>
 
 {{cta}}

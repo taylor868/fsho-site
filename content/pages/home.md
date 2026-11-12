@@ -11,7 +11,7 @@ faq: []
 ---
 <section class="wrap pad">{{qualifier}}</section>
 
-<section class="wrap pad"><h2 class="c">We help homeowners in every situation</h2>{{situations}}</section>
+<section class="wrap pad"><h2 class="c">We help homeowners in every situation</h2>{{situations}}<div class="card" style="margin-top:20px"><h3>Facing foreclosure?</h3><p>Behind on payments, or hearing from the lender about a sale? <a href="/stop-foreclosure/">Read your options</a>, or call or text <a href="tel:+19106366669">(910) 636-6669</a>.</p></div></section>
 
 <section class="alt"><div class="wrap pad"><h2 class="c">How it works: 3 simple steps</h2>{{steps}}</div></section>
 
