@@ -357,6 +357,15 @@
       if (value && typeof value.then === "function") return value.then(fn);
       return fn(value);
     }
+    function settle(value, fn, onError) {
+      if (value && typeof value.then === "function") return value.then(fn, onError);
+      return fn(value);
+    }
+    function retryOwnership() {
+      state.stage = "q_ownership";
+      state.googleTagFired = false;
+      return { ok: false, error: "try_again", view: snapshot(state) };
+    }
     function recordAnswer(question, value) {
       if (typeof adapter.answer !== "function") return { ok: true };
       return adapter.answer(Object.assign(trackingFields(), { question: question, answer: value })) || { ok: true };
@@ -556,7 +565,10 @@
               return { ok: false, error: "bad_input", fields: owned.fields, view: snapshot(state) };
             }
             var hint = owner ? "hot" : "quiet_non_owner";
-            return chain(decideClaim(hint, owner ? "promote" : "non_owner"), function (decided) {
+            var decidedClaim;
+            try { decidedClaim = decideClaim(hint, owner ? "promote" : "non_owner"); }
+            catch (e) { return retryOwnership(); }
+            return settle(decidedClaim, function (decided) {
               if (decided === "hot") {
                 state.googleTagFired = true;
                 gate.load();
@@ -569,17 +581,24 @@
                 finish("quiet_non_owner", "crm_follow_up", "Google tag not loaded.");
                 return { ok: true, view: snapshot(state) };
               }
-              state.branch = decided;
-              state.downstream = "staying_parked";
-              state.stage = "done";
-              state.googleTagFired = false;
-              adapter.branch(decided);
-              adapter.google(false);
-              adapter.downstream("staying_parked");
-              note(state, "google", "Google tag not loaded.");
-              note(state, "downstream", "Expected path: " + PATHS.staying_parked);
-              return { ok: true, view: snapshot(state) };
-            });
+              if (decided === "stopped") {
+                state.branch = "stopped";
+                state.downstream = "staying_parked";
+                state.stage = "thanks";
+                state.sorry = null;
+                state.followup = null;
+                state.thanks = THANKS;
+                state.googleTagFired = false;
+                adapter.branch("stopped");
+                adapter.google(false);
+                adapter.downstream("staying_parked");
+                note(state, "google", "Google tag not loaded.");
+                note(state, "downstream", "Expected path: " + PATHS.staying_parked);
+                note(state, "thanks", "Already claimed. Thanks screen. No reserve and no Zap.");
+                return { ok: true, view: snapshot(state) };
+              }
+              return retryOwnership();
+            }, retryOwnership);
           });
         }
         if (state.stage === "enrich" && (ENRICH_STEPS.indexOf(id) >= 0 || LEGACY[id])) {
@@ -959,6 +978,7 @@ function boot(api) {
   var thanks = document.getElementById("ts-thanks");
   var error = document.getElementById("ts-error");
   var pending = false;
+  var tryAgain = "That step did not save. You can try again.";
   var tag = { loaded: false, load: function () { this.loaded = true; var n = document.createElement("script"); n.id = "fsho-google-gate"; n.type = "application/json"; n.textContent = "{\"event\":\"form_fill\",\"dry_run\":true}"; document.body.appendChild(n); } };
   var dl = globalThis.dataLayer = globalThis.dataLayer || [];
   var flow = api.createFlow(api.chooseAdapter({ isTest: testOn }), tag, {
@@ -977,7 +997,7 @@ function boot(api) {
     node.appendChild(h);
     node.appendChild(p);
   }
-  function paint() {
+  function paintScreen() {
     trace.replaceChildren();
     flow.state.trace.forEach(function (row) {
       var li = document.createElement("li");
@@ -1054,6 +1074,28 @@ function boot(api) {
       ask.appendChild(skip);
     }
   }
+  function hasNodes(node) {
+    return !!(node && node.childNodes && node.childNodes.length);
+  }
+  function hasScreen() {
+    return hasNodes(ask) || hasNodes(sorry) || hasNodes(follow) || hasNodes(thanks);
+  }
+  function paintFallback() {
+    try {
+      ask.replaceChildren();
+      var h = document.createElement("h2");
+      h.id = "ts-fallback";
+      h.textContent = tryAgain;
+      ask.appendChild(h);
+    } catch (e) {}
+    showError(tryAgain);
+  }
+  function paint() {
+    var threw = false;
+    try { paintScreen(); }
+    catch (e) { threw = true; }
+    if (form.hidden && !hasScreen() && (threw || flow.state.stage !== "abandoned")) paintFallback();
+  }
   function setBusy(on) {
     pending = on;
     var nodes = app.querySelectorAll("button,input");
@@ -1078,11 +1120,11 @@ function boot(api) {
           if (publicForm) showError(need);
           else summary.textContent = need;
         }
-        else showError("That step did not save. You can try again.");
+        else showError(tryAgain);
       }
     }, function () {
       setBusy(false);
-      showError("That step did not save. You can try again.");
+      showError(tryAgain);
       paint();
     });
   }
