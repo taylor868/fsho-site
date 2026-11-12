@@ -57,6 +57,17 @@ def esc(s):
 def pos_int(v):
     return type(v) is int and v > 0
 
+def deploy_context(live):
+    """Baked into the test page. Production cannot be overridden by a query string."""
+    if live or os.environ.get('CONTEXT') == 'production':
+        return 'production'
+    ctx = os.environ.get('CONTEXT', '')
+    if ctx in ('deploy-preview', 'branch-deploy', 'dev'):
+        return ctx
+    if not ctx:
+        return 'local'
+    return 'denied'
+
 def show_drafts(site, live):
     """True when this build should include draft:true pages and markets."""
     if live:
@@ -369,6 +380,73 @@ def check_media(site, pages, markets, E, W):
         if n not in by_file and n not in missing:
             W.append(f'content/media/{n}: not listed in media.json')
 
+def load_test_form_guard():
+    fp = os.path.join(B, 'test_form_guard.json')
+    data = json.load(open(fp, encoding='utf-8'))
+    if not isinstance(data.get('patterns'), list) or not data['patterns']:
+        raise ValueError('build/test_form_guard.json: patterns must be a non-empty list')
+    return data['patterns']
+
+def banned_test_form_hits(text):
+    hits = []
+    for item in load_test_form_guard():
+        if re.search(item['re'], text or '', re.I):
+            hits.append(item['id'])
+    return hits
+
+def test_form_sources():
+    items = [('build/two-stage.js', open(os.path.join(B, 'two-stage.js'), encoding='utf-8').read())]
+    page = os.path.join(C, 'pages', 'test-intake.md')
+    if os.path.isfile(page):
+        items.append((os.path.relpath(page, ROOT), open(page, encoding='utf-8').read()))
+    src = open(os.path.join(B, 'gen.py'), encoding='utf-8').read()
+    found = re.search(r'\n    def test_intake\(\):\n.*?\n    def qualifier_form\(\):', src, re.S)
+    if not found:
+        items.append(('build/gen.py test_intake()', ''))
+    else:
+        items.append(('build/gen.py test_intake()', found.group(0)))
+    return items
+
+def check_test_form(E):
+    for label, text in test_form_sources():
+        if label == 'build/gen.py test_intake()' and not text:
+            E.append('build/gen.py: test_intake() source was not found for the copy check')
+            continue
+        for hit in banned_test_form_hits(text):
+            E.append(f'{label}: banned test-form phrase ({hit})')
+
+def guard_test_page():
+    """Test intake only: transferred bytes and subresource count. Does not change other pages."""
+    page_path = os.path.join(OUT, 'test-intake', 'index.html')
+    if not os.path.isfile(page_path):
+        return
+    raw = open(page_path, encoding='utf-8').read()
+    urls = set()
+    for m in re.finditer(r'<(script|img|iframe|link)\b([^>]*)>', raw, re.I):
+        tag, attrs = m.group(1).lower(), m.group(2)
+        if tag == 'link':
+            rel = re.search(r'\brel\s*=\s*"([^"]*)"', attrs, re.I)
+            relv = (rel.group(1).lower() if rel else '').split()
+            if 'icon' not in relv and 'stylesheet' not in relv:
+                continue
+        src = re.search(r'\b(?:src|href)\s*=\s*"([^"]+)"', attrs, re.I)
+        if not src:
+            continue
+        url = src.group(1).strip()
+        if not url or url.startswith(('#', 'data:', 'mailto:', 'tel:')):
+            continue
+        urls.add(url.split('#', 1)[0])
+    total = os.path.getsize(page_path)
+    for url in urls:
+        if re.match(r'(?:https?:)?//', url):
+            continue
+        fp = os.path.join(OUT, url.lstrip('/'))
+        if os.path.isfile(fp):
+            total += os.path.getsize(fp)
+    requests = 1 + len(urls)
+    if total > 100 * 1024 or requests >= 10:
+        raise SystemExit(f'test-intake budget: {total} bytes, {requests} requests (limit 100KB and under 10 requests)')
+
 def check(site, pages, markets, redirects, errs):
     E = list(errs) + check_qualifier(site.get('_qualifier'))
     W = []
@@ -424,6 +502,7 @@ def check(site, pages, markets, redirects, errs):
         if sz > MAX_IMG: E.append(f'content/media/{n}: {sz//1024} KB is over the 200 KB limit')
         if not n.lower().endswith('.webp') and n != 'favicon.png': E.append(f'content/media/{n}: images must be .webp (favicon.png is the only exception)')
     check_media(site, pages, markets, E, W)
+    check_test_form(E)
     for title, srcs in titles.items():
         if len(srcs) > 1: W.append('duplicate title "%s": %s' % (title, ', '.join(srcs)))
     return E, W
@@ -450,6 +529,50 @@ def build(site, pages, markets, redirects, live):
         c = QC.get('consent', {})
         if not c.get('enabled'): return ''
         return f'<label class="chk"><input type="checkbox" name="consent"{" required" if c.get("required") else ""}> <small>{c["text"]} <a href="/text-messaging-terms/">Text Terms</a> · <a href="/privacy/">Privacy</a></small></label>'
+    def test_intake():
+        ctx = deploy_context(live)
+        real_flag = '1' if os.environ.get('FSHO_USE_REAL_ADAPTER') == '1' else ''
+        src = re.sub(r'\n\s*\n', '\n', open(os.path.join(B, 'two-stage.js'), encoding='utf-8').read().strip()).replace('</', '<\\/')
+        return (
+            '<section class="wrap pad" id="two-stage"><h1>Two-stage test intake</h1>'
+            '<p class="fine">Test mode only. The public form stays off. Nothing on this page is sent.</p>'
+            '<p id="ts-off" hidden>Test mode is off. Production builds cannot enable it, and other builds need ?test=1.</p>'
+            '<div id="ts-app" hidden><form id="ts-form" action="#" method="post">'
+            '<div class="lead-h"><strong>Stage 1</strong><span>Name, property, phone, and email. This only parks the lead.</span></div>'
+            '<label>Name<input name="name" autocomplete="name" required></label>'
+            '<label>Property address<input name="address" autocomplete="street-address" required></label>'
+            '<label>Phone<input name="phone" type="tel" autocomplete="tel" required></label>'
+            '<label>Email<input name="email" type="email" autocomplete="email" required></label>'
+            '<button class="btn btn-o" type="submit">Park this lead</button></form>'
+            '<div id="ts-sorry"></div><div id="ts-followup"></div><div id="ts-thanks"></div><div id="ts-ask"></div>'
+            '<h2 id="ts-trace-title">Step trace</h2><p id="ts-summary" data-google="not-loaded" data-downstream="" data-priority=""></p>'
+            '<p id="ts-error" hidden role="alert"></p><p id="ts-events"></p><ol id="ts-trace"></ol></div>'
+            '<style>'
+            '#ts-app{max-width:32rem}'
+            '#ts-form label{display:block;font-weight:700;font-size:14px;margin:14px 0 0;color:var(--n)}'
+            '#ts-form input{display:block;width:100%;margin-top:6px;padding:14px 16px;border:1.5px solid #c8d1da;border-radius:12px;font-size:16px;background:#fff}'
+            '#ts-form input:focus{outline:2px solid var(--o);border-color:var(--o)}'
+            '#ts-form .btn{width:100%;margin-top:16px;min-height:48px}'
+            '#ts-app h2{font-size:1.35rem;margin:18px 0 10px}'
+            '#ts-app .qo{display:block;width:100%;text-align:left;margin:0 0 10px;min-height:48px;padding:14px 16px;border-radius:12px}'
+            '#ts-abandon{display:block;width:100%;margin-top:4px;min-height:44px;font-weight:700}'
+            '#ts-sorry:empty,#ts-followup:empty,#ts-thanks:empty{display:none}'
+            '#ts-sorry,#ts-followup,#ts-thanks{border-radius:14px;padding:18px 16px;margin:8px 0 18px}'
+            '#ts-sorry{background:#fff7f2;border-left:5px solid var(--o)}'
+            '#ts-followup,#ts-thanks{background:#f4f8f4;border-left:5px solid var(--n)}'
+            '#ts-sorry h2,#ts-followup h2,#ts-thanks h2{margin:0 0 8px}'
+            '#ts-sorry p,#ts-followup p,#ts-thanks p{margin:0;font-size:17px;line-height:1.45}'
+            '#ts-kicker{margin:8px 0 0;font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#667}'
+            '#ts-skip{display:block;width:100%;margin-top:4px;min-height:48px;border-radius:12px;border:1.5px solid #c8d1da;background:#fff;font-weight:800;font-size:16px;color:var(--n)}'
+            '#ts-error{background:#fff1f0;border-radius:12px;padding:12px 14px;margin:8px 0;font-weight:700}'
+            '#ts-app button:disabled,#ts-app input:disabled{opacity:.55}'
+            '#ts-summary{font-size:15px;line-height:1.4}'
+            '#ts-trace{margin:8px 0 0;padding-left:1.2em}'
+            '#ts-trace li{margin:8px 0}'
+            '@media(max-width:860px){#two-stage{padding-bottom:104px}}'
+            '</style>'
+            f'<script>window.FSHO_DEPLOY_CONTEXT="{ctx}";window.FSHO_USE_REAL_ADAPTER="{real_flag}";</script><script>{src}</script></section>'
+        )
     def qualifier_form():
         cfg = {k: QC[k] for k in ('id', 'version', 'start', 'result', 'endings') if k in QC}
         cfg['questions'] = [{k: v for k, v in x.items() if not k.startswith('_')} for x in QC['questions']]
@@ -534,6 +657,7 @@ def build(site, pages, markets, redirects, live):
             if k == 'states': return states
             if k == 'step2_form': return step2()
             if k == 'qualifier_form': return qualifier_form()
+            if k == 'test_intake': return test_intake()
             if k == 'phone': return PH
             raise ValueError(f'unknown shortcode {{{{{k}}}}}')
         return re.sub(r'\{\{([a-z0-9_]+(?::[^}]*)?)\}\}', rep, body)
@@ -647,6 +771,7 @@ def build(site, pages, markets, redirects, live):
     for fp in glob.glob(os.path.join(C, 'media', '*')):
         if os.path.basename(fp) == 'media.json': continue
         shutil.copy(fp, OUT)
+    guard_test_page()
     return built, skipped, drafts_in
 
 if __name__ == '__main__':
