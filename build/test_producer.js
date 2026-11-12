@@ -446,6 +446,84 @@ async function main() {
   assert.equal(badFlag.statusCode, 400);
   assert.deepEqual(JSON.parse(badFlag.body).fields, ["is_test"]);
 
+  const deliveredJar = cookie(reserved);
+  let extraHooks = 0;
+  let extraReserves = 0;
+  const replayed = await producer.handle(event("reserve", { stage: "final", destination: "crm_create" }, deliveredJar), {
+    env, now: () => 1700000000000,
+    fetch: async (url) => {
+      if (url === HOOK) extraHooks += 1;
+      if (String(url).endsWith("/reserve")) extraReserves += 1;
+      if (String(url).endsWith("/mint")) return json(200, { ok: true, intake_id: INTAKE, session_binding: BINDING, kid: KID });
+      return json(500, { ok: false, status: "edge_down" });
+    }
+  });
+  assert.equal(replayed.statusCode, 200);
+  assert.deepEqual(JSON.parse(replayed.body), { ok: true, status: "idempotent_replay" });
+  assert.equal(extraHooks, 0);
+  assert.equal(extraReserves, 0);
+
+  const already = await producer.handle(event("claim", { by: "promote" }, deliveredJar), {
+    env, now: () => 1700000000000,
+    fetch: async (url) => {
+      if (String(url).endsWith("/mint")) return json(200, { ok: true, intake_id: INTAKE, session_binding: BINDING, kid: KID });
+      if (String(url).endsWith("/claim")) return json(200, { ok: true, claimed: false, status: "already_claimed" });
+      return json(500, { ok: false });
+    }
+  });
+  assert.equal(already.statusCode, 200);
+  assert.deepEqual(JSON.parse(already.body), { ok: true, status: "already_claimed", claimed: false, reserved: true });
+
+  async function readClaim(by, edgeBody) {
+    const res = await producer.handle(event("claim", { by }), {
+      env, now: () => 1700000000000,
+      fetch: async (url) => {
+        if (String(url).endsWith("/mint")) return json(200, { ok: true, intake_id: INTAKE, session_binding: BINDING, kid: KID });
+        if (String(url).endsWith("/claim")) return json(200, edgeBody);
+        return json(200, { ok: true, status: "saved" });
+      }
+    });
+    assert.equal(res.statusCode, 200);
+    return JSON.parse(res.body);
+  }
+  const bareHot = await readClaim("promote", { ok: true, claimed: true, status: "claimed", priority_tier: null });
+  assert.equal(bareHot.tier, "hot");
+  assert.equal(bareHot.status, "claimed");
+  assert.equal(bareHot.claimed, true);
+  assert.equal(bareHot.ok, true);
+  const priorityOnly = await readClaim("promote", { ok: true, claimed: true, priority_tier: "p2" });
+  assert.equal(priorityOnly.tier, "hot");
+  assert.equal(priorityOnly.status, "claimed");
+  assert.equal(priorityOnly.priority_tier, "p2");
+  const lateMissing = await readClaim("promote", { ok: true, status: "late_hot", priority_tier: null });
+  assert.equal(lateMissing.tier, "hot");
+  assert.equal(lateMissing.status, "claimed");
+  assert.equal(lateMissing.claimed, true);
+  const follow = await readClaim("non_owner", { ok: true, claimed: true, tier: "follow_up", status: "claimed", priority_tier: null });
+  assert.equal(follow.tier, "follow_up");
+  assert.equal(follow.status, "claimed");
+  const quietBare = await readClaim("non_owner", { ok: true, claimed: true, status: "claimed", priority_tier: null });
+  assert.equal(quietBare.tier, undefined);
+  assert.equal(quietBare.status, "claimed");
+  const stoppedClaim = await readClaim("promote", { ok: true, claimed: false, status: "already_claimed" });
+  assert.equal(stoppedClaim.status, "already_claimed");
+  assert.equal(stoppedClaim.tier, undefined);
+  assert.equal(stoppedClaim.reserved, undefined);
+  const declined = await readClaim("promote", { ok: false, status: "not_qualified", claimed: false });
+  assert.equal(declined.tier, undefined);
+  assert.equal(declined.status, "not_qualified");
+
+  const unsent = await producer.handle(event("claim", { by: "promote" }, cookie(failed)), {
+    env, now: () => 1700000000000,
+    fetch: async (url) => {
+      if (String(url).endsWith("/mint")) return json(200, { ok: true, intake_id: INTAKE, session_binding: BINDING, kid: KID });
+      if (String(url).endsWith("/claim")) return json(200, { ok: true, claimed: false, status: "already_claimed" });
+      return json(500, { ok: false });
+    }
+  });
+  assert.equal(JSON.parse(unsent.body).reserved, undefined);
+  assert.equal(JSON.parse(unsent.body).status, "already_claimed");
+
   logs.restore();
   console.log("producer tests passed");
 }

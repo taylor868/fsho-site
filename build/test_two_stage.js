@@ -444,7 +444,7 @@ test("a disagreeing claim response decides the screen and blocks reserve", () =>
   assert.equal(done.view.conversionFired, false);
   assert.equal(session.state.trace.some((row) => row.id === "server" && row.text.includes("overrides")), true);
   const stopped = flow.createFlow(flow.createMockAdapter(), { loaded: false, load() { this.loaded = true; } });
-  stopped.adapter.claim = () => ({ ok: true, claimed: false, status: "already_claimed" });
+  stopped.adapter.claim = () => ({ ok: true, claimed: false, status: "already_claimed", reserved: true });
   stopped.adapter.reserve = () => { throw new Error("reserve"); };
   stopped.submitContact(contact);
   stopped.answer("type", "multi_2_4");
@@ -693,6 +693,7 @@ test("async and Response-shaped transports set mint ids before every later stage
       return { ok: true, intake_id: "async-intake", session_binding: "async-bind", kid: "async-kid" };
     }
     if (url.endsWith("/claim")) return { ok: true, claimed: true, tier: "hot", priority_tier: null, status: "claimed" };
+    if (url.endsWith("/reserve")) return { ok: true, status: "dispatch_intended_committed" };
     if (url.endsWith("/enrich")) return { ok: true, status: "saved", priority_tier: "p1" };
     if (url.endsWith("/park")) return { ok: true, status: "parked", intake_id: "async-intake", geocode_status: "ok" };
     return { ok: true, status: "saved" };
@@ -804,6 +805,7 @@ test("enrich returns the saved tier, sends {} when skipped, and retries one unav
     transport(url) {
       if (mint(url)) return { status: 200, body: { ok: true, intake_id: "i", session_binding: "s", kid: "k" } };
       if (url.endsWith("/claim")) return { status: 200, body: { ok: true, claimed: true, tier: "hot", priority_tier: null, status: "claimed" } };
+      if (url.endsWith("/reserve")) return { status: 200, body: { ok: true, status: "dispatch_intended_committed" } };
       if (url.endsWith("/enrich")) return { status: 409, body: { ok: false, status: "not_hot" } };
       return { status: 200, body: { ok: true, status: "saved" } };
     }
@@ -1070,7 +1072,7 @@ test("a declining claim stays on ownership and already_claimed shows thanks", as
   assert.equal(blankDone(quiet.session, follow), false);
 
   const stopped = run();
-  stopped.session.adapter.claim = () => Promise.resolve({ ok: true, claimed: false, status: "already_claimed" });
+  stopped.session.adapter.claim = () => Promise.resolve({ ok: true, claimed: false, status: "already_claimed", reserved: true });
   stopped.session.adapter.reserve = () => { throw new Error("reserve"); };
   stopped.session.submitContact(contact);
   stopped.session.answer("type", "sfh");
@@ -1082,6 +1084,130 @@ test("a declining claim stays on ownership and already_claimed shows thanks", as
   assert.equal(stopped.session.state.thanks.body, flow.THANKS.body);
   assert.equal(stopped.session.state.googleTagFired, false);
   assert.equal(blankDone(stopped.session, held), false);
+});
+
+test("a hot claim waits for reserve before enrich, and already_claimed does not look delivered early", async () => {
+  const { tag, adapter, session } = run();
+  session.submitContact(contact);
+  session.answer("type", "sfh");
+  const hot = session.answer("ownership", "sole_owner");
+  assert.equal(hot.ok, true);
+  assert.equal(hot.view.stage, "enrich");
+  assert.equal(hot.view.branch, "hot");
+  assert.equal(adapter.log.filter((row) => row.op === "reserve").length, 1);
+  assert.equal(adapter.log.find((row) => row.op === "reserve").res.status, "dispatch_intended_committed");
+  assert.equal(tag.loaded, true);
+
+  const replay = run();
+  replay.session.adapter.reserve = () => ({ ok: true, status: "idempotent_replay" });
+  replay.session.submitContact(contact);
+  replay.session.answer("type", "multi_2_4");
+  const again = replay.session.answer("ownership", "all_agree");
+  assert.equal(again.ok, true);
+  assert.equal(again.view.stage, "enrich");
+  assert.equal(replay.tag.loaded, true);
+
+  const failures = [
+    () => ({ ok: false, status: "needs_reconcile" }),
+    () => ({ ok: false, status: "reservation_held" }),
+    () => ({ ok: true, status: "saved" }),
+    () => ({ ok: true, http: 500, status: "dispatch_intended_committed" }),
+    () => { throw new Error("reserve"); }
+  ];
+  for (const reserve of failures) {
+    const failed = run();
+    failed.session.adapter.reserve = reserve;
+    failed.session.submitContact(contact);
+    failed.session.answer("type", "sfh");
+    const res = failed.session.answer("ownership", "sole_owner");
+    assert.equal(res.ok, false, String(reserve));
+    assert.equal(res.error, "try_again");
+    assert.equal(failed.session.state.stage, "q_ownership");
+    assert.equal(res.view.stage, "q_ownership");
+    assert.equal(failed.session.state.thanks, null);
+    assert.equal(failed.session.state.branch, null);
+    assert.equal(failed.tag.loaded, false);
+    assert.equal(failed.session.state.conversionFired, false);
+    assert.equal(blankDone(failed.session, res), false);
+  }
+
+  const rejected = run();
+  rejected.session.adapter.reserve = () => Promise.reject(new Error("reserve"));
+  rejected.session.submitContact(contact);
+  rejected.session.answer("type", "sfh");
+  const offline = await rejected.session.answer("ownership", "sole_owner");
+  assert.equal(offline.ok, false);
+  assert.equal(offline.error, "try_again");
+  assert.equal(rejected.session.state.stage, "q_ownership");
+  assert.equal(rejected.session.state.thanks, null);
+  assert.equal(rejected.tag.loaded, false);
+
+  const missing = run();
+  missing.session.adapter.reserve = undefined;
+  missing.session.submitContact(contact);
+  missing.session.answer("type", "sfh");
+  const skipped = missing.session.answer("ownership", "decision_maker");
+  assert.equal(skipped.ok, false);
+  assert.equal(skipped.error, "try_again");
+  assert.equal(missing.session.state.stage, "q_ownership");
+  assert.equal(missing.tag.loaded, false);
+
+  const recovered = run();
+  let reserves = 0;
+  recovered.session.adapter.reserve = () => {
+    reserves += 1;
+    if (reserves === 1) return { ok: false, status: "needs_reconcile" };
+    return { ok: true, status: "reserved" };
+  };
+  recovered.session.submitContact(contact);
+  recovered.session.answer("type", "sfh");
+  assert.equal(recovered.session.answer("ownership", "sole_owner").ok, false);
+  const next = recovered.session.answer("ownership", "sole_owner");
+  assert.equal(next.ok, true);
+  assert.equal(next.view.stage, "enrich");
+  assert.equal(reserves, 2);
+  assert.equal(recovered.tag.loaded, true);
+
+  const held = run();
+  let heldReserves = 0;
+  held.session.adapter.claim = () => ({ ok: true, claimed: false, status: "already_claimed" });
+  held.session.adapter.reserve = () => {
+    heldReserves += 1;
+    return { ok: false, status: "needs_reconcile" };
+  };
+  held.session.submitContact(contact);
+  held.session.answer("type", "sfh");
+  const undelivered = held.session.answer("ownership", "sole_owner");
+  assert.equal(undelivered.ok, false);
+  assert.equal(undelivered.error, "try_again");
+  assert.equal(held.session.state.stage, "q_ownership");
+  assert.equal(held.session.state.thanks, null);
+  assert.equal(heldReserves, 1);
+  assert.notEqual(held.session.state.stage, "thanks");
+  held.session.adapter.reserve = () => {
+    heldReserves += 1;
+    return { ok: true, status: "reserved" };
+  };
+  const delivered = held.session.answer("ownership", "sole_owner");
+  assert.equal(delivered.ok, true);
+  assert.equal(delivered.view.stage, "thanks");
+  assert.equal(held.session.state.thanks.headline, flow.THANKS.headline);
+  assert.equal(heldReserves, 2);
+  assert.equal(held.tag.loaded, false);
+
+  const prior = run();
+  let priorReserves = 0;
+  prior.session.adapter.claim = () => ({ ok: true, claimed: false, status: "already_claimed", reserved: true });
+  prior.session.adapter.reserve = () => { priorReserves += 1; throw new Error("reserve"); };
+  prior.session.submitContact(contact);
+  prior.session.answer("type", "multi_2_4");
+  const done = prior.session.answer("ownership", "all_agree");
+  assert.equal(done.ok, true);
+  assert.equal(done.view.stage, "thanks");
+  assert.equal(done.view.branch, "stopped");
+  assert.equal(prior.session.state.thanks.body, flow.THANKS.body);
+  assert.equal(priorReserves, 0);
+  assert.equal(prior.session.state.trace.some((row) => row.text.includes("No reserve")), true);
 });
 
 function memoryStore() {
@@ -1206,11 +1332,15 @@ function jsonResponse(status, body) {
   };
 }
 
-function producerFetch(claim) {
+function producerFetch(claim, reserve) {
   return (url, init) => {
     const body = JSON.parse(init.body);
     if (body.op === "claim") return Promise.resolve(jsonResponse(claim.status, claim.body));
-    if (body.op === "reserve") return Promise.resolve(jsonResponse(200, { ok: true, status: "reserved" }));
+    if (body.op === "reserve") {
+      if (reserve && reserve.throw) return Promise.reject(new Error("reserve"));
+      const res = reserve || { status: 200, body: { ok: true, status: "reserved" } };
+      return Promise.resolve(jsonResponse(res.status, res.body));
+    }
     const status = body.op === "park" ? "parked" : "saved";
     return Promise.resolve(jsonResponse(200, { ok: true, status }));
   };
@@ -1297,10 +1427,80 @@ test("paint keeps a screen for hot, follow-up, declined, and thrown renders", as
     assert.equal(nodeText(ui.thanks).trim(), "");
   });
 
-  await withPublicForm(producerFetch({ status: 200, body: { ok: true, claimed: false, status: "already_claimed" } }), async (ui) => {
+  await withPublicForm(producerFetch(
+    { status: 200, body: { ok: true, claimed: true, tier: "hot", status: "claimed", priority_tier: null } },
+    { status: 200, body: { ok: false, status: "needs_reconcile" } }
+  ), async (ui) => {
+    await clickThrough(ui, "sfh", "sole_owner");
+    assert.equal(ui.form.hidden, true);
+    assert.match(nodeText(ui.ask), /Are you the owner, or can you make the decision to sell\?/);
+    assert.equal(ui.error.hidden, false);
+    assert.equal(ui.error.textContent, "That step did not save. You can try again.");
+    assert.equal(nodeText(ui.thanks).trim(), "");
+    assert.doesNotMatch(cardText(ui), /Optional 1 of 4/);
+    assert.doesNotMatch(cardText(ui), /Thanks\. We have your info/);
+  });
+
+  await withPublicForm(producerFetch(
+    { status: 200, body: { ok: true, claimed: true, tier: "hot", status: "claimed" } },
+    { throw: true }
+  ), async (ui) => {
+    await clickThrough(ui, "sfh", "decision_maker");
+    assert.match(nodeText(ui.ask), /Are you the owner, or can you make the decision to sell\?/);
+    assert.equal(ui.error.textContent, "That step did not save. You can try again.");
+    assert.equal(nodeText(ui.thanks).trim(), "");
+    assert.doesNotMatch(cardText(ui), /Optional 1 of 4/);
+  });
+
+  await withPublicForm(producerFetch({ status: 200, body: { ok: true, status: "claimed" } }), async (ui) => {
+    await clickThrough(ui, "sfh", "sole_owner");
+    assert.match(nodeText(ui.ask), /Are you the owner, or can you make the decision to sell\?/);
+    assert.equal(ui.error.textContent, "That step did not save. You can try again.");
+    assert.equal(nodeText(ui.thanks).trim(), "");
+    assert.doesNotMatch(cardText(ui), /Optional 1 of 4/);
+  });
+
+  let reservedClaims = 0;
+  await withPublicForm((url, init) => {
+    const body = JSON.parse(init.body);
+    if (body.op === "reserve") reservedClaims += 1;
+    if (body.op === "claim") return Promise.resolve(jsonResponse(200, { ok: true, claimed: false, status: "already_claimed" }));
+    if (body.op === "reserve") return Promise.resolve(jsonResponse(200, { ok: true, status: "reserved" }));
+    return Promise.resolve(jsonResponse(200, { ok: true, status: body.op === "park" ? "parked" : "saved" }));
+  }, async (ui) => {
     await clickThrough(ui, "multi_2_4", "all_agree");
+    assert.equal(reservedClaims, 1);
     assert.match(nodeText(ui.thanks), /Thanks\. We have your info\./);
     assert.match(nodeText(ui.thanks), /Your answers are saved with this lead\./);
+    assert.equal(ui.error.hidden, true);
+    assert.doesNotMatch(cardText(ui), /Optional 1 of 4/);
+  });
+
+  await withPublicForm(producerFetch(
+    { status: 200, body: { ok: true, claimed: false, status: "already_claimed" } },
+    { status: 200, body: { ok: false, status: "needs_reconcile" } }
+  ), async (ui) => {
+    await clickThrough(ui, "sfh", "sole_owner");
+    assert.match(nodeText(ui.ask), /Are you the owner, or can you make the decision to sell\?/);
+    assert.equal(ui.error.hidden, false);
+    assert.equal(ui.error.textContent, "That step did not save. You can try again.");
+    assert.equal(nodeText(ui.thanks).trim(), "");
+    assert.doesNotMatch(cardText(ui), /Thanks\. We have your info/);
+  });
+
+  let repeatReserves = 0;
+  await withPublicForm((url, init) => {
+    const body = JSON.parse(init.body);
+    if (body.op === "reserve") {
+      repeatReserves += 1;
+      return Promise.reject(new Error("reserve"));
+    }
+    if (body.op === "claim") return Promise.resolve(jsonResponse(200, { ok: true, claimed: false, status: "already_claimed", reserved: true }));
+    return Promise.resolve(jsonResponse(200, { ok: true, status: body.op === "park" ? "parked" : "saved" }));
+  }, async (ui) => {
+    await clickThrough(ui, "sfh", "all_agree");
+    assert.equal(repeatReserves, 0);
+    assert.match(nodeText(ui.thanks), /Thanks\. We have your info\./);
     assert.equal(ui.error.hidden, true);
   });
 
