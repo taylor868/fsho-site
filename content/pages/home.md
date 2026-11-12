@@ -3,7 +3,7 @@ title: "Sell Your House Fast for Cash | Fair & Simple Home Offer"
 meta_description: "Get a fair, no-obligation cash offer for your house. Sell as-is, no fees or commissions, close on your timeline. Call (910) 636-6669."
 template: home
 slug: ""
-hero_headline: "Sell your house fast, for a fair price, on your timeline."
+hero_headline: "Sell your house fast, for a fair cash offer, on your timeline."
 hero_sub: "Get a no-obligation cash offer, or let us show you how to net more with a market sale. No repairs, no cleaning, no commissions. You choose."
 cta_label: "Ready to see your options?"
 noindex: false
