@@ -449,9 +449,13 @@ test("a disagreeing claim response decides the screen and blocks reserve", () =>
   stopped.submitContact(contact);
   stopped.answer("type", "multi_2_4");
   const held = stopped.answer("ownership", "all_agree");
+  assert.equal(held.ok, true);
   assert.equal(held.view.branch, "stopped");
+  assert.equal(held.view.stage, "thanks");
   assert.equal(held.view.googleTagFired, false);
   assert.equal(held.view.conversionFired, false);
+  assert.equal(stopped.state.thanks.headline, flow.THANKS.headline);
+  assert.equal(stopped.state.thanks.body, flow.THANKS.body);
   assert.equal(stopped.state.trace.some((row) => row.text.includes("No reserve")), true);
 });
 
@@ -985,4 +989,340 @@ test("late_hot is a normal hot claim", () => {
   assert.equal(hot.view.googleTagFired, true);
   assert.equal(tag.loaded, true);
   assert.equal(hot.view.downstream, "zap_hot");
+});
+
+function blankDone(session, res) {
+  return !!(res && res.ok === true && res.view && res.view.stage === "done" && !session.state.sorry && !session.state.followup && !session.state.thanks);
+}
+
+test("a declining claim stays on ownership and already_claimed shows thanks", async () => {
+  const declines = [
+    { ok: false, http: 503, status: "not_configured" },
+    { ok: false, http: 401, status: "auth_failed" },
+    { ok: false, http: 404, status: "not_found" },
+    { ok: false, http: 400, status: "bad_input", fields: ["by"] },
+    { ok: false, http: 409, status: "not_qualified" },
+    { ok: false, http: 409, status: "not_non_owner" },
+    { ok: true, http: 200 },
+    { ok: true, status: "claimed" }
+  ];
+  for (const claim of declines) {
+    const { session } = run();
+    session.adapter.claim = () => claim;
+    session.adapter.reserve = () => { throw new Error("reserve"); };
+    session.submitContact(contact);
+    session.answer("type", "sfh");
+    const res = session.answer("ownership", "sole_owner");
+    assert.equal(res.ok, false, JSON.stringify(claim));
+    assert.equal(res.error, "try_again");
+    assert.equal(session.state.stage, "q_ownership");
+    assert.equal(res.view.stage, "q_ownership");
+    assert.equal(blankDone(session, res), false);
+    const again = session.answer("ownership", "sole_owner");
+    assert.equal(again.ok, false);
+    assert.equal(session.state.stage, "q_ownership");
+  }
+  const thrown = run();
+  thrown.session.adapter.claim = () => { throw new Error("network"); };
+  thrown.session.submitContact(contact);
+  thrown.session.answer("type", "sfh");
+  const blew = thrown.session.answer("ownership", "sole_owner");
+  assert.equal(blew.ok, false);
+  assert.equal(blew.error, "try_again");
+  assert.equal(thrown.session.state.stage, "q_ownership");
+  assert.equal(blankDone(thrown.session, blew), false);
+
+  const rejected = run();
+  rejected.session.adapter.claim = () => Promise.reject(new Error("network"));
+  rejected.session.submitContact(contact);
+  rejected.session.answer("type", "sfh");
+  const offline = await rejected.session.answer("ownership", "sole_owner");
+  assert.equal(offline.ok, false);
+  assert.equal(offline.error, "try_again");
+  assert.equal(rejected.session.state.stage, "q_ownership");
+  assert.equal(blankDone(rejected.session, offline), false);
+
+  const recovered = run();
+  let claims = 0;
+  recovered.session.adapter.claim = () => {
+    claims += 1;
+    if (claims === 1) return { ok: false, http: 503, status: "not_configured" };
+    return { ok: true, claimed: true, tier: "hot", status: "claimed", priority_tier: null };
+  };
+  recovered.session.submitContact(contact);
+  recovered.session.answer("type", "sfh");
+  assert.equal(recovered.session.answer("ownership", "sole_owner").error, "try_again");
+  const hot = recovered.session.answer("ownership", "sole_owner");
+  assert.equal(hot.ok, true);
+  assert.equal(hot.view.branch, "hot");
+  assert.equal(recovered.session.state.stage, "enrich");
+  assert.equal(recovered.session.state.enrichIndex, 0);
+  assert.equal(blankDone(recovered.session, hot), false);
+
+  const quiet = run();
+  quiet.session.submitContact(contact);
+  quiet.session.answer("type", "sfh");
+  const follow = quiet.session.answer("ownership", "no");
+  assert.equal(follow.ok, true);
+  assert.equal(follow.view.branch, "quiet_non_owner");
+  assert.equal(quiet.session.state.followup.headline, flow.FOLLOW_UP.headline);
+  assert.equal(quiet.session.state.followup.body, flow.FOLLOW_UP.body);
+  assert.equal(blankDone(quiet.session, follow), false);
+
+  const stopped = run();
+  stopped.session.adapter.claim = () => Promise.resolve({ ok: true, claimed: false, status: "already_claimed" });
+  stopped.session.adapter.reserve = () => { throw new Error("reserve"); };
+  stopped.session.submitContact(contact);
+  stopped.session.answer("type", "sfh");
+  const held = await stopped.session.answer("ownership", "sole_owner");
+  assert.equal(held.ok, true);
+  assert.equal(held.view.branch, "stopped");
+  assert.notEqual(held.view.stage, "done");
+  assert.equal(stopped.session.state.thanks.headline, flow.THANKS.headline);
+  assert.equal(stopped.session.state.thanks.body, flow.THANKS.body);
+  assert.equal(stopped.session.state.googleTagFired, false);
+  assert.equal(blankDone(stopped.session, held), false);
+});
+
+function memoryStore() {
+  const data = Object.create(null);
+  return {
+    getItem(key) { return Object.prototype.hasOwnProperty.call(data, key) ? data[key] : null; },
+    setItem(key, value) { data[key] = String(value); },
+    removeItem(key) { delete data[key]; }
+  };
+}
+
+function makeNode(tag) {
+  return {
+    tagName: tag,
+    id: "",
+    hidden: false,
+    className: "",
+    type: "",
+    textContent: "",
+    value: "",
+    disabled: false,
+    dataset: {},
+    attributes: {},
+    childNodes: [],
+    parentNode: null,
+    onclick: null,
+    onsubmit: null,
+    getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; },
+    setAttribute(name, value) { this.attributes[name] = String(value); },
+    appendChild(child) { this.childNodes.push(child); child.parentNode = this; return child; },
+    replaceChildren() { this.childNodes.length = 0; },
+    querySelector(sel) { return queryAll(this, sel)[0] || null; },
+    querySelectorAll(sel) { return queryAll(this, sel); }
+  };
+}
+
+function queryAll(node, sel) {
+  const out = [];
+  (node.childNodes || []).forEach((child) => {
+    if (sel === "button,input" && (child.tagName === "button" || child.tagName === "input")) out.push(child);
+    const named = /^input\[name="([^"]+)"\]$/.exec(sel);
+    if (named && child.tagName === "input" && child.getAttribute("name") === named[1]) out.push(child);
+    out.push(...queryAll(child, sel));
+  });
+  return out;
+}
+
+function nodeText(node) {
+  let out = node && node.textContent ? node.textContent : "";
+  (node && node.childNodes || []).forEach((child) => { out += " " + nodeText(child); });
+  return out;
+}
+
+function cardText(ui) {
+  return [
+    ui.form.hidden ? "" : nodeText(ui.form),
+    nodeText(ui.sorry),
+    nodeText(ui.follow),
+    nodeText(ui.thanks),
+    nodeText(ui.ask),
+    ui.error.hidden ? "" : nodeText(ui.error)
+  ].join(" ").replace(/\s+/g, " ").trim();
+}
+
+function publicDocument() {
+  const byId = {};
+  function mount(id, tag, parent) {
+    const node = makeNode(tag);
+    node.id = id;
+    node.setAttribute("id", id);
+    byId[id] = node;
+    if (parent) parent.appendChild(node);
+    return node;
+  }
+  const app = mount("ts-app", "div");
+  app.setAttribute("data-public", "1");
+  const form = mount("ts-form", "form", app);
+  const values = { name: contact.name, address: contact.address, phone: contact.phone, email: contact.email };
+  Object.keys(values).forEach((name) => {
+    const input = makeNode("input");
+    input.setAttribute("name", name);
+    input.value = values[name];
+    form.appendChild(input);
+  });
+  const submit = makeNode("button");
+  submit.type = "submit";
+  form.appendChild(submit);
+  const doc = {
+    body: makeNode("body"),
+    head: makeNode("head"),
+    createElement: makeNode,
+    getElementById(id) { return byId[id] || null; }
+  };
+  return {
+    doc,
+    app,
+    form,
+    ask: mount("ts-ask", "div", app),
+    sorry: mount("ts-sorry", "div", app),
+    follow: mount("ts-followup", "div", app),
+    thanks: mount("ts-thanks", "div", app),
+    error: mount("ts-error", "p", app),
+    summary: mount("ts-summary", "p", app),
+    events: mount("ts-events", "p", app),
+    trace: mount("ts-trace", "ol", app)
+  };
+}
+
+function findButton(node, value) {
+  return queryAll(node, "button,input").find((button) => button.tagName === "button" && button.dataset.v === value);
+}
+
+async function settleUi() {
+  for (let i = 0; i < 40; i++) await new Promise((resolve) => setImmediate(resolve));
+}
+
+function jsonResponse(status, body) {
+  return {
+    status,
+    headers: { get() { return ""; } },
+    json() { return Promise.resolve(body); }
+  };
+}
+
+function producerFetch(claim) {
+  return (url, init) => {
+    const body = JSON.parse(init.body);
+    if (body.op === "claim") return Promise.resolve(jsonResponse(claim.status, claim.body));
+    if (body.op === "reserve") return Promise.resolve(jsonResponse(200, { ok: true, status: "reserved" }));
+    const status = body.op === "park" ? "parked" : "saved";
+    return Promise.resolve(jsonResponse(200, { ok: true, status }));
+  };
+}
+
+async function withPublicForm(fetchImpl, fn) {
+  const prev = {
+    document: global.document,
+    location: global.location,
+    localStorage: global.localStorage,
+    sessionStorage: global.sessionStorage,
+    addEventListener: global.addEventListener,
+    fetch: global.fetch,
+    FormData: global.FormData,
+    flag: global.FSHO_USE_REAL_ADAPTER
+  };
+  const ui = publicDocument();
+  global.document = ui.doc;
+  global.location = { search: "" };
+  global.localStorage = memoryStore();
+  global.sessionStorage = memoryStore();
+  global.addEventListener = () => {};
+  global.FormData = class {
+    constructor(form) { this.form = form; }
+    get(name) {
+      const input = queryAll(this.form, "button,input").find((node) => node.tagName === "input" && node.getAttribute("name") === name);
+      return input ? input.value : null;
+    }
+  };
+  global.FSHO_USE_REAL_ADAPTER = fetchImpl ? "1" : "";
+  if (fetchImpl) global.fetch = fetchImpl;
+  const resolved = require.resolve("./two-stage.js");
+  delete require.cache[resolved];
+  require("./two-stage.js");
+  try {
+    await fn(ui);
+  } finally {
+    delete require.cache[resolved];
+    global.document = prev.document;
+    global.location = prev.location;
+    global.localStorage = prev.localStorage;
+    global.sessionStorage = prev.sessionStorage;
+    global.addEventListener = prev.addEventListener;
+    global.fetch = prev.fetch;
+    global.FormData = prev.FormData;
+    global.FSHO_USE_REAL_ADAPTER = prev.flag;
+  }
+}
+
+async function clickThrough(ui, property, ownership) {
+  ui.form.onsubmit({ preventDefault() {} });
+  await settleUi();
+  const propertyButton = findButton(ui.ask, property);
+  assert.ok(propertyButton, JSON.stringify({ card: cardText(ui), ask: nodeText(ui.ask), err: ui.error.textContent, errHidden: ui.error.hidden, formHidden: ui.form.hidden, summary: nodeText(ui.summary) }));
+  propertyButton.onclick();
+  await settleUi();
+  assert.notEqual(cardText(ui), "");
+  findButton(ui.ask, ownership).onclick();
+  await settleUi();
+  assert.notEqual(cardText(ui), "");
+}
+
+test("paint keeps a screen for hot, follow-up, declined, and thrown renders", async () => {
+  await withPublicForm(producerFetch({ status: 200, body: { ok: true, claimed: true, tier: "hot", status: "claimed", priority_tier: null } }), async (ui) => {
+    await clickThrough(ui, "sfh", "sole_owner");
+    assert.equal(ui.form.hidden, true);
+    assert.match(nodeText(ui.ask), /Optional 1 of 4/);
+    assert.match(nodeText(ui.ask), /Who is living there\?/);
+  });
+
+  await withPublicForm(producerFetch({ status: 200, body: { ok: true, claimed: true, tier: "follow_up", status: "claimed" } }), async (ui) => {
+    await clickThrough(ui, "sfh", "no");
+    assert.match(nodeText(ui.follow), /Thanks\. We'll follow up\./);
+    assert.match(nodeText(ui.follow), /We saved your info and will be in touch\./);
+    assert.equal(ui.error.hidden, true);
+  });
+
+  await withPublicForm(producerFetch({ status: 503, body: { ok: false, status: "not_configured" } }), async (ui) => {
+    await clickThrough(ui, "sfh", "sole_owner");
+    assert.equal(ui.form.hidden, true);
+    assert.match(nodeText(ui.ask), /Are you the owner, or can you make the decision to sell\?/);
+    assert.equal(ui.error.hidden, false);
+    assert.equal(ui.error.textContent, "That step did not save. You can try again.");
+    assert.equal(nodeText(ui.thanks).trim(), "");
+  });
+
+  await withPublicForm(producerFetch({ status: 200, body: { ok: true, claimed: false, status: "already_claimed" } }), async (ui) => {
+    await clickThrough(ui, "multi_2_4", "all_agree");
+    assert.match(nodeText(ui.thanks), /Thanks\. We have your info\./);
+    assert.match(nodeText(ui.thanks), /Your answers are saved with this lead\./);
+    assert.equal(ui.error.hidden, true);
+  });
+
+  await withPublicForm(null, async (ui) => {
+    ui.form.onsubmit({ preventDefault() {} });
+    await settleUi();
+    assert.match(nodeText(ui.ask), /What kind of property is it\?/);
+    const orig = ui.ask.replaceChildren.bind(ui.ask);
+    let boom = true;
+    ui.ask.replaceChildren = function () {
+      orig();
+      if (boom) {
+        boom = false;
+        throw new Error("paint failed");
+      }
+    };
+    findButton(ui.ask, "sfh").onclick();
+    await settleUi();
+    assert.equal(ui.form.hidden, true);
+    assert.match(nodeText(ui.ask), /That step did not save\. You can try again\./);
+    assert.equal(ui.error.hidden, false);
+    assert.equal(ui.error.textContent, "That step did not save. You can try again.");
+    assert.notEqual(cardText(ui), "");
+  });
 });
