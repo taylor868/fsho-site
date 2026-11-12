@@ -573,13 +573,13 @@ def build(site, pages, markets, redirects, live):
         ctx, real_flag, src = two_stage_assets()
         if ctx == 'production':
             return (
-                '<section class="wrap pad" id="two-stage"><h1>Two-stage test intake</h1>'
-                '<p>This test page is not available on the live site. Call or text '
+                '<section class="wrap pad" id="two-stage"><h1>This page isn\'t in use.</h1>'
+                '<p>This page isn\'t used anymore. Call or text '
                 f'<a href="tel:{TEL}">{PH}</a>, or <a href="/#offer">start the form on the homepage</a>.</p>'
-                '<p class="fine">This page stays noindex. The live site does not turn the test form on.</p></section>'
+                '<p class="fine">If you want an offer, use the homepage form or call us.</p></section>'
             )
         return (
-            '<section class="wrap pad" id="two-stage"><h1>Two-stage test intake</h1>'
+            '<section class="wrap pad" id="two-stage"><h1>This page isn\'t in use.</h1>'
             '<p class="fine">Test mode only. Needs ?test=1. This page stays noindex.</p>'
             '<p id="ts-off" hidden>Test mode is off. Production builds cannot enable it, and other builds need ?test=1.</p>'
             '<div id="ts-app" hidden><form id="ts-form" action="#" method="post">'
