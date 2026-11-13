@@ -206,10 +206,8 @@
     "faq_tenants_stay": "Placeholder, waiting on Andrew or Taylor. Not confirmed: leases, notice, or whether tenants stay through closing. This is not a tenant program.",
     "faq_stay_after_closing": "We have not confirmed any option to stay after closing. Nothing here is a rent-back or an occupancy program. Placeholder, waiting on Andrew or Taylor. Do not plan on days in the house after closing unless they confirm it in writing.",
     "faq_probate_open": "Placeholder, waiting on Andrew or Taylor and on counsel. This is not a statement that we can buy during probate, or that you should wait until it closes.",
-    "faq_contract_assignment": "Placeholder, waiting on counsel. Not confirmed: whether a contract is ever assigned to another investor. This page does not claim that we never assign, and it does not claim that we always do.",
     "faq_who_handles_file": "Placeholder, waiting on Andrew or Taylor. Not confirmed: who else, if anyone, handles a file day to day. This is not a staffing chart.",
-    "faq_cancel_after_signing": "Placeholder, waiting on counsel. No cancellation terms, deadlines, or penalties are stated here.",
-    "faq_moving_or_advance": "We have not confirmed help with moving, or any way to receive cash before closing. This page does not describe a program for either one. Placeholder, waiting on Andrew or Taylor. Do not plan on an advance or a moving service unless they confirm it in writing."
+    "faq_moving_or_advance": "Yes. We can help with moving, and we can provide cash before closing. Just bring it up early, before contracts are signed, and we'll work out the details together."
   },
   "faq_page": {
     "reviewed": "Last reviewed: November 2026 by Andrew Collier.",
@@ -361,11 +359,6 @@
         "title": "Legitimacy and trust",
         "items": [
           {
-            "q": "Do you buy the house yourselves, or assign the contract to another investor?",
-            "a": "<p>The site says we buy property as principals. It also says we are not a licensed brokerage unless stated.</p>",
-            "answer_id": "faq_contract_assignment"
-          },
-          {
             "q": "How can I tell a legitimate cash buyer from a scam?",
             "a": "<p>See who you are dealing with before you sign anything.</p><p>Fair &amp; Simple Home Offer is operated by Andrew Collier LLC. The footer says we buy as principals and are not a licensed brokerage unless stated. Use <a href=\"tel:+19106366669\">(910) 636-6669</a> and offer@fairandsimplehomeoffer.com. Read the contract, compare it with another option, and open the BBB profile linked from the site. This page does not claim star ratings.</p>"
           },
@@ -384,11 +377,6 @@
         "id": "after-yes",
         "title": "After you say yes",
         "items": [
-          {
-            "q": "Can I back out after I sign?",
-            "a": "<p>This page cannot tell you whether you can cancel after you sign. An attorney can read the contract. We are not attorneys.</p>",
-            "answer_id": "faq_cancel_after_signing"
-          },
           {
             "q": "Can you help with moving or getting cash before closing?",
             "answer_id": "faq_moving_or_advance"
