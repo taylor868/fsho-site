@@ -234,7 +234,7 @@ class ParityTests(unittest.TestCase):
         self.assertNotIn('{ is_test: true }', home)
         self.assertIn('window.FSHO_USE_REAL_ADAPTER=""', home)
         self.assertIn('/.netlify/functions/intake-producer', home)
-        self.assertIn('GTM-WWPBQGDZ', home)
+        self.assertIn('GTM-TM6JSDLB', home)
         self.assertIn('pointerdown', home)
         self.assertIsNone(re.search(r'<script[^>]+src="https://www\.googletagmanager\.com/gtm\.js', home))
         self.assertIn('tracking:false', home)
@@ -975,7 +975,7 @@ cta_label: "Page specific heading"
     def test_approved_pixels_are_on_public_pages_and_conversions_wait_for_reserve(self):
         curly = re.compile('[\u2018\u2019\u201c\u201d\u2013\u2014]')
         gtm_ns = (
-            '<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-WWPBQGDZ" '
+            '<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-TM6JSDLB" '
             'height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>'
         )
         self.build(live=False)
@@ -1005,7 +1005,7 @@ cta_label: "Page specific heading"
             self.assertIsNone(curly.search(body_open), name)
             self.assertIn('<body>' + gtm_ns, doc, name)
             self.assertEqual(doc.count('https://www.googletagmanager.com/gtm.js?id='), 2 if 'function armGtm' in doc else 1, name)
-            self.assertEqual(doc.count('ns.html?id=GTM-WWPBQGDZ'), 1, name)
+            self.assertEqual(doc.count('ns.html?id=GTM-TM6JSDLB'), 1, name)
             self.assertNotIn('googletagmanager.com/gtag/js', doc, name)
             self.assertNotIn("gtag('config'", doc, name)
             self.assertNotIn('gtag("config"', doc, name)
@@ -1111,7 +1111,7 @@ cta_label: "Page specific heading"
         data['gtm_id'] = 'GTM-OTHER'
         self.save_site(data, path)
         errors, _warns = self.check()
-        self.assertTrue(any('gtm_id must be GTM-WWPBQGDZ' in e for e in errors), errors)
+        self.assertTrue(any('gtm_id must be GTM-TM6JSDLB' in e for e in errors), errors)
 
     def test_ad_landing_pages_are_unique_indexable_and_public(self):
         self.build(live=False)
@@ -1131,7 +1131,7 @@ cta_label: "Page specific heading"
         titles, metas, h1s = [], [], []
         form = '<div id="ts-app" data-public="1"><form id="ts-form" action="#" method="post">'
         gtm_ns = (
-            '<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-WWPBQGDZ" '
+            '<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-TM6JSDLB" '
             'height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>'
         )
         for spec in AD_LANDINGS:
@@ -1177,7 +1177,7 @@ cta_label: "Page specific heading"
             for bad in ('lorem', 'tbd', 'placeholder', 'todo', 'fixme'):
                 self.assertNotIn(bad, visible.lower(), '%s %s' % (slug, bad))
             self.assertIn('<body>' + gtm_ns, html, slug)
-            self.assertEqual(html.count('ns.html?id=GTM-WWPBQGDZ'), 1, slug)
+            self.assertEqual(html.count('ns.html?id=GTM-TM6JSDLB'), 1, slug)
             self.assertNotIn('googletagmanager.com/gtag/js', html, slug)
             self.assertNotIn("gtag('config'", html, slug)
             self.assertNotIn('google-site-verification', html, slug)
