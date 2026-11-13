@@ -1815,3 +1815,424 @@ test("pixel conversions dedupe on lead id and click-to-call does not load gtag",
   queued.onClick({ target: { closest: () => ({ getAttribute: () => "/faq/" }) } });
   assert.equal(page.dataLayer.length, 2);
 });
+
+test("first and last touch, cookies, and device stay off the dataLayer", async () => {
+  const src = fs.readFileSync(path.join(__dirname, "two-stage.js"), "utf8");
+  assert.equal(/document\.cookie\s*=/.test(src), false);
+  assert.equal(src.includes("document.cookie"), true);
+  assert.deepEqual(flow.SIGNAL_KEYS, producer.SIGNALS);
+  assert.equal(producer.deviceCategory(""), "");
+  assert.equal(producer.deviceCategory("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"), "mobile");
+  assert.equal(producer.deviceCategory("Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X)"), "tablet");
+  assert.equal(producer.deviceCategory("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"), "tablet");
+  assert.equal(producer.deviceCategory("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"), "mobile");
+  assert.equal(producer.deviceCategory("Mozilla/5.0 (Windows NT 10.0; Win64; x64)"), "desktop");
+  assert.equal(producer.gaClientId("GA1.1.111.222"), "111.222");
+  assert.equal(producer.gaClientId(""), "");
+  const local = memory();
+  const first = flow.captureAttribution("?" + flow.SIGNAL_KEYS.map((key) => key + "=" + encodeURIComponent("ft-" + key)).join("&"), local, null, {
+    href: "https://fsho.co/landing?gclid=G-FIRST",
+    path: "/landing",
+    hostname: "fsho.co",
+    referrer: "https://www.google.com/search",
+    cookie: "_ga=GA1.1.111.222; _gcl_aw=GCL.1.aw; _fbp=fb.1.1.9",
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+    now: 1700000000000
+  });
+  for (const key of flow.SIGNAL_KEYS) assert.equal(first[key], "ft-" + key, key);
+  assert.equal(first.visits.length, 1);
+  assert.equal(first.visits[0].q.gclid, "ft-gclid");
+  assert.equal(first.visits[0].h, "https://fsho.co/landing?gclid=G-FIRST");
+  assert.equal(first.visits[0].c.includes("_ga="), true);
+  const later = flow.captureAttribution("?" + flow.SIGNAL_KEYS.map((key) => key + "=" + encodeURIComponent("lt-" + key)).join("&") + "&msclkid=bad%20id", local, null, {
+    href: "https://fairandsimplehomeoffer.com/sell?utm_source=later",
+    hostname: "FairAndSimpleHomeOffer.com",
+    referrer: "https://fsho.co/landing",
+    cookie: "_fbc=fb.1.9.Ab",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    now: 1700000001000
+  });
+  for (const key of flow.SIGNAL_KEYS) assert.equal(later[key], "ft-" + key, key);
+  assert.equal(later.visits.length, 2);
+  assert.equal(later.visits[1].q.gclid, "lt-gclid");
+  assert.equal(later.visits[1].q.msclkid, "bad id");
+  assert.equal(later.visits[0].q.gclid, "ft-gclid");
+  const calls = [];
+  const adapter = flow.createRealAdapter({
+    mode: "producer",
+    transport(url, init) {
+      calls.push(JSON.parse(init.body));
+      return { status: 200, body: { ok: true, status: "parked" } };
+    }
+  });
+  const parked = await flow.createFlow(adapter, { loaded: false, load() {} }, {
+    search: "",
+    localStorage: local,
+    sessionStorage: memory(),
+    dataLayer: [],
+    page: { path: "/sell", hostname: "fairandsimplehomeoffer.com", now: 1700000002000 }
+  }).submitContact(contact);
+  assert.equal(parked.ok, true);
+  assert.equal(calls[0].op, "park");
+  assert.equal(calls[0].gclid, "ft-gclid");
+  assert.equal(calls[0].msclkid, undefined);
+  assert.equal(calls[0].attribution, undefined);
+  assert.equal(calls[0].touch.visits.length, 3);
+  assert.equal(calls[0].touch.visits[0].q.keyword, "ft-keyword");
+  assert.equal(calls[0].touch.visits[1].q.utm_source, "lt-utm_source");
+  assert.equal(calls[0].touch.visits[2].p, "/sell");
+  assert.equal(calls[0].touch.visits[2].o, "fairandsimplehomeoffer.com");
+  assert.equal(calls[0].touch.lead_id, parked.view.leadId);
+  const visited = await producerSteps([
+    Object.assign({
+      op: "park",
+      full_name: "Ada Lovelace",
+      address_line: "1 Main St",
+      phone: "5550100199",
+      email: "ada@example.com",
+      gclid: "ft-gclid",
+      lead_id: calls[0].touch.lead_id,
+      touch: calls[0].touch
+    }),
+    { op: "reserve", stage: "final", destination: "crm_create", touch: calls[0].touch, gclid: "lt-gclid" }
+  ]);
+  const visitHook = visited.capture.find((row) => row.url === visited.env.INTAKE_ZAP_HOOK_URL).body;
+  assert.equal(visitHook.attr_gclid, "ft-gclid");
+  assert.equal(visitHook.attr_ft_gclid, "ft-gclid");
+  assert.equal(visitHook.attr_lt_gclid, "lt-gclid");
+  assert.equal(visitHook.attr_ft_msclkid, "ft-msclkid");
+  assert.equal(visitHook.attr_lt_msclkid, "ft-msclkid");
+  assert.equal(visitHook.attr_lt_utm_source, "lt-utm_source");
+  assert.equal(visitHook.attr_landing_page, "https://fsho.co/landing?gclid=G-FIRST");
+  assert.equal(visitHook.attr_lt_landing_page, "https://fairandsimplehomeoffer.com/sell?utm_source=later");
+  assert.equal(visitHook.attr_landing_path, "/landing");
+  assert.equal(visitHook.attr_lt_landing_path, "/sell");
+  assert.equal(visitHook.attr_ft_hostname, "fsho.co");
+  assert.equal(visitHook.attr_hostname, "fairandsimplehomeoffer.com");
+  assert.equal(visitHook.attr_submit_hostname, "fairandsimplehomeoffer.com");
+  assert.equal(visitHook.attr_submit_path, "/sell");
+  assert.equal(visitHook.attr_referrer, "https://www.google.com/search");
+  assert.equal(visitHook.attr_lt_referrer, "https://fsho.co/landing");
+  assert.equal(visitHook.attr_device, "desktop");
+  assert.equal(visitHook.attr_ga_client_id, "111.222");
+  assert.equal(visitHook.attr_gcl_aw, "GCL.1.aw");
+  assert.equal(visitHook.attr_fbp, "fb.1.1.9");
+  assert.equal(visitHook.attr_fbc, "fb.1.9.Ab");
+  assert.equal(visitHook.attr_first_seen, new Date(1700000000000).toISOString());
+  assert.equal(visitHook.attr_last_seen, new Date(1700000002000).toISOString());
+  assert.equal(visitHook.attr_lead_id, calls[0].touch.lead_id);
+  assert.equal(visitHook.attr_transaction_id, calls[0].touch.lead_id);
+  assert.equal(visited.capture.find((row) => row.url.endsWith("/park")).body.payload.gclid, "ft-gclid");
+  assert.equal(visited.capture.find((row) => row.url.endsWith("/reserve")).body.payload.gclid, "ft-gclid");
+  const seen = [];
+  const direct = flow.createRealAdapter({
+    transport(url, init) {
+      seen.push(JSON.parse(init.body));
+      if (url.endsWith("/mint")) return { status: 200, body: { ok: true, intake_id: "i", session_binding: "s", kid: "k" } };
+      return { status: 200, body: { ok: true, status: "parked" } };
+    }
+  });
+  await direct.park({ name: "Ada Lovelace", address: "1 Main St", phone: "5550100199", email: "ada@example.com", gclid: "G1", touch: { ft: { gclid: "G1", msclkid: "M1" } } });
+  const payload = seen.find((row) => row.payload).payload;
+  assert.equal(payload.gclid, "G1");
+  assert.equal(payload.touch, undefined);
+  assert.equal(payload.msclkid, undefined);
+  assert.equal(JSON.stringify(seen).includes("msclkid"), false);
+  const dataLayer = [];
+  const hot = flow.createFlow(flow.createMockAdapter(), { loaded: false, load() { this.loaded = true; } }, {
+    localStorage: local, sessionStorage: memory(), dataLayer
+  });
+  hot.submitContact(contact);
+  hot.answer("type", "sfh");
+  hot.answer("ownership", "sole_owner");
+  assert.deepEqual(dataLayer, [{ event: "seller_form_completed", transaction_id: hot.state.leadId }]);
+});
+
+const HOOK_CONTEXT_KEYS = [
+  "attr_landing_page", "attr_ft_landing_page", "attr_lt_landing_page",
+  "attr_landing_path", "attr_ft_landing_path", "attr_lt_landing_path",
+  "attr_hostname", "attr_ft_hostname", "attr_lt_hostname",
+  "attr_referrer", "attr_ft_referrer", "attr_lt_referrer",
+  "attr_first_seen", "attr_last_seen",
+  "attr_submit_path", "attr_submit_hostname", "attr_submit_ts",
+  "attr_device", "attr_lead_id", "attr_transaction_id",
+  "attr_ga_client_id", "attr_gcl_aw", "attr_gcl_gb", "attr_fbp", "attr_fbc"
+];
+
+function hookAttrKeys() {
+  return producer.SIGNALS.flatMap((key) => {
+    const row = ["attr_ft_" + key, "attr_lt_" + key];
+    if (key !== "device") row.unshift("attr_" + key);
+    return row;
+  }).concat(HOOK_CONTEXT_KEYS);
+}
+
+function producerDeps(capture) {
+  const env = {
+    INTAKE_HMAC_KEY_V1: "dummy-hmac-key",
+    INTAKE_HMAC_KID: "kid-test",
+    INTAKE_EDGE_BASE_URL: "https://edge.example.test/functions/v1",
+    INTAKE_ZAP_HOOK_URL: "https://hooks.example.test/catch",
+    INTAKE_SENTINEL: "SENTINEL-NOT-A-FIELD"
+  };
+  const fetchImpl = async (url, init) => {
+    const target = String(url);
+    if (/zapier\.com|hooks\.zapier|fsho\.co|fairandsimplehomeoffer\.com/i.test(target)) throw new Error("live call blocked");
+    const body = init && init.body ? JSON.parse(init.body) : {};
+    capture.push({ url: target, body });
+    const json = (status, payload) => ({ status, headers: { get() { return ""; } }, json: async () => payload });
+    if (target === env.INTAKE_ZAP_HOOK_URL) return json(200, { ok: true });
+    if (target.endsWith("/mint")) {
+      return json(200, { ok: true, intake_id: "11111111-1111-4111-8111-111111111111", session_binding: "22222222-2222-4222-8222-222222222222", kid: "kid-test" });
+    }
+    if (target.endsWith("/reserve")) {
+      return json(200, { ok: true, status: "dispatch_intended_committed", reservation_id: "44444444-4444-4444-8444-444444444444", reservation_generation: 1 });
+    }
+    return json(200, { ok: true, status: target.endsWith("/park") ? "parked" : "saved" });
+  };
+  return { env, fetch: fetchImpl, now: () => 1700000000000, retryMs: 0 };
+}
+
+async function producerSteps(steps, extraCookie) {
+  const capture = [];
+  const deps = producerDeps(capture);
+  let jar = "";
+  const responses = [];
+  for (const step of steps) {
+    const res = await producer.handle({
+      httpMethod: "POST",
+      headers: {
+        cookie: [jar, extraCookie || ""].filter(Boolean).join("; "),
+        "x-nf-client-connection-ip": "203.0.113.7"
+      },
+      body: JSON.stringify(step)
+    }, deps);
+    const next = String(res.headers["set-cookie"] || "").split(";")[0];
+    if (next) jar = next;
+    responses.push(res);
+  }
+  return { capture, responses, env: deps.env };
+}
+
+test("the catch hook lists every attribution key, keeps edge first touch, and sanitizes", async () => {
+  assert.deepEqual(producer.HOOK_ATTR_KEYS, hookAttrKeys());
+  assert.equal(producer.HOOK_ATTR_KEYS.length, 93);
+  const edgeKeys = ["gclid", "gbraid", "wbraid", "fbclid", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id"];
+  const ft = {};
+  const lt = {};
+  const tampered = {};
+  producer.SIGNALS.forEach((key) => {
+    ft[key] = "ft-" + key;
+    lt[key] = "lt-" + key;
+    tampered[key] = "zz-" + key;
+  });
+  const firstTouch = {
+    ft, lt: Object.assign({}, ft),
+    landing_page: "https://fsho.co/landing?gclid=ft-gclid",
+    landing_path: "/landing",
+    hostname: "fsho.co",
+    referrer: "https://www.google.com/search",
+    first_seen: "2026-11-01T15:04:05.000Z",
+    last_seen: "2026-11-01T15:04:05.000Z",
+    submit_path: "/landing",
+    submit_hostname: "fsho.co",
+    ua_device: "mobile",
+    lead_id: "lead_fixed_1",
+    ga_client_id: "111.222",
+    gcl_aw: "GCL.1.aw",
+    fbp: "fb.1.1.9",
+    fbc: "fb.1.client"
+  };
+  const lastTouch = {
+    ft: tampered,
+    lt,
+    lt_landing_page: "https://fairandsimplehomeoffer.com/sell",
+    lt_landing_path: "/sell",
+    lt_hostname: "fairandsimplehomeoffer.com",
+    lt_referrer: "https://fsho.co/landing",
+    last_seen: "2026-11-13T14:35:00.000Z",
+    submit_path: "/sell",
+    submit_hostname: "fairandsimplehomeoffer.com",
+    ua_device: "mobile",
+    lead_id: "lead_other",
+    landing_page: "javascript:alert(1)"
+  };
+  const park = Object.assign({
+    op: "park",
+    full_name: "Ada Lovelace",
+    address_line: "1 Main St",
+    phone: "5550100199",
+    email: "ada@example.com",
+    lead_id: "lead_fixed_1",
+    touch: firstTouch
+  }, Object.fromEntries(edgeKeys.map((key) => [key, "ft-" + key])));
+  const answer = Object.assign({
+    op: "answer",
+    question: "type",
+    answer: "sfh",
+    lead_id: "lead_other",
+    touch: lastTouch
+  }, Object.fromEntries(edgeKeys.map((key) => [key, "lt-" + key])));
+  const reserved = await producerSteps([
+    park,
+    answer,
+    { op: "reserve", stage: "final", destination: "crm_create", touch: lastTouch, gclid: "lt-gclid" }
+  ], "_ga=GA1.1.999.888; _fbc=fb.1.9.FROM-HEADER; _gcl_gb=GCL.header.gb");
+  reserved.responses.forEach((res) => assert.equal(res.statusCode, 200, res.body));
+  const parks = reserved.capture.filter((row) => row.url.endsWith("/park"));
+  const answers = reserved.capture.filter((row) => row.url.endsWith("/answer"));
+  const reserves = reserved.capture.filter((row) => row.url.endsWith("/reserve"));
+  assert.equal(parks[0].body.payload.gclid, "ft-gclid");
+  assert.equal(parks[0].body.payload.utm_source, "ft-utm_source");
+  assert.equal(parks[0].body.payload.lead_id, "lead_fixed_1");
+  assert.equal(parks[0].body.payload.touch, undefined);
+  assert.equal(parks[0].body.payload.msclkid, undefined);
+  assert.equal(JSON.stringify(parks[0].body.payload).includes("attr_"), false);
+  assert.equal(answers[0].body.payload.gclid, "ft-gclid");
+  assert.equal(answers[0].body.payload.utm_campaign, "ft-utm_campaign");
+  assert.equal(reserves[0].body.payload.gclid, "ft-gclid");
+  assert.equal(reserves[0].body.payload.client_ip, undefined);
+  assert.equal(JSON.stringify(reserves[0].body).includes("fairandsimplehomeoffer"), false);
+  const hook = reserved.capture.find((row) => row.url === reserved.env.INTAKE_ZAP_HOOK_URL).body;
+  const expected = {};
+  producer.HOOK_ATTR_KEYS.forEach((key) => { expected[key] = ""; });
+  producer.SIGNALS.forEach((key) => {
+    if (key !== "device") expected["attr_" + key] = "ft-" + key;
+    expected["attr_ft_" + key] = "ft-" + key;
+    expected["attr_lt_" + key] = "lt-" + key;
+  });
+  expected.attr_landing_page = "https://fsho.co/landing?gclid=ft-gclid";
+  expected.attr_ft_landing_page = expected.attr_landing_page;
+  expected.attr_lt_landing_page = "https://fairandsimplehomeoffer.com/sell";
+  expected.attr_landing_path = "/landing";
+  expected.attr_ft_landing_path = "/landing";
+  expected.attr_lt_landing_path = "/sell";
+  expected.attr_ft_hostname = "fsho.co";
+  expected.attr_lt_hostname = "fairandsimplehomeoffer.com";
+  expected.attr_hostname = "fairandsimplehomeoffer.com";
+  expected.attr_submit_hostname = "fairandsimplehomeoffer.com";
+  expected.attr_referrer = "https://www.google.com/search";
+  expected.attr_ft_referrer = expected.attr_referrer;
+  expected.attr_lt_referrer = "https://fsho.co/landing";
+  expected.attr_first_seen = "2026-11-01T15:04:05.000Z";
+  expected.attr_last_seen = "2026-11-13T14:35:00.000Z";
+  expected.attr_submit_path = "/sell";
+  expected.attr_device = "mobile";
+  expected.attr_lead_id = "lead_fixed_1";
+  expected.attr_transaction_id = "lead_fixed_1";
+  expected.attr_ga_client_id = "999.888";
+  expected.attr_gcl_aw = "GCL.1.aw";
+  expected.attr_gcl_gb = "GCL.header.gb";
+  expected.attr_fbp = "fb.1.1.9";
+  expected.attr_fbc = "fb.1.9.FROM-HEADER";
+  expected.attr_submit_ts = new Date(1700000000000).toISOString();
+  const base = ["address_line", "consent", "email", "full_name", "intake_id", "owner_token", "phone", "reservation_generation", "reservation_id", "session_binding"];
+  assert.deepEqual(Object.keys(hook).sort(), base.concat(producer.HOOK_ATTR_KEYS).sort());
+  for (const key of producer.HOOK_ATTR_KEYS) assert.equal(hook[key], expected[key], key);
+  assert.equal(hook.full_name, "Ada Lovelace");
+  assert.equal(hook.consent, false);
+  assert.equal(hook.reservation_generation, 1);
+  const blob = JSON.stringify(hook);
+  assert.equal(blob.includes(reserved.env.INTAKE_SENTINEL), false);
+  assert.equal(blob.includes(reserved.env.INTAKE_HMAC_KEY_V1), false);
+  assert.equal(blob.includes(reserved.env.INTAKE_ZAP_HOOK_URL), false);
+
+  const empty = await producerSteps([
+    { op: "park", full_name: "Ada Lovelace", address_line: "1 Main St", phone: "5550100199", email: "ada@example.com" },
+    { op: "reserve", stage: "final", destination: "crm_create" }
+  ]);
+  const bare = empty.capture.find((row) => row.url === empty.env.INTAKE_ZAP_HOOK_URL).body;
+  for (const key of producer.HOOK_ATTR_KEYS) {
+    assert.equal(typeof bare[key], "string", key);
+    if (key !== "attr_submit_ts") assert.equal(bare[key], "", key);
+  }
+  assert.equal(bare.attr_submit_ts, new Date(1700000000000).toISOString());
+
+  const hostileFt = {
+    gclid: "bad id",
+    msclkid: "good_click",
+    utm_source: "goo<gle>\n",
+    keyword: "k".repeat(250) + "<x>",
+    campaignid: " 99 ",
+    fbclid: { nope: true },
+    ttclid: "t".repeat(300),
+    not_a_signal: "secret-marker"
+  };
+  const hostile = await producerSteps([
+    {
+      op: "park",
+      full_name: "Ada Lovelace",
+      address_line: "1 Main St",
+      phone: "5550100199",
+      email: "ada@example.com",
+      touch: {
+        ft: hostileFt,
+        lt: { gclid: "also bad", msclkid: "good_click" },
+        landing_page: "javascript:alert(1)",
+        referrer: "https://evil.example/<tag>",
+        hostname: "FSHO.CO.",
+        ua_device: "phablet",
+        lead_id: "no spaces",
+        first_seen: "yesterday",
+        ga_client_id: "GA1.2.5.6",
+        submit_path: "sell",
+        submit_hostname: "ok.example.com:443"
+      }
+    },
+    { op: "reserve", stage: "final", destination: "crm_create" }
+  ]);
+  const cleaned = hostile.capture.find((row) => row.url === hostile.env.INTAKE_ZAP_HOOK_URL).body;
+  assert.equal(cleaned.attr_gclid, "");
+  assert.equal(cleaned.attr_ft_gclid, "");
+  assert.equal(cleaned.attr_lt_gclid, "");
+  assert.equal(cleaned.attr_msclkid, "good_click");
+  assert.equal(cleaned.attr_ft_msclkid, "good_click");
+  assert.equal(cleaned.attr_utm_source, "google");
+  assert.equal(cleaned.attr_keyword, "k".repeat(200));
+  assert.equal(cleaned.attr_campaignid, "99");
+  assert.equal(cleaned.attr_fbclid, "");
+  assert.equal(cleaned.attr_ttclid, "t".repeat(256));
+  assert.equal(cleaned.attr_landing_page, "");
+  assert.equal(cleaned.attr_referrer, "https://evil.example/tag");
+  assert.equal(cleaned.attr_ft_hostname, "fsho.co");
+  assert.equal(cleaned.attr_device, "");
+  assert.equal(cleaned.attr_lead_id, "");
+  assert.equal(cleaned.attr_first_seen, "");
+  assert.equal(cleaned.attr_ga_client_id, "5.6");
+  assert.equal(cleaned.attr_submit_path, "");
+  assert.equal(cleaned.attr_submit_hostname, "ok.example.com");
+  assert.equal(JSON.stringify(cleaned).includes("secret-marker"), false);
+  assert.equal(JSON.stringify(cleaned).includes("javascript:"), false);
+  for (const key of producer.HOOK_ATTR_KEYS) assert.equal(typeof cleaned[key], "string", key);
+
+  const longId = "a".repeat(256);
+  const bulkyTouch = {
+    ft: Object.fromEntries(producer.SIGNALS.map((key) => [key, longId])),
+    lt: Object.fromEntries(producer.SIGNALS.map((key) => [key, longId])),
+    landing_page: "https://fsho.co/" + "p".repeat(800),
+    referrer: "https://www.google.com/" + "r".repeat(800)
+  };
+  const bulky = await producerSteps([
+    {
+      op: "park",
+      full_name: "Ada Lovelace",
+      address_line: "1 Main St",
+      phone: "5550100199",
+      email: "ada@example.com",
+      gclid: longId,
+      touch: bulkyTouch
+    },
+    { op: "reserve", stage: "final", destination: "crm_create", touch: bulkyTouch }
+  ]);
+  bulky.responses.forEach((res) => {
+    assert.equal(res.statusCode, 200, res.body);
+    assert.ok(String(res.headers["set-cookie"] || "").length < 3900, String(res.headers["set-cookie"] || "").length);
+  });
+  const wide = bulky.capture.find((row) => row.url === bulky.env.INTAKE_ZAP_HOOK_URL).body;
+  assert.equal(wide.attr_gclid, longId);
+  assert.equal(wide.attr_ft_gclid, longId);
+  assert.equal(wide.attr_landing_page.length, 500);
+  assert.equal(wide.attr_referrer.length, 500);
+  assert.equal(bulky.capture.find((row) => row.url.endsWith("/park")).body.payload.gclid, longId);
+  assert.equal(bulky.capture.find((row) => row.url.endsWith("/park")).body.payload.touch, undefined);
+});

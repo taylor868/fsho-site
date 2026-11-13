@@ -84,6 +84,17 @@ function assertQuiet(res, rows) {
   for (const key of ["owner_token", "session_binding", "sig", "envelope"]) assert.equal(body[key], undefined);
 }
 
+const HOOK_BASE_KEYS = ["address_line", "consent", "email", "full_name", "intake_id", "owner_token", "phone", "reservation_generation", "reservation_id", "session_binding"];
+
+function assertHookAttribution(body, nowMs, filled) {
+  assert.deepEqual(Object.keys(body).sort(), HOOK_BASE_KEYS.concat(producer.HOOK_ATTR_KEYS).sort());
+  const expect = {};
+  for (const key of producer.HOOK_ATTR_KEYS) expect[key] = "";
+  Object.assign(expect, filled || {});
+  expect.attr_submit_ts = new Date(nowMs).toISOString();
+  for (const key of producer.HOOK_ATTR_KEYS) assert.equal(body[key], expect[key], key);
+}
+
 async function main() {
   const src = require("fs").readFileSync(require("path").join(__dirname, "../netlify/functions/intake-producer.js"), "utf8");
   assert.equal(src.includes("console.log(String(state.reservation_id || \"\"))"), true);
@@ -234,7 +245,15 @@ async function main() {
   expectSig(reserve.body.envelope, reserve.body.payload);
   assert.deepEqual(Object.keys(reserve.body).sort(), ["destination", "envelope", "lease_seconds", "owner_token", "payload", "session_binding"]);
   const hook = calls.find((row) => row.url === HOOK);
-  assert.deepEqual(Object.keys(hook.body).sort(), ["address_line", "consent", "email", "full_name", "intake_id", "owner_token", "phone", "reservation_generation", "reservation_id", "session_binding"]);
+  const stuckAttribution = {
+    attr_gclid: "click-a",
+    attr_ft_gclid: "click-a",
+    attr_lt_gclid: "click-a",
+    attr_utm_source: "google",
+    attr_ft_utm_source: "google",
+    attr_lt_utm_source: "google"
+  };
+  assertHookAttribution(hook.body, 1700000000000, stuckAttribution);
   assert.equal(hook.body.consent, false);
   assert.equal(hook.body.intake_id, INTAKE);
   assert.equal(hook.body.reservation_id, RES);
@@ -752,6 +771,7 @@ async function main() {
   assert.equal(freshHooks[0].address_line, "2 New St");
   assert.equal(freshHooks[0].consent, true);
   assert.equal(freshHooks[0].session_binding, BINDING2);
+  assertHookAttribution(freshHooks[0], 1700000000000, stuckAttribution);
   assert.notEqual(freshHooks[0].owner_token, OWNER);
   assert.equal(/^[0-9a-f-]{36}$/.test(freshHooks[0].owner_token), true);
 

@@ -11,6 +11,8 @@
   var ENRICH_STEPS = ["occupancy", "condition", "listed", "timeline"];
   var PAYLOAD_FIELDS = ["lead_id", "stage", "gclid", "gbraid", "wbraid", "fbclid", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
   var PUBLIC_EVENT_KEYS = { event: 1, transaction_id: 1, reason: 1, property_type: 1 };
+  var SIGNAL_KEYS = "gclid,gbraid,wbraid,fbclid,msclkid,ttclid,li_fat_id,utm_source,utm_medium,utm_campaign,utm_term,utm_content,utm_id,campaignid,adgroupid,keyword,matchtype,network,device,creative,placement,loc_physical_ms,gad_source".split(",");
+  var CLICK_IDS = SIGNAL_KEYS.slice(0, 4), EXTRA_CLICKS = SIGNAL_KEYS.slice(4, 7), UTM_KEYS = SIGNAL_KEYS.slice(7, 13);
   var TRACKING = {
     gtm_id: "GTM-WWPBQGDZ",
     ga4: false,
@@ -18,8 +20,8 @@
     lazy: true,
     storage_key: "fsho_ts_attr",
     lead_key: "fsho_ts_lead",
-    click_ids: ["gclid", "gbraid", "wbraid", "fbclid"],
-    utm: ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id"]
+    click_ids: CLICK_IDS,
+    utm: UTM_KEYS
   };
   var REAL_ADAPTER = {
     enabled: false,
@@ -161,28 +163,31 @@
     try { storage.setItem(key, JSON.stringify(obj)); } catch (e) {}
   }
 
+  function trackKeys(tracking) {
+    return tracking.click_ids.concat(tracking.utm);
+  }
+
   function project(obj, keys) {
     var out = {};
     keys.forEach(function (k) { out[k] = obj && obj[k] ? String(obj[k]) : ""; });
     return out;
   }
 
-  function trackKeys(tracking) {
-    return tracking.click_ids.concat(tracking.utm);
-  }
-
-  function captureAttribution(search, storage, tracking) {
-    var cfg = Object.assign({}, TRACKING, tracking || {});
-    var keys = trackKeys(cfg);
-    var store = storage || memoryStorage();
-    var existing = readJson(store, cfg.storage_key);
-    var incoming = project(parseQuery(search), keys);
-    var changed = false;
-    keys.forEach(function (k) {
-      if (!existing[k] && incoming[k]) { existing[k] = incoming[k]; changed = true; }
-    });
-    if (changed) writeJson(store, cfg.storage_key, existing);
-    return project(existing, keys);
+  function captureAttribution(search, storage, tracking, page) {
+    var cfg = Object.assign({}, TRACKING, tracking || {}), keys = trackKeys(cfg), store = storage || memoryStorage(), existing = readJson(store, cfg.storage_key), query = parseQuery(search), info = page || {}, q = {}, n = info.now;
+    function keep(key, value, max) { var incoming = value ? String(value).slice(0, max) : ""; if (incoming && !existing[key]) existing[key] = incoming; }
+    SIGNAL_KEYS.concat(keys).forEach(function (k) { keep(k, query[k], CLICK_IDS.concat(EXTRA_CLICKS).indexOf(k) < 0 ? 200 : 256); });
+    SIGNAL_KEYS.forEach(function (k) { if (query[k]) q[k] = String(query[k]).slice(0, 256); });
+    if (typeof n === "function") n = n();
+    var visit = { q: q, t: typeof n === "number" && isFinite(n) ? n : Date.now() };
+    [["h", info.href, 500], ["p", info.path, 180], ["o", info.hostname, 253], ["r", info.referrer, 500], ["u", info.userAgent, 240], ["c", info.cookie, 700]].forEach(function (row) { if (row[1]) visit[row[0]] = String(row[1]).slice(0, row[2]); });
+    var visits = Array.isArray(existing.visits) ? existing.visits.slice(-7) : [];
+    visits.push(visit);
+    existing.visits = visits;
+    writeJson(store, cfg.storage_key, existing);
+    var out = project(existing, keys.concat(SIGNAL_KEYS));
+    out.visits = visits;
+    return out;
   }
 
   function mintLeadId() {
@@ -311,7 +316,8 @@
     var localStore = config.localStorage || memoryStorage();
     var sessionStore = config.sessionStorage || memoryStorage();
     var dataLayer = config.dataLayer || [];
-    var attr = captureAttribution(config.search || "", localStore, tracking);
+    var page = config.page || {};
+    var attr = captureAttribution(config.search || "", localStore, tracking, page);
     var leadId = loadLeadId(sessionStore, tracking);
     var state = {
       stage: "contact", parked: false, branch: null, googleTagFired: false, downstream: null,
@@ -326,9 +332,11 @@
       QUESTIONS.type[1].forEach(function (opt) { if (opt[0] === value) known = true; });
       return known ? true : null;
     }
+    function touchBundle() { var out = { visits: state.attr.visits || [] }; if (state.leadId) out.lead_id = state.leadId; return out; }
     function basePayload(stageName) {
       var row = { lead_id: state.leadId, stage: stageName };
       trackKeys(tracking).forEach(function (k) { row[k] = state.attr[k] || ""; });
+      row.touch = touchBundle();
       return row;
     }
     function emit(stageName, extra) {
@@ -362,6 +370,7 @@
     function trackingFields() {
       var row = { lead_id: state.leadId };
       trackKeys(tracking).forEach(function (k) { if (state.attr[k]) row[k] = state.attr[k]; });
+      row.touch = touchBundle();
       return row;
     }
     function chain(value, fn) {
@@ -787,24 +796,25 @@
             phone: row.phone || "",
             email: row.email || "",
             is_test: options.isTest === true,
-            consent: row.consent === true
+            consent: row.consent === true,
+            touch: row.touch
           }));
         },
         answer: function (req) {
           req = req || {};
-          return producerCall("answer", Object.assign(tracking(req), { question: req.question, answer: req.answer }));
+          return producerCall("answer", Object.assign(tracking(req), { question: req.question, answer: req.answer, touch: req.touch }));
         },
         claim: function (req) {
           req = req || {};
-          return producerCall("claim", Object.assign(tracking(req), { by: req.by }));
+          return producerCall("claim", Object.assign(tracking(req), { by: req.by, touch: req.touch }));
         },
         enrich: function (req) {
           req = req || {};
-          return producerCall("enrich", Object.assign(tracking(req), { enrichment: mapEnrichment(req.enrichment) }));
+          return producerCall("enrich", Object.assign(tracking(req), { enrichment: mapEnrichment(req.enrichment), touch: req.touch }));
         },
         reserve: function (req) {
           req = req || {};
-          return producerCall("reserve", Object.assign(tracking(req), { destination: req.destination || "crm_create", stage: req.stage === "first" ? "first" : "final" }));
+          return producerCall("reserve", Object.assign(tracking(req), { destination: req.destination || "crm_create", stage: req.stage === "first" ? "first" : "final", touch: req.touch }));
         },
         branch: function () {},
         google: function () {},
@@ -986,6 +996,7 @@
     chooseAdapter: chooseAdapter,
     createFlow: createFlow,
     captureAttribution: captureAttribution,
+    SIGNAL_KEYS: SIGNAL_KEYS,
     canonicalJson: canonicalJson,
     sha256Hex: sha256Hex,
     REAL_ADAPTER: REAL_ADAPTER,
@@ -1034,8 +1045,10 @@ function boot(api) {
     localStorage: safeStore(localStorage),
     sessionStorage: safeStore(sessionStorage),
     dataLayer: dl,
-    publicForm: publicForm
+    publicForm: publicForm,
+    page: currentPage()
   });
+  function currentPage() { var loc = globalThis.location || {}, nav = globalThis.navigator || {}, path = String(loc.pathname || ""), search = String(loc.search || ""); return { href: String(loc.href || ""), path: (path || search) ? (path || "/") + search : "", hostname: String(loc.hostname || ""), referrer: String(document.referrer || ""), cookie: String(document.cookie || ""), userAgent: String(nav.userAgent || "") }; }
   function box(node, copy) {
     node.replaceChildren();
     if (!copy) return;

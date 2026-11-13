@@ -34,7 +34,7 @@ The mock claim agrees with the requested `by`, so the dry-run still matches the 
 
 ## Click ids, lead id, and tags
 
-Attribution is config-driven on `TRACKING` in `build/two-stage.js`. The page stores `gclid`, `gbraid`, `wbraid`, `fbclid`, `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`, and `utm_id` in `localStorage` under `fsho_ts_attr`. Each field is write-once: a stored value is never replaced, and a field that is still empty can be filled later. Every stage payload includes the stored fields.
+Attribution is config-driven on `TRACKING` in `build/two-stage.js`. The page stores first-touch click ids and UTMs in `localStorage` under `fsho_ts_attr`, and appends a visit record for each page view (query, URL, path, hostname, referrer, user agent, cookie jar, and time). First-touch fields are write-once: a stored value is never replaced, and a field that is still empty can be filled later. The signed edge payload still sends only the original first-touch `gclid`, `gbraid`, `wbraid`, `fbclid`, UTMs, and `lead_id`. The producer turns the visit list into the Catch Hook fields below. Cookies `_ga`, `_gcl_aw`, `_gcl_gb`, `_fbp`, and `_fbc` are read when present and are never set by this script.
 
 `lead_id` is created with `crypto.randomUUID()` once per browser session and kept in `sessionStorage` under `fsho_ts_lead`. A value already in that key is kept. The same id is sent on every stage. The real adapter also refuses to overwrite a click id, UTM, or lead id it has already sent.
 
@@ -111,13 +111,132 @@ A claim response of `status: "late_hot"` with `tier: "hot"` is a normal Hot clai
 
 Signatures use the fixed `canonicalLines` order from `edge/envelope.ts`: `v`, `kid`, `route`, `channel`, `intake_id`, `event_id`, `stage`, `ts`, `exp`, `payload_sha256`. The reference copies are `docs/CALL-SHAPES.md`, `edge/envelope.ts`, `edge/intake-park/handler.ts`, and `edge/intake-reserve/index.ts`.
 
-The browser sends `{op, ...whitelisted fields}`. Park includes `is_test` and `consent`. Public forms send `is_test: false`. A production build does not serve a working `/test-intake/` form, including with `?test=1`. On a deploy preview, branch deploy, dev, or local build, `/test-intake/?test=1` sends `true`. The function forwards that boolean and treats a missing flag as `false`. Edge intake-park stores a test row only when `is_test === true`, so `false` is a real lead. A non-boolean `is_test` is `400 bad_input`. `consent` is a boolean on the park payload and the Catch Hook. Missing consent is `false`. A non-boolean `consent` is `400 bad_input`. The edge ignores that unknown park key, so it does not fail intake. The function mints when the session cookie is empty. A later park also mints when that cookie intake is already reserved (`zap_sent`) or already claimed, and parks the new contact on the new intake. A later park on an in-progress intake that has not been reserved keeps the same intake. The function signs park, answer, claim, enrich, and reserve. `session_binding` goes on park and reserve only. Answer, claim, and enrich are exactly `{envelope, payload}`. Session state, including `session_binding` and `owner_token`, stays in an opaque HttpOnly cookie. The cookie key is SHA-256 of `INTAKE_COOKIE_KEY` when that is set, otherwise HKDF-SHA256 of the signing key with info `fsho-intake-cookie-v1`. `attribution` and `price_vs_value` are rejected. Tracking is write-once. After a reserve that commits, the function POSTs the Catch Hook with `intake_id`, `reservation_id`, `reservation_generation`, `session_binding`, `owner_token`, `full_name`, `phone`, `email`, `address_line`, and `consent`. That POST is server-side only. If the hook fails, it is retried once. If it still fails, the function signs `POST /intake-reserve/reconcile` with the reservation's own stage and reason `hook_uncertain`, and logs only the reservation id. The browser gets `{ok:false, status:"needs_reconcile"}`.
+The browser sends `{op, ...whitelisted fields}`. Park includes `is_test` and `consent`. Public forms send `is_test: false`. A production build does not serve a working `/test-intake/` form, including with `?test=1`. On a deploy preview, branch deploy, dev, or local build, `/test-intake/?test=1` sends `true`. The function forwards that boolean and treats a missing flag as `false`. Edge intake-park stores a test row only when `is_test === true`, so `false` is a real lead. A non-boolean `is_test` is `400 bad_input`. `consent` is a boolean on the park payload and the Catch Hook. Missing consent is `false`. A non-boolean `consent` is `400 bad_input`. The edge ignores that unknown park key, so it does not fail intake. The function mints when the session cookie is empty. A later park also mints when that cookie intake is already reserved (`zap_sent`) or already claimed, and parks the new contact on the new intake. A later park on an in-progress intake that has not been reserved keeps the same intake. The function signs park, answer, claim, enrich, and reserve. `session_binding` goes on park and reserve only. Answer, claim, and enrich are exactly `{envelope, payload}`. Session state, including `session_binding` and `owner_token`, stays in an opaque HttpOnly cookie. The cookie key is SHA-256 of `INTAKE_COOKIE_KEY` when that is set, otherwise HKDF-SHA256 of the signing key with info `fsho-intake-cookie-v1`. `attribution` and `price_vs_value` are rejected. Tracking is write-once. After a reserve that commits, the function POSTs the Catch Hook with the contact and reservation fields plus every `attr_*` key in the list below. That POST is server-side only. The signed edge payload is unchanged: first-touch `gclid`, `gbraid`, and `wbraid` are still what Zap verify uses for `campaign_id`. If the hook fails, it is retried once. If it still fails, the function signs `POST /intake-reserve/reconcile` with the reservation's own stage and reason `hook_uncertain`, and logs only the reservation id. The browser gets `{ok:false, status:"needs_reconcile"}`.
 
 Stage 1 advances only when park returns 200. Any other producer or park status stays on the contact step and the page says to try again.
 
 Enrich `503` is retried once. `409` and `429` are not retried. A second enrich `503` is returned with no tier.
 
 A 400 `bad_input` response is returned as `{ok:false, http:400, status, fields}` and the field names are logged. The owner token is not written into the test trace. `payload_sha256` is the SHA-256 of the canonical payload (sorted keys, no spaces).
+
+## Catch Hook fields
+
+Every reserve that commits POSTs one JSON object. These ten fields are unchanged:
+
+| Key | Meaning |
+|---|---|
+| `intake_id` | Intake id from mint. |
+| `reservation_id` | Reservation id from reserve. |
+| `reservation_generation` | Number. Generation from reserve. |
+| `session_binding` | Session binding from mint. |
+| `owner_token` | Owner token for the Zap. |
+| `full_name` | Name from the form. |
+| `phone` | Digits from the form. |
+| `email` | Email from the form. |
+| `address_line` | Address line from the form. |
+| `consent` | Boolean. Unchecked is `false`. |
+
+Every `attr_*` key below is a string. A missing value is `""`, so the Zap field list stays stable. For `gclid`, `gbraid`, `wbraid`, `fbclid`, and the six UTMs, `attr_<name>` and `attr_ft_<name>` match the signed edge payload (first value wins). `attr_lt_<name>` is the latest value and can differ. The producer strips control characters and `<>`, drops values that fail the click-id or URL rules, and caps length. It does not copy environment variables into the body.
+
+`attr_device` is the browser's mobile, desktop, or tablet category. Google's ValueTrack `device` parameter is only `attr_ft_device` and `attr_lt_device`. `attr_hostname` and `attr_submit_hostname` are the host that submitted the form (`fsho.co` or `fairandsimplehomeoffer.com`). `attr_ft_hostname` is the first host.
+
+| Key | Meaning |
+|---|---|
+| `attr_gclid` | First-touch Google click id. Same as `attr_ft_gclid`. |
+| `attr_ft_gclid` | First-touch Google click id. |
+| `attr_lt_gclid` | Latest Google click id. |
+| `attr_gbraid` | First-touch Google app click id. |
+| `attr_ft_gbraid` | First-touch Google app click id. |
+| `attr_lt_gbraid` | Latest Google app click id. |
+| `attr_wbraid` | First-touch Google web-to-app click id. |
+| `attr_ft_wbraid` | First-touch Google web-to-app click id. |
+| `attr_lt_wbraid` | Latest Google web-to-app click id. |
+| `attr_fbclid` | First-touch Meta click id. |
+| `attr_ft_fbclid` | First-touch Meta click id. |
+| `attr_lt_fbclid` | Latest Meta click id. |
+| `attr_msclkid` | First-touch Microsoft Ads click id. |
+| `attr_ft_msclkid` | First-touch Microsoft Ads click id. |
+| `attr_lt_msclkid` | Latest Microsoft Ads click id. |
+| `attr_ttclid` | First-touch TikTok click id. |
+| `attr_ft_ttclid` | First-touch TikTok click id. |
+| `attr_lt_ttclid` | Latest TikTok click id. |
+| `attr_li_fat_id` | First-touch LinkedIn ad tracking id. |
+| `attr_ft_li_fat_id` | First-touch LinkedIn ad tracking id. |
+| `attr_lt_li_fat_id` | Latest LinkedIn ad tracking id. |
+| `attr_utm_source` | First-touch `utm_source`. |
+| `attr_ft_utm_source` | First-touch `utm_source`. |
+| `attr_lt_utm_source` | Latest `utm_source`. |
+| `attr_utm_medium` | First-touch `utm_medium`. |
+| `attr_ft_utm_medium` | First-touch `utm_medium`. |
+| `attr_lt_utm_medium` | Latest `utm_medium`. |
+| `attr_utm_campaign` | First-touch `utm_campaign`. |
+| `attr_ft_utm_campaign` | First-touch `utm_campaign`. |
+| `attr_lt_utm_campaign` | Latest `utm_campaign`. |
+| `attr_utm_term` | First-touch `utm_term`. |
+| `attr_ft_utm_term` | First-touch `utm_term`. |
+| `attr_lt_utm_term` | Latest `utm_term`. |
+| `attr_utm_content` | First-touch `utm_content`. |
+| `attr_ft_utm_content` | First-touch `utm_content`. |
+| `attr_lt_utm_content` | Latest `utm_content`. |
+| `attr_utm_id` | First-touch `utm_id`. |
+| `attr_ft_utm_id` | First-touch `utm_id`. |
+| `attr_lt_utm_id` | Latest `utm_id`. |
+| `attr_campaignid` | First-touch Google Ads campaign id. |
+| `attr_ft_campaignid` | First-touch Google Ads campaign id. |
+| `attr_lt_campaignid` | Latest Google Ads campaign id. |
+| `attr_adgroupid` | First-touch Google Ads ad group id. |
+| `attr_ft_adgroupid` | First-touch Google Ads ad group id. |
+| `attr_lt_adgroupid` | Latest Google Ads ad group id. |
+| `attr_keyword` | First-touch Google Ads keyword. |
+| `attr_ft_keyword` | First-touch Google Ads keyword. |
+| `attr_lt_keyword` | Latest Google Ads keyword. |
+| `attr_matchtype` | First-touch Google Ads match type. |
+| `attr_ft_matchtype` | First-touch Google Ads match type. |
+| `attr_lt_matchtype` | Latest Google Ads match type. |
+| `attr_network` | First-touch Google Ads network. |
+| `attr_ft_network` | First-touch Google Ads network. |
+| `attr_lt_network` | Latest Google Ads network. |
+| `attr_ft_device` | First-touch Google Ads ValueTrack device code. |
+| `attr_lt_device` | Latest Google Ads ValueTrack device code. |
+| `attr_creative` | First-touch Google Ads creative id. |
+| `attr_ft_creative` | First-touch Google Ads creative id. |
+| `attr_lt_creative` | Latest Google Ads creative id. |
+| `attr_placement` | First-touch Google Ads placement. |
+| `attr_ft_placement` | First-touch Google Ads placement. |
+| `attr_lt_placement` | Latest Google Ads placement. |
+| `attr_loc_physical_ms` | First-touch Google Ads physical location id. |
+| `attr_ft_loc_physical_ms` | First-touch Google Ads physical location id. |
+| `attr_lt_loc_physical_ms` | Latest Google Ads physical location id. |
+| `attr_gad_source` | First-touch Google Ads `gad_source`. |
+| `attr_ft_gad_source` | First-touch Google Ads `gad_source`. |
+| `attr_lt_gad_source` | Latest Google Ads `gad_source`. |
+| `attr_landing_page` | First landing page URL. |
+| `attr_ft_landing_page` | First landing page URL. |
+| `attr_lt_landing_page` | Latest page URL. |
+| `attr_landing_path` | First path, including its query string. |
+| `attr_ft_landing_path` | First path, including its query string. |
+| `attr_lt_landing_path` | Latest path, including its query string. |
+| `attr_hostname` | Hostname of the page that submitted the form. |
+| `attr_ft_hostname` | Hostname of the first page. |
+| `attr_lt_hostname` | Hostname of the latest page. |
+| `attr_referrer` | First referrer. |
+| `attr_ft_referrer` | First referrer. |
+| `attr_lt_referrer` | Latest referrer. |
+| `attr_first_seen` | ISO time of the first captured visit. |
+| `attr_last_seen` | ISO time of the latest captured visit. |
+| `attr_submit_path` | Path of the page that submitted the form. |
+| `attr_submit_hostname` | Hostname of the page that submitted the form. |
+| `attr_submit_ts` | Server time of this Catch Hook POST, ISO-8601 UTC. |
+| `attr_device` | `mobile`, `desktop`, or `tablet` from the user agent. |
+| `attr_lead_id` | Site lead id. Same value as the conversion `transaction_id`. |
+| `attr_transaction_id` | Same as `attr_lead_id`. |
+| `attr_ga_client_id` | Google Analytics client id parsed from `_ga`. |
+| `attr_gcl_aw` | Value of the `_gcl_aw` cookie, when the browser sent it. |
+| `attr_gcl_gb` | Value of the `_gcl_gb` cookie, when the browser sent it. |
+| `attr_fbp` | Value of the `_fbp` cookie, when the browser sent it. |
+| `attr_fbc` | Value of the `_fbc` cookie, when the browser sent it. |
+
+Map each new key to its own CRM field in the Zap. Leave `campaign_id` on the value Zap verify already returns. An empty string means the signal was not present.
 
 ## Copy check
 
