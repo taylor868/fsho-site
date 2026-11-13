@@ -9,8 +9,34 @@
 const crypto = require("crypto");
 
 const CLICKS = ["gclid", "gbraid", "wbraid", "fbclid"];
+const EXTRA_CLICKS = ["msclkid", "ttclid", "li_fat_id"];
 const UTMS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id"];
+const VALUE_TRACK = ["campaignid", "adgroupid", "keyword", "matchtype", "network", "device", "creative", "placement", "loc_physical_ms", "gad_source"];
+const SIGNALS = CLICKS.concat(EXTRA_CLICKS, UTMS, VALUE_TRACK);
 const TRACK_KEYS = CLICKS.concat(UTMS).concat(["lead_id"]);
+const CLICK_MAX = 256;
+const TEXT_MAX = 200;
+const URL_MAX = 500;
+const PATH_MAX = 180;
+const HOST_MAX = 253;
+const COOKIE_MAX = 200;
+const COOKIE_BUDGET = 3600;
+const HOOK_CONTEXT_KEYS = [
+  "attr_landing_page", "attr_ft_landing_page", "attr_lt_landing_page",
+  "attr_landing_path", "attr_ft_landing_path", "attr_lt_landing_path",
+  "attr_hostname", "attr_ft_hostname", "attr_lt_hostname",
+  "attr_referrer", "attr_ft_referrer", "attr_lt_referrer",
+  "attr_first_seen", "attr_last_seen",
+  "attr_submit_path", "attr_submit_hostname", "attr_submit_ts",
+  "attr_device", "attr_lead_id", "attr_transaction_id",
+  "attr_ga_client_id", "attr_gcl_aw", "attr_gcl_gb", "attr_fbp", "attr_fbc"
+];
+const HOOK_ATTR_KEYS = SIGNALS.reduce((keys, key) => {
+  if (key !== "device") keys.push("attr_" + key);
+  keys.push("attr_ft_" + key);
+  keys.push("attr_lt_" + key);
+  return keys;
+}, []).concat(HOOK_CONTEXT_KEYS);
 const CLICK_RE = /^[A-Za-z0-9._~-]{1,256}$/;
 const UTM_RE = /^[^\u0000-\u001f\u007f<>]{1,200}$/;
 const LEAD_RE = /^[A-Za-z0-9_-]{1,64}$/;
@@ -156,6 +182,323 @@ function stick(state, incoming) {
   TRACK_KEYS.forEach((key) => {
     if (!state.tracking[key] && incoming[key]) state.tracking[key] = incoming[key];
   });
+}
+
+function plain(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value;
+}
+
+function own(obj, key) {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return undefined;
+  if (!Object.prototype.hasOwnProperty.call(obj, key)) return undefined;
+  return obj[key];
+}
+
+function cleanText(value, max) {
+  if (typeof value !== "string") return "";
+  return value.replace(/[\u0000-\u001f\u007f<>]/g, "").trim().slice(0, max);
+}
+
+function cleanClick(value) {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!/^[A-Za-z0-9._~-]+$/.test(trimmed)) return "";
+  return trimmed.slice(0, CLICK_MAX);
+}
+
+function cleanUrl(value) {
+  const text = cleanText(value, URL_MAX);
+  if (!text) return "";
+  if (/^[a-z][a-z0-9+.-]*:/i.test(text) && !/^https?:/i.test(text)) return "";
+  return text;
+}
+
+function cleanPath(value) {
+  const text = cleanText(value, PATH_MAX);
+  if (!text || text[0] !== "/" || text.indexOf("//") === 0) return "";
+  return text;
+}
+
+function cleanHost(value) {
+  let text = cleanText(value, HOST_MAX).toLowerCase();
+  if (!text) return "";
+  const colon = text.indexOf(":");
+  if (colon >= 0) text = text.slice(0, colon);
+  text = text.replace(/\.$/, "");
+  if (!/^[a-z0-9.-]{1,253}$/.test(text) || text.indexOf("..") >= 0) return "";
+  return text;
+}
+
+function cleanDevice(value) {
+  const text = cleanText(value, 16).toLowerCase();
+  return text === "mobile" || text === "desktop" || text === "tablet" ? text : "";
+}
+
+function cleanStamp(value) {
+  if (typeof value !== "string") return "";
+  const text = value.trim();
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(text) ? text : "";
+}
+
+function cleanLead(value) {
+  if (typeof value !== "string") return "";
+  const text = value.trim();
+  return LEAD_RE.test(text) ? text : "";
+}
+
+function gaClientId(value) {
+  const text = cleanText(value, 80);
+  const match = text.match(/(\d+\.\d+)$/);
+  return match ? match[1].slice(0, 40) : "";
+}
+
+function cleanCookie(value) {
+  return cleanText(value, COOKIE_MAX);
+}
+
+function signalValue(key, value) {
+  if (CLICKS.indexOf(key) >= 0 || EXTRA_CLICKS.indexOf(key) >= 0) return cleanClick(value);
+  return cleanText(value, TEXT_MAX);
+}
+
+function sanitizeTouch(input) {
+  const src = plain(input);
+  const ftIn = plain(own(src, "ft"));
+  const ltIn = plain(own(src, "lt"));
+  const ft = {};
+  const lt = {};
+  SIGNALS.forEach((key) => {
+    const first = signalValue(key, own(ftIn, key));
+    const last = signalValue(key, own(ltIn, key));
+    if (first) ft[key] = first;
+    if (last) lt[key] = last;
+  });
+  const ctx = {};
+  function set(key, value) { if (value) ctx[key] = value; }
+  set("landing_page", cleanUrl(own(src, "landing_page")));
+  set("landing_path", cleanPath(own(src, "landing_path")));
+  set("lt_landing_page", cleanUrl(own(src, "lt_landing_page")));
+  set("lt_landing_path", cleanPath(own(src, "lt_landing_path")));
+  set("hostname", cleanHost(own(src, "hostname")));
+  set("lt_hostname", cleanHost(own(src, "lt_hostname")));
+  set("referrer", cleanUrl(own(src, "referrer")));
+  set("lt_referrer", cleanUrl(own(src, "lt_referrer")));
+  set("first_seen", cleanStamp(own(src, "first_seen")));
+  set("last_seen", cleanStamp(own(src, "last_seen")));
+  set("submit_path", cleanPath(own(src, "submit_path")));
+  set("submit_hostname", cleanHost(own(src, "submit_hostname")));
+  set("ua_device", cleanDevice(own(src, "ua_device")));
+  set("lead_id", cleanLead(own(src, "lead_id")));
+  set("ga_client_id", gaClientId(own(src, "ga_client_id")));
+  set("gcl_aw", cleanCookie(own(src, "gcl_aw")));
+  set("gcl_gb", cleanCookie(own(src, "gcl_gb")));
+  set("fbp", cleanCookie(own(src, "fbp")));
+  set("fbc", cleanCookie(own(src, "fbc")));
+  return { ft, lt, ctx };
+}
+
+function deviceCategory(ua) {
+  const text = String(ua || "");
+  if (!text) return "";
+  if (/iPad|Tablet|PlayBook|Silk|Kindle|Android(?!.*Mobile)/i.test(text)) return "tablet";
+  return /Mobi|iPhone|iPod|Windows Phone|IEMobile|webOS|BlackBerry/i.test(text) ? "mobile" : "desktop";
+}
+
+function readCookieValue(jar, name) {
+  const match = String(jar || "").match(new RegExp("(?:^|;\\s*)" + name + "=([^;]*)"));
+  if (!match) return "";
+  try { return decodeURIComponent(match[1]); } catch (e) { return match[1]; }
+}
+
+function hostFromHref(href) {
+  const match = String(href || "").match(/^https?:\/\/([^/?#]+)/i);
+  return match ? cleanHost(match[1]) : "";
+}
+
+function pathFromHref(href) {
+  const match = String(href || "").match(/^https?:\/\/[^/?#]+([^#]*)/i);
+  if (!match || !match[1]) return "";
+  const path = match[1][0] === "/" ? match[1] : "/" + match[1];
+  return cleanPath(path);
+}
+
+function touchFromVisits(visits, leadId) {
+  const ft = {};
+  const lt = {};
+  const ctx = {};
+  (Array.isArray(visits) ? visits : []).slice(-8).forEach((visit) => {
+    const row = plain(visit);
+    const query = plain(row.q);
+    SIGNALS.forEach((key) => {
+      const value = signalValue(key, own(query, key));
+      if (!value) return;
+      if (!ft[key]) ft[key] = value;
+      lt[key] = value;
+    });
+    const href = cleanUrl(row.h);
+    const path = cleanPath(row.p) || pathFromHref(href);
+    const host = cleanHost(row.o) || hostFromHref(href);
+    const referrer = cleanUrl(row.r);
+    if (href && !ctx.landing_page) ctx.landing_page = href;
+    if (path && !ctx.landing_path) ctx.landing_path = path;
+    if (host && !ctx.hostname) ctx.hostname = host;
+    if (referrer && !ctx.referrer) ctx.referrer = referrer;
+    if (href) ctx.lt_landing_page = href;
+    if (path) ctx.lt_landing_path = path;
+    if (host) ctx.lt_hostname = host;
+    if (referrer) ctx.lt_referrer = referrer;
+    if (path) ctx.submit_path = path;
+    if (host) ctx.submit_hostname = host;
+    const device = cleanDevice(deviceCategory(row.u));
+    if (device) ctx.ua_device = device;
+    const stamp = cleanStamp(typeof row.t === "number" && Number.isFinite(row.t) ? new Date(row.t).toISOString() : row.t);
+    if (stamp && !ctx.first_seen) ctx.first_seen = stamp;
+    if (stamp) ctx.last_seen = stamp;
+    const jar = typeof row.c === "string" ? row.c : "";
+    const ga = gaClientId(readCookieValue(jar, "_ga"));
+    if (ga) ctx.ga_client_id = ga;
+    [["_gcl_aw", "gcl_aw"], ["_gcl_gb", "gcl_gb"], ["_fbp", "fbp"], ["_fbc", "fbc"]].forEach((pair) => {
+      const value = cleanCookie(readCookieValue(jar, pair[0]));
+      if (value) ctx[pair[1]] = value;
+    });
+  });
+  const lead = cleanLead(leadId);
+  if (lead) ctx.lead_id = lead;
+  return { ft, lt, ctx };
+}
+
+function mergeTouch(state, inputTouch) {
+  const src = plain(inputTouch);
+  const incoming = sanitizeTouch(src);
+  if (Array.isArray(src.visits)) {
+    const visited = touchFromVisits(src.visits, own(src, "lead_id"));
+    SIGNALS.forEach((key) => {
+      if (!incoming.ft[key] && visited.ft[key]) incoming.ft[key] = visited.ft[key];
+      if (!incoming.lt[key] && visited.lt[key]) incoming.lt[key] = visited.lt[key];
+    });
+    Object.keys(visited.ctx).forEach((key) => {
+      if (!incoming.ctx[key]) incoming.ctx[key] = visited.ctx[key];
+    });
+  }
+  const prev = plain(state.touch);
+  const ft = Object.assign({}, plain(prev.ft));
+  const lt = Object.assign({}, plain(prev.lt));
+  const ctx = Object.assign({}, plain(prev.ctx));
+  SIGNALS.forEach((key) => {
+    if (!ft[key] && incoming.ft[key]) ft[key] = incoming.ft[key];
+    if (incoming.lt[key]) lt[key] = incoming.lt[key];
+  });
+  ["landing_page", "landing_path", "hostname", "referrer", "first_seen"].forEach((key) => {
+    if (!ctx[key] && incoming.ctx[key]) ctx[key] = incoming.ctx[key];
+  });
+  ["lt_landing_page", "lt_landing_path", "lt_hostname", "lt_referrer", "last_seen", "submit_path", "submit_hostname", "ua_device", "lead_id", "ga_client_id", "gcl_aw", "gcl_gb", "fbp", "fbc"].forEach((key) => {
+    if (incoming.ctx[key]) ctx[key] = incoming.ctx[key];
+  });
+  state.touch = { ft, lt, ctx };
+}
+
+function alignTouch(state) {
+  const tracking = plain(state.tracking);
+  const touch = plain(state.touch);
+  const ft = Object.assign({}, plain(touch.ft));
+  const ctx = Object.assign({}, plain(touch.ctx));
+  CLICKS.concat(UTMS).forEach((key) => {
+    if (tracking[key]) ft[key] = tracking[key];
+  });
+  if (tracking.lead_id) ctx.lead_id = tracking.lead_id;
+  state.touch = { ft, lt: plain(touch.lt), ctx };
+}
+
+function hookFields(state, jar, nowMs) {
+  const out = {};
+  HOOK_ATTR_KEYS.forEach((key) => { out[key] = ""; });
+  const touch = plain(state && state.touch);
+  const ft = plain(touch.ft);
+  const lt = plain(touch.lt);
+  const ctx = plain(touch.ctx);
+  SIGNALS.forEach((key) => {
+    const first = typeof ft[key] === "string" ? ft[key] : "";
+    const last = typeof lt[key] === "string" && lt[key] ? lt[key] : first;
+    if (key !== "device") out["attr_" + key] = first;
+    out["attr_ft_" + key] = first;
+    out["attr_lt_" + key] = last;
+  });
+  const landing = ctx.landing_page || "";
+  const landingPath = ctx.landing_path || "";
+  const host = ctx.hostname || "";
+  const referrer = ctx.referrer || "";
+  const submitHost = ctx.submit_hostname || ctx.lt_hostname || host;
+  out.attr_landing_page = landing;
+  out.attr_ft_landing_page = landing;
+  out.attr_lt_landing_page = ctx.lt_landing_page || landing;
+  out.attr_landing_path = landingPath;
+  out.attr_ft_landing_path = landingPath;
+  out.attr_lt_landing_path = ctx.lt_landing_path || landingPath;
+  out.attr_ft_hostname = host;
+  out.attr_lt_hostname = ctx.lt_hostname || host;
+  out.attr_hostname = submitHost;
+  out.attr_submit_hostname = ctx.submit_hostname || ctx.lt_hostname || host;
+  out.attr_referrer = referrer;
+  out.attr_ft_referrer = referrer;
+  out.attr_lt_referrer = ctx.lt_referrer || referrer;
+  out.attr_first_seen = ctx.first_seen || "";
+  out.attr_last_seen = ctx.last_seen || "";
+  out.attr_submit_path = ctx.submit_path || "";
+  out.attr_device = ctx.ua_device || "";
+  const lead = (state && state.tracking && state.tracking.lead_id) || ctx.lead_id || "";
+  out.attr_lead_id = lead;
+  out.attr_transaction_id = lead;
+  const cookies = jar || {};
+  out.attr_ga_client_id = gaClientId(cookies._ga) || ctx.ga_client_id || "";
+  out.attr_gcl_aw = cleanCookie(cookies._gcl_aw) || ctx.gcl_aw || "";
+  out.attr_gcl_gb = cleanCookie(cookies._gcl_gb) || ctx.gcl_gb || "";
+  out.attr_fbp = cleanCookie(cookies._fbp) || ctx.fbp || "";
+  out.attr_fbc = cleanCookie(cookies._fbc) || ctx.fbc || "";
+  const ms = typeof nowMs === "number" && Number.isFinite(nowMs) ? nowMs : Date.now();
+  out.attr_submit_ts = new Date(ms).toISOString();
+  return out;
+}
+
+function shrinkTouch(state, env) {
+  if (!state || !state.touch) return;
+  const size = () => {
+    try { return seal(state, cookieKey(env)).length; } catch (e) { return COOKIE_BUDGET + 1; }
+  };
+  if (size() <= COOKIE_BUDGET) return;
+  const ft = plain(state.touch.ft);
+  const lt = plain(state.touch.lt);
+  const ctx = plain(state.touch.ctx);
+  state.touch.ft = ft;
+  state.touch.lt = lt;
+  state.touch.ctx = ctx;
+  const signals = VALUE_TRACK.concat(EXTRA_CLICKS, UTMS, CLICKS);
+  for (const key of signals) {
+    if (!lt[key]) continue;
+    delete lt[key];
+    if (size() <= COOKIE_BUDGET) return;
+  }
+  for (const key of ["gcl_aw", "gcl_gb", "fbp", "fbc", "ga_client_id", "lt_referrer", "referrer", "lt_landing_page", "landing_page", "lt_landing_path", "landing_path", "last_seen"]) {
+    if (!ctx[key]) continue;
+    delete ctx[key];
+    if (size() <= COOKIE_BUDGET) return;
+  }
+  for (const key of VALUE_TRACK.concat(EXTRA_CLICKS)) {
+    if (!ft[key]) continue;
+    delete ft[key];
+    if (size() <= COOKIE_BUDGET) return;
+  }
+  state.touch.lt = {};
+  if (size() <= COOKIE_BUDGET) return;
+  const kept = {};
+  CLICKS.forEach((key) => { if (ft[key]) kept[key] = ft[key]; });
+  const keptCtx = {};
+  if (ctx.first_seen) keptCtx.first_seen = ctx.first_seen;
+  if (ctx.hostname) keptCtx.hostname = ctx.hostname;
+  if (ctx.submit_hostname) keptCtx.submit_hostname = ctx.submit_hostname;
+  state.touch = { ft: kept, lt: {}, ctx: keptCtx };
+  if (size() <= COOKIE_BUDGET) return;
+  delete state.touch;
 }
 
 function banned(input) {
@@ -315,8 +658,10 @@ async function handle(event, deps) {
     const contact = parkContact(input);
     if (!tracked.fields.length && !contact.fields.length) {
       const previous = state.tracking;
+      const touch = state.touch;
       const tracking = previous && typeof previous === "object" && !Array.isArray(previous) ? previous : {};
       state = { tracking: tracking };
+      if (touch && typeof touch === "object" && !Array.isArray(touch)) state.touch = touch;
     }
   }
 
@@ -332,6 +677,8 @@ async function handle(event, deps) {
   const tracked = trackingErrors(input);
   if (tracked.fields.length) return respond(env, state, 400, { ok: false, status: "bad_input", fields: tracked.fields });
   stick(state, tracked.tracking);
+  mergeTouch(state, input.touch);
+  alignTouch(state);
   const needsIp = op === "park" || op === "answer" || op === "claim" || op === "enrich";
   if (needsIp && !ip) return respond(env, state, 400, { ok: false, status: "bad_input", fields: ["client_ip"] });
 
@@ -393,7 +740,7 @@ async function handle(event, deps) {
     state.reservation_generation = result.body.reservation_generation || state.reservation_generation || 1;
     if (result.body.owner_token) state.owner_token = result.body.owner_token;
     if (!state.zap_sent) {
-      const hookBody = JSON.stringify({
+      const hookBody = JSON.stringify(Object.assign({
         intake_id: state.intake_id,
         reservation_id: state.reservation_id,
         reservation_generation: state.reservation_generation,
@@ -404,7 +751,7 @@ async function handle(event, deps) {
         email: state.contact.email,
         address_line: state.contact.address_line,
         consent: state.contact.consent === true
-      });
+      }, hookFields(state, jar, now())));
       let hook = await postHook(doFetch, env.INTAKE_ZAP_HOOK_URL, hookBody);
       if (!hookOk(hook)) hook = await postHook(doFetch, env.INTAKE_ZAP_HOOK_URL, hookBody);
       if (!hookOk(hook)) {
@@ -448,6 +795,7 @@ function envelopeRetry(env, state, payload, now) {
 }
 
 function respond(env, state, status, body, extra) {
+  shrinkTouch(state, env);
   const headers = Object.assign({ "content-type": "application/json", "set-cookie": cookieHeader(seal(state, cookieKey(env))) }, extra || {});
   return { statusCode: status, headers, body: JSON.stringify(body) };
 }
@@ -459,3 +807,11 @@ exports.canonicalLines = canonicalLines;
 exports.signFields = signFields;
 exports.cookieKey = cookieKey;
 exports.stripControls = stripControls;
+exports.HOOK_ATTR_KEYS = HOOK_ATTR_KEYS;
+exports.SIGNALS = SIGNALS;
+exports.hookFields = hookFields;
+exports.mergeTouch = mergeTouch;
+exports.alignTouch = alignTouch;
+exports.sanitizeTouch = sanitizeTouch;
+exports.gaClientId = gaClientId;
+exports.deviceCategory = deviceCategory;

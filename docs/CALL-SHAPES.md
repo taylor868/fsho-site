@@ -278,7 +278,7 @@ Responses:
 3. `answer` × n
 4. `claim{by:promote}` returns `tier hot` and `priority_tier`
 5. `reserve{final, crm_create, owner_token}`
-6. The Catch Hook body to the Zap is `{intake_id, reservation_id, reservation_generation, session_binding, owner_token}`. Contact fields go only if Taylor's Zap needs them.
+6. The Catch Hook body to the Zap is the reservation and contact fields (`intake_id`, `reservation_id`, `reservation_generation`, `session_binding`, `owner_token`, `full_name`, `phone`, `email`, `address_line`, `consent`) plus the flat `attr_*` strings documented in `docs/TEST-MODE.md`. Those strings are for CRM fields. `campaign_id` still comes from Zap verify and still depends on the signed payload's first-touch `gclid`, `gbraid`, or `wbraid`.
 7. Zap `verify`
 8. Zap `create_lead`
 9. Zap `complete{remote_id}` returns `priority_tier`. **The Zap is the only completer.**

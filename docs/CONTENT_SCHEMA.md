@@ -188,7 +188,7 @@ Warns (`WARN`, exit 0) on: `title` longer than 60 characters, `meta_description`
 
 This is the lead qualifier on `/step-2/` (shortcode `{{qualifier_form}}`). It is graded on Taylor's **EMOTA** framework: **E**quity, **M**otivation, **O**wnership, **T**imeframe, **A**bility. A lead is **Hot only if all 5 pass**. Hot is the only result that fires a Google Ads conversion (`qualified_lead`).
 
-1. Public heroes (home, situation pages, and state landers) use the two-stage form. Stage 1 collects name, address, phone, and email, plus an unchecked communication-consent checkbox that does not block submit. The lead parks through `intake-producer`. `/step-2/` remains, and it is not the primary call to action.
+1. Public heroes (home, situation pages, and state landers) use the two-stage form. Stage 1 collects name, address, phone, and email, plus an unchecked communication-consent checkbox that does not block submit. The lead parks through `intake-producer`. On reserve, the Catch Hook also receives the `attr_*` attribution keys listed in `docs/TEST-MODE.md`. `/step-2/` remains, and it is not the primary call to action.
 2. A property gate comes first. Condo, townhouse, mobile/manufactured home and vacant land go to `not_fit`, the lead is saved and tagged, and no conversion fires. (Townhouse declined: confirmed by Taylor.)
 3. Then one one-tap question per letter, in the order O, T, M, E, A. Letters are internal and never shown to sellers.
 4. `@score` grades the letters. All pass gives Hot (`speed-to-lead`, `qualified_lead`). Any fail gives Nurture (`60day`, **no conversion**) with tags `emota-fail-<L>` for each failed letter, plus `emota-4of5` when exactly one letter failed (the old "Warm", now a tag only). Every outcome is still sent to the CRM.
