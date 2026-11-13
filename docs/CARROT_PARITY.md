@@ -103,7 +103,7 @@ Done (preview is off; the homepage two-stage form posts through intake-producer 
 8. **Static reviews** (#45): `reviews[]` + `{{reviews}}`. No quotes invented.
 9. **Per-page CTA wiring** (#6) and optional `canonical` override (#29). Pages without the hero form send the cash-offer button and the sticky Get Offer control to `/#offer`. Pages with the form keep `#offer`.
 - **WhatConverts profile 176490** is on for generated public pages. The official inline snapshot is in the head; `176490.js` is deferred. `/test-intake/` and redirect stubs are excluded.
-- **Approved pixels** (ClickCease visitor monitoring, GTM noscript for `GTM-WWPBQGDZ`, Meta PageView, OpenAI init) are on those same public pages. `tracking` stays false so the footer demo does not load a second container. Conversions wait for a reserved public form completion. The Carrot footer JSON-LD, gclid writer, and google-site-verification meta are not included.
+- **Approved pixels** (ClickCease visitor monitoring, GTM noscript for `GTM-TM6JSDLB`, Meta PageView, OpenAI init) are on those same public pages. `tracking` stays false so the footer demo does not load a second container. Conversions wait for a reserved public form completion. The Carrot footer JSON-LD, gclid writer, and google-site-verification meta are not included.
 
 Still open:
 

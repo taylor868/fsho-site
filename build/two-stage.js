@@ -12,7 +12,7 @@
   var PAYLOAD_FIELDS = ["lead_id", "stage", "gclid", "gbraid", "wbraid", "fbclid", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
   var PUBLIC_EVENT_KEYS = { event: 1, transaction_id: 1, reason: 1, property_type: 1 };
   var TRACKING = {
-    gtm_id: "GTM-WWPBQGDZ",
+    gtm_id: "GTM-TM6JSDLB",
     ga4: false,
     meta_pixel: false,
     lazy: true,
@@ -37,7 +37,7 @@
     townhouse_route: "quiet",
     use_real_adapter: false,
     producer_path: "/.netlify/functions/intake-producer",
-    gtm_id: "GTM-WWPBQGDZ"
+    gtm_id: "GTM-TM6JSDLB"
   };
   var NOT_FIT = {
     headline: "Thanks for the details.",

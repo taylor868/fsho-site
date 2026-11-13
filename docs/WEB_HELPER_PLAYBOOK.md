@@ -26,7 +26,7 @@ Fair, honest, simple. Write the way Andrew talks to a neighbor.
 
 ## Performance rules (the site must stay Usain-Bolt fast)
 
-- Add no new scripts, widgets, iframes, chat bubbles, popups, review embeds, or other third-party code without Taylor's approval. WhatConverts profile 176490 is on. Keep the inline snapshot ahead of `176490.js`. ClickCease visitor monitoring, the GTM-WWPBQGDZ noscript iframe, Meta Pixel 959620977142967 (PageView on load), and OpenAI Pixel AMsRexCaeaxScDiV9SGJcP (init on load) are on. Their conversions fire only after a reserved public form completion. Do not turn `tracking` on. Do not add a second gtag.js, a gtag config, the Carrot footer JSON-LD, the gclid footer script, or a google-site-verification meta.
+- Add no new scripts, widgets, iframes, chat bubbles, popups, review embeds, or other third-party code without Taylor's approval. WhatConverts profile 176490 is on. Keep the inline snapshot ahead of `176490.js`. ClickCease visitor monitoring, the GTM-TM6JSDLB noscript iframe, Meta Pixel 959620977142967 (PageView on load), and OpenAI Pixel AMsRexCaeaxScDiV9SGJcP (init on load) are on. Their conversions fire only after a reserved public form completion. Do not turn `tracking` on. Do not add a second gtag.js, a gtag config, the Carrot footer JSON-LD, the gclid footer script, or a google-site-verification meta.
 - Images must be WebP, under 200 KB, and sized close to how they display. Convert uploads yourself.
 - No web fonts. The site uses system fonts.
 - Keep pages lean: reuse shortcodes, and don't paste the same block three times. Videos stay click-to-load.

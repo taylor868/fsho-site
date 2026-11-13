@@ -1,7 +1,7 @@
 /* ===== FSHO CONFIG: the only switches ===== */
 var FSHO={endpoint:"",/* e.g. Zapier/Make webhook -> Carrot CRM + Twilio SMS. Empty = local demo, nothing sent */
 tracking:false,/* single flag: GTM + ClickCease load after window load */
-gtm:"GTM-WWPBQGDZ",clickcease:"" /* ClickCease site ID TBD */};
+gtm:"GTM-TM6JSDLB",clickcease:"" /* ClickCease site ID TBD */};
 (function(){var K=["gclid","utm_campaign","utm_term","utm_source","utm_medium"],q=new URLSearchParams(location.search),A={};
 try{A=JSON.parse(localStorage.getItem("fsho_attr")||"{}")}catch(e){}
 K.forEach(function(k){var v=q.get(k);if(v)A[k]=v});try{localStorage.setItem("fsho_attr",JSON.stringify(A))}catch(e){}
