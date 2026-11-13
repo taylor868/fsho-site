@@ -15,7 +15,7 @@ faq: []
 
 <section class="alt"><div class="wrap pad"><h2 class="c">How it works: 3 simple steps</h2>{{steps}}</div></section>
 
-<section class="wrap pad"><h2 class="c">Two ways to sell. You pick.</h2><div class="grid2"><div class="card big"><h3>💵 The Fast Cash Option</h3><p>Guaranteed offer with no contingencies, inspections, hidden fees, or commissions.</p><ul class="ck"><li>Fast</li><li>As-is</li><li>Easy</li></ul></div><div class="card big"><h3>📈 The More-Money Option</h3><p>Our network of on- and off-market buyers and trained local partners work to get you more than a lowball cash offer.</p><ul class="ck"><li>Takes 45–90 days</li><li>Fewer headaches than a traditional sale</li><li>More money in your pocket</li></ul></div></div></section>
+<section class="wrap pad"><h2 class="c">Two ways to sell. You pick.</h2><div class="grid2"><div class="card big"><h3>💵 The Fast Cash Option</h3><p>Guaranteed offer with no hidden fees or commissions. The price stays the same once we are under contract, unless an inspection finds problems that were not disclosed.</p><ul class="ck"><li>Fast</li><li>As-is</li><li>Easy</li></ul></div><div class="card big"><h3>📈 The More-Money Option</h3><p>Our network of on- and off-market buyers and trained local partners work to get you more than a lowball cash offer.</p><ul class="ck"><li>Takes 45–90 days</li><li>Fewer headaches than a traditional sale</li><li>More money in your pocket</li></ul></div></div></section>
 
 <section class="alt"><div class="wrap pad"><h2 class="c">Cash offer vs. listing with an agent</h2>{{comparison}}</div></section>
 

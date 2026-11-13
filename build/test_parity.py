@@ -527,8 +527,8 @@ faq:
         summaries = re.findall(r'<summary>(.*?)</summary>', faq)
         self.assertEqual([item['name'] for item in main], [html_mod.unescape(q) for q in summaries])
         self.assertIn('What types of properties do you buy?', summaries)
-        self.assertNotIn('Will you show me how you got to your number?', summaries)
-        self.assertNotIn('Do you need to see the inside of the house?', summaries)
+        self.assertIn('Will you show me how you got to your number?', summaries)
+        self.assertIn('Do you need to see the inside of the house?', summaries)
         self.assertNotIn('Placeholder, waiting', faq)
         self.assertNotIn('10–14 business days', faq)
         for item in main:
@@ -564,8 +564,10 @@ faq:
             for marker in markers:
                 self.assertNotIn(marker, text, '%s in %s' % (marker, path.name))
         faq = (out / 'faq' / 'index.html').read_text(encoding='utf-8')
-        self.assertNotIn('Will you show me how you got to your number?', faq)
+        self.assertIn('Will you show me how you got to your number?', faq)
+        self.assertIn('Yes. Your offer comes in writing.', faq)
         self.assertIn("What's the difference between your cash offer and your market-sale option?", faq)
+        self.assertIn('a licensed real estate partner in your market lists the house', faq)
         self.assertNotIn('who lists the house', faq)
         fast = (out / 'sell-your-house-fast' / 'index.html').read_text(encoding='utf-8')
         self.assertIn('You pick the closing date that works for you. If you need more time, say so.', fast)
