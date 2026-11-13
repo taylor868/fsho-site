@@ -507,30 +507,91 @@ faq:
         def faq_page_blocks(doc):
             return [b for b in ld_blocks(doc) if b.get('@type') == 'FAQPage']
 
-        for doc, name in ((home, 'home'), (how, 'how'), (contact, 'contact'), (own, 'own')):
+        for doc, name in ((home, 'home'), (how, 'how'), (contact, 'contact')):
             self.assertEqual(faq_page_blocks(doc), [], name)
         self.assertNotIn('Frequently asked questions', home)
         self.assertNotIn('<div class="faq">', home)
         self.assertNotIn('<div class="faq">', how)
         self.assertIn('href="/faq/"', how)
+        # A page with its own faq still renders that block and its FAQPage schema.
         self.assertEqual(faq_pairs(own), [('Own question?', 'Own &amp; answer')])
+        own_blocks = faq_page_blocks(own)
+        self.assertEqual(len(own_blocks), 1)
+        self.assertEqual([item['name'] for item in own_blocks[0]['mainEntity']], ['Own question?'])
+        self.assertEqual(own_blocks[0]['mainEntity'][0]['acceptedAnswer']['text'], 'Own & answer')
         self.assertTrue(any(b.get('@type') == 'RealEstateAgent' for b in ld_blocks(home)))
         self.assertTrue(any(b.get('@type') == 'RealEstateAgent' for b in ld_blocks(faq)))
         blocks = faq_page_blocks(faq)
         self.assertEqual(len(blocks), 1)
         main = blocks[0]['mainEntity']
         summaries = re.findall(r'<summary>(.*?)</summary>', faq)
-        self.assertEqual(len(summaries), 33)
         self.assertEqual([item['name'] for item in main], [html_mod.unescape(q) for q in summaries])
+        self.assertIn('What types of properties do you buy?', summaries)
+        self.assertNotIn('Will you show me how you got to your number?', summaries)
+        self.assertNotIn('Do you need to see the inside of the house?', summaries)
+        self.assertNotIn('Placeholder, waiting', faq)
+        self.assertNotIn('10–14 business days', faq)
         for item in main:
             self.assertEqual(item['@type'], 'Question')
             self.assertEqual(item['acceptedAnswer']['@type'], 'Answer')
             self.assertNotIn('5-star', item['acceptedAnswer']['text'])
             self.assertNotIn('close on the date you choose', item['acceptedAnswer']['text'])
+            self.assertNotIn('10–14', item['acceptedAnswer']['text'])
+            self.assertNotIn('Placeholder', item['acceptedAnswer']['text'])
         legit = next(q for q in main if q['name'].startswith('How can I tell a legitimate'))
         self.assertIn('Fair & Simple', legit['acceptedAnswer']['text'])
         self.assertNotIn('&amp;', legit['acceptedAnswer']['text'])
         self.assertEqual(site['faq'], [])
+
+    def test_placeholder_answers_stay_out_of_the_production_build(self):
+        markers = (
+            'Placeholder, waiting',
+            'Not confirmed:',
+            '[F]',
+            '[C]',
+            '[F/C]',
+            'class="ph"',
+            '10–14 business days',
+            'We close on the date you choose',
+            '5-star on Google and Facebook',
+        )
+        self.build(live=True)
+        out = Path(gen.OUT)
+        html_files = list(out.rglob('*.html'))
+        self.assertGreater(len(html_files), 20)
+        for path in html_files:
+            text = path.read_text(encoding='utf-8')
+            for marker in markers:
+                self.assertNotIn(marker, text, '%s in %s' % (marker, path.name))
+        faq = (out / 'faq' / 'index.html').read_text(encoding='utf-8')
+        self.assertNotIn('Will you show me how you got to your number?', faq)
+        self.assertIn("What's the difference between your cash offer and your market-sale option?", faq)
+        self.assertNotIn('who lists the house', faq)
+        fast = (out / 'sell-your-house-fast' / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('You pick the closing date that works for you. If you need more time, say so.', fast)
+        self.assertIn('You pick the closing date. If you need a later date, say so.', fast)
+        self.assertTrue(any(b.get('@type') == 'FAQPage' for b in ld_blocks(fast)))
+
+        data, path = self.site()
+        data['faq_answers']['faq_show_price_math'] = 'We show the price math in writing before you decide.'
+        self.save_site(data, path)
+        self.build(live=True)
+        faq = (Path(gen.OUT) / 'faq' / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('Will you show me how you got to your number?', faq)
+        self.assertIn('We show the price math in writing before you decide.', faq)
+        block = next(b for b in ld_blocks(faq) if b.get('@type') == 'FAQPage')
+        names = [item['name'] for item in block['mainEntity']]
+        self.assertIn('Will you show me how you got to your number?', names)
+        filled = next(item for item in block['mainEntity'] if item['name'].startswith('Will you show me'))
+        self.assertIn('price math in writing', filled['acceptedAnswer']['text'])
+
+        data['faq_answers']['faq_show_price_math'] = ''
+        self.save_site(data, path)
+        self.build(live=True)
+        faq = (Path(gen.OUT) / 'faq' / 'index.html').read_text(encoding='utf-8')
+        self.assertNotIn('Will you show me how you got to your number?', faq)
+        block = next(b for b in ld_blocks(faq) if b.get('@type') == 'FAQPage')
+        self.assertFalse(any(item['name'].startswith('Will you show me') for item in block['mainEntity']))
 
     def test_canonical_and_og_are_escaped(self):
         self.write('content/pages/special.md', SPECIAL)
@@ -547,13 +608,11 @@ faq:
         self.assertIn('<meta name="twitter:title" content="OG and &quot;title&quot; &lt;x&gt;">', doc)
         self.assertNotIn('content="Tom & "Jerry"', doc)
         blocks = ld_blocks(doc)
-        self.assertFalse(any(b.get('@type') == 'FAQPage' for b in blocks))
-        escaped = gen.ld_script({"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
-            {"@type": "Question", "name": "Own question?", "acceptedAnswer": {"@type": "Answer", "text": "Own & answer </script><script>alert(1)"}}]})
-        raw = re.search(r'<script type="application/ld\+json">(\{"@context":"https://schema.org","@type":"FAQPage".*?)</script>', escaped).group(1)
+        faq = next(b for b in blocks if b['@type'] == 'FAQPage')
+        self.assertEqual(faq['mainEntity'][0]['acceptedAnswer']['text'], 'Own & answer </script><script>alert(1)')
+        raw = re.search(r'<script type="application/ld\+json">(\{"@context":"https://schema.org","@type":"FAQPage".*?)</script>', doc).group(1)
         self.assertNotIn('</script>', raw)
         self.assertIn('<\\/script>', raw)
-        self.assertEqual(json.loads(raw)['mainEntity'][0]['acceptedAnswer']['text'], 'Own & answer </script><script>alert(1)')
         # Default page with no og_image uses summary and the title, still escaped.
         home = (Path(gen.OUT) / 'index.html').read_text(encoding='utf-8')
         self.assertIn('twitter:card" content="summary"', home)
@@ -867,8 +926,10 @@ cta_label: "Page specific heading"
             self.assertNotIn('href="/#offer"', html, path)
             self.assertIn('Sell your house as-is · No fees · No repairs', html, path)
         home = (out / 'index.html').read_text(encoding='utf-8')
-        self.assertIn('<h1>Sell your house fast, for a fair price, on your timeline.</h1>', home)
-        self.assertIn('Brett C.', home)
+        self.assertIn('<h1>Sell your house fast, for a fair cash offer, on your timeline.</h1>', home)
+        self.assertNotIn('Brett C.', home)
+        self.assertNotIn('Sale price', home)
+        self.assertIn('<td class="us">On your timeline</td>', home)
         self.assertIn('Fair &amp; Simple Cash Offer', home)
         self.assertIn('Our Market-Sale Option', home)
         self.assertIn('Traditional Listing', home)
@@ -900,8 +961,15 @@ cta_label: "Page specific heading"
             else:
                 self.assertEqual(cash.findall(html), [], name)
         faq = no_form['faq'].read_text(encoding='utf-8')
+        reviews = no_form['reviews'].read_text(encoding='utf-8')
         self.assertIn('What types of properties do you buy?', faq)
-        self.assertIn('<h1>Straight answers about selling for cash.</h1>', faq)
+        self.assertIn('<h1>Straight answers before you decide.</h1>', faq)
+        self.assertNotIn('Brett C.', reviews)
+        self.assertNotIn('Brett C.', faq)
+        ohio = (out / 'sell-your-house-fast-in-ohio' / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('Questions about selling? Read the FAQ.', ohio)
+        self.assertNotIn('Brett C.', ohio)
+        self.assertFalse(any(b.get('@type') == 'FAQPage' for b in ld_blocks(ohio)))
 
     def test_whatconverts_profile_is_enabled_on_public_pages(self):
         init = (
@@ -995,9 +1063,9 @@ cta_label: "Page specific heading"
         two_stage = (ROOT / 'build' / 'two-stage.js').read_text(encoding='utf-8')
         self.assertIsNone(curly.search(pixels_js))
         self.assertIsNone(curly.search(two_stage[two_stage.index('function notifyReservedPixels'):two_stage.index('function fireExit')]))
-        self.assertIn('<h1>Sell your house fast, for a fair price, on your timeline.</h1>', home)
+        self.assertIn('<h1>Sell your house fast, for a fair cash offer, on your timeline.</h1>', home)
         self.assertIn('Fair &amp; Simple Cash Offer', home)
-        self.assertIn('Brett C.', home)
+        self.assertNotIn('Brett C.', home)
         self.assertIn('og:site_name" content="Fair and Simple Home Offer"', home)
         agent = next(b for b in ld_blocks(home) if b['@type'] == 'RealEstateAgent')
         self.assertEqual(agent['name'], 'Fair and Simple Home Offer')
@@ -1129,9 +1197,9 @@ cta_label: "Page specific heading"
         self.assertIn('<h1>Stop Foreclosure</h1>', stop)
         self.assertIn('If you are behind, you still have choices', stop)
         self.assertIn('href="/selling-a-house-in-pre-foreclosure/"', stop)
-        self.assertIn('<h1>Sell your house fast, for a fair price, on your timeline.</h1>', home)
-        self.assertNotIn('Sell your house fast, for a fair cash offer, on your timeline.', home)
-        self.assertIn('Brett C.', home)
+        self.assertIn('<h1>Sell your house fast, for a fair cash offer, on your timeline.</h1>', home)
+        self.assertNotIn('<h1>Sell your house fast, for a fair price, on your timeline.</h1>', home)
+        self.assertNotIn('Brett C.', home)
         header = re.search(r'<header class="top">.*?</header>', home, re.S).group(0)
         mains = {}
         titles, metas, h1s = [], [], []
@@ -1179,7 +1247,12 @@ cta_label: "Page specific heading"
             visible = re.sub(r'<style\b[^>]*>.*?</style>', '', visible, flags=re.S)
             self.assertNotIn('Brett C.', visible, slug)
             self.assertNotIn('Sell your house fast, for a fair cash offer', html, slug)
-            self.assertNotIn('3–6 months', html, slug)
+            self.assertIn('More answers are on the FAQ page.', html, slug)
+            if slug == 'companies-that-buy-houses':
+                self.assertIn('3–6 months+', html, slug)
+                self.assertNotIn('Sale price', html, slug)
+            else:
+                self.assertNotIn('3–6 months', html, slug)
             for bad in ('lorem', 'tbd', 'placeholder', 'todo', 'fixme'):
                 self.assertNotIn(bad, visible.lower(), '%s %s' % (slug, bad))
             self.assertIn('<body>' + gtm_ns, html, slug)

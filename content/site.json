@@ -140,7 +140,7 @@
     {
       "n": 3,
       "title": "Close on your timeline",
-      "text": "We coordinate with a reputable title company. Cash in as little as 10–14 business days in most cases."
+      "text": "We coordinate with a reputable title company and close on your timeline."
     }
   ],
   "comparison": {
@@ -176,7 +176,7 @@
       ],
       [
         "Typical timeline",
-        "10–14 business days",
+        "On your timeline",
         "45–90 days",
         "3–6 months+"
       ]
@@ -192,7 +192,216 @@
     "vSytu6IDw6s"
   ],
   "faq": [],
-  "_faq_note": "The public FAQ is only content/pages/faq.md. Do not put a FAQ block back on other pages. FAQPage JSON-LD is emitted only for /faq/.",
+  "faq_answers": {
+    "faq_who_lists_market_sale": "Placeholder, waiting on Andrew or Taylor and on counsel. Not confirmed: who lists the house on the market-sale path, and whether Fair & Simple acts as an agent.",
+    "faq_show_price_math": "We have not confirmed, for this preview, whether you get a written breakdown of the price. Placeholder, waiting on Andrew or Taylor. Do not treat this as a promise that we show the math, or that we do not.",
+    "faq_who_calls": "Placeholder, waiting on Andrew or Taylor. Not confirmed: who calls, how soon they call, and whether someone walks the house.",
+    "faq_see_inside": "We have not confirmed whether someone needs to see the inside before making an offer. Placeholder, waiting on Andrew or Taylor. This is not a yes or a no, and it is not a description of an inspection.",
+    "faq_offer_negotiable": "We have not confirmed whether an offer can be negotiated, or whether a visit or inspection changes it. Placeholder, waiting on Andrew or Taylor. No bargaining rules are stated on this page.",
+    "faq_offer_duration": "We have not confirmed how long an offer stays open. Placeholder, waiting on Andrew or Taylor. Do not assume a number of days.",
+    "faq_proceeds_amounts": "Placeholder, waiting on Andrew or Taylor. Not confirmed: which other amounts, if any, could still come out of your proceeds.",
+    "faq_how_liens_paid": "Placeholder, waiting on Andrew or Taylor. Not confirmed: how each lien, judgment, or tax bill is paid at closing.",
+    "faq_underwater_loan": "Placeholder, waiting on Andrew or Taylor and on counsel. This is not a short-sale policy and not a promise that a sale can close.",
+    "faq_payment_method": "Placeholder, waiting on Andrew or Taylor. Not confirmed: whether you are paid by wire, check, or another method.",
+    "faq_tenants_stay": "Placeholder, waiting on Andrew or Taylor. Not confirmed: leases, notice, or whether tenants stay through closing. This is not a tenant program.",
+    "faq_stay_after_closing": "We have not confirmed any option to stay after closing. Nothing here is a rent-back or an occupancy program. Placeholder, waiting on Andrew or Taylor. Do not plan on days in the house after closing unless they confirm it in writing.",
+    "faq_probate_open": "Placeholder, waiting on Andrew or Taylor and on counsel. This is not a statement that we can buy during probate, or that you should wait until it closes.",
+    "faq_contract_assignment": "Placeholder, waiting on counsel. Not confirmed: whether a contract is ever assigned to another investor. This page does not claim that we never assign, and it does not claim that we always do.",
+    "faq_who_handles_file": "Placeholder, waiting on Andrew or Taylor. Not confirmed: who else, if anyone, handles a file day to day. This is not a staffing chart.",
+    "faq_cancel_after_signing": "Placeholder, waiting on counsel. No cancellation terms, deadlines, or penalties are stated here.",
+    "faq_moving_or_advance": "We have not confirmed help with moving, or any way to receive cash before closing. This page does not describe a program for either one. Placeholder, waiting on Andrew or Taylor. Do not plan on an advance or a moving service unless they confirm it in writing."
+  },
+  "faq_page": {
+    "reviewed": "Last reviewed: November 2026 by Andrew Collier.",
+    "groups": [
+      {
+        "id": "cash-vs-listing",
+        "title": "Cash offer vs listing with an agent",
+        "items": [
+          {
+            "q": "Should I take a cash offer or list my house with an agent?",
+            "a": "<p>You do not have to pick before we talk. We show a cash offer and a market-sale option, and we compare both with a traditional listing.</p><p>Cash is on your timeline. A market sale is usually 45–90 days. A traditional listing is often 3–6 months or more, often about 6% commission, and the seller typically pays some closing costs. Those are typical industry figures. On our two paths, commission is none and we cover closing costs.</p>"
+          },
+          {
+            "q": "What's the difference between your cash offer and your market-sale option?",
+            "a": "<p>A cash offer is us buying the house. The market-sale option takes longer and can net more. We do not charge a commission or closing costs on that path either.</p><p>Cash is on your timeline, and a market sale is usually 45–90 days. The footer says we are not a licensed brokerage unless stated, and that we buy as principals.</p>",
+            "answer_id": "faq_who_lists_market_sale"
+          },
+          {
+            "q": "Why is a cash offer lower than what my house might list for?",
+            "a": "<p>A cash price is usually below a list price because it has to cover repairs, carrying the house, and the chance it takes time to sell again.</p><p>This page will not quote a percent of retail. If cash is not your best result, the market-sale option may put more in your pocket, on a slower clock of about 45–90 days.</p>"
+          },
+          {
+            "q": "Will you show me how you got to your number?",
+            "answer_id": "faq_show_price_math"
+          },
+          {
+            "q": "How do I compare your offer to what I'd net with an agent?",
+            "a": "<p>Compare what you would receive, not the headline price.</p><p>Line up price, commission, closing costs, repairs, and any payoff the title company sends to a lender. On our cash offer and our market-sale path, commission is none and we cover closing costs. A traditional listing often includes about 6% commission and some seller closing costs. Those are typical industry figures, not a quote.</p>"
+          },
+          {
+            "q": "I'm already listed with a Realtor. Can I still talk to you?",
+            "a": "<p>Yes. You can still talk to us if the house is already listed. The form does not turn listed homes away.</p><p>The form does not cancel a listing agreement. What that agreement allows is a question for your agent or a real estate attorney. We are not attorneys and will not tell you to break a contract. We will still walk through a cash offer or a market-sale option.</p>"
+          }
+        ]
+      },
+      {
+        "id": "process",
+        "title": "Process and the offer",
+        "items": [
+          {
+            "q": "What happens after I submit my address?",
+            "a": "<p>The form takes about 60 seconds and does not obligate you to sell. The consent box starts unchecked. You do not have to check it, and leaving it blank does not block the form.</p><p>You can also call or text <a href=\"tel:+19106366669\">(910) 636-6669</a>. There is no purchase-price question. Which property types continue is answered below.</p>",
+            "answer_id": "faq_who_calls"
+          },
+          {
+            "q": "Do you need to see the inside of the house?",
+            "answer_id": "faq_see_inside"
+          },
+          {
+            "q": "Is the offer negotiable? Does it ever change after a walkthrough or inspection?",
+            "answer_id": "faq_offer_negotiable"
+          },
+          {
+            "q": "How long is an offer good for?",
+            "answer_id": "faq_offer_duration"
+          },
+          {
+            "q": "Can a family member or my attorney be part of the conversation?",
+            "a": "<p>Yes. A family member or your attorney can join the conversation.</p><p>Call or text <a href=\"tel:+19106366669\">(910) 636-6669</a> and say who should be included. We are not attorneys. If someone should read the paperwork, that is their job. There is no fee to start, you can say no, and an offer does not obligate you.</p>"
+          }
+        ]
+      },
+      {
+        "id": "costs",
+        "title": "Costs and net proceeds",
+        "items": [
+          {
+            "q": "Who pays closing costs, and are there any costs I'd still pay?",
+            "a": "<p>We cover closing costs on the cash offer and on the market-sale path. We do not charge a commission on either path.</p><p>A traditional listing is different: the seller typically pays some closing costs, and commission is often about 6%. Those are typical industry figures, not your quote. A mortgage payoff goes to the lender. It is not a fee we add.</p>",
+            "answer_id": "faq_proceeds_amounts"
+          },
+          {
+            "q": "What happens to my mortgage when I sell?",
+            "a": "<p>If you still have a mortgage, the loan is paid from the sale at closing. You do not keep the loan and hand us the house.</p><p>The title company sends the payoff to your lender. We can help coordinate that. We cannot make the lender pause a case or change the loan. If a foreclosure sale date is in play, the closing has to land in time for a sale to matter.</p>"
+          },
+          {
+            "q": "Can you buy a house with liens, judgments, or back taxes?",
+            "a": "<p>Yes, we consider houses with liens, judgments, or back taxes. That is already how we describe the houses we look at.</p><p>That is not a promise that every lien can be paid off, or that the numbers will work.</p>",
+            "answer_id": "faq_how_liens_paid"
+          },
+          {
+            "q": "What if I owe more than the house is worth?",
+            "a": "<p>We cannot tell you from this page what happens if the loan is higher than the price. If a foreclosure date is involved, talk with a foreclosure attorney or a HUD-approved counselor. We are not attorneys.</p>",
+            "answer_id": "faq_underwater_loan"
+          },
+          {
+            "q": "Will I owe capital gains tax when I sell?",
+            "a": "<p>We do not give tax advice. This is not a statement about whether you will owe capital gains.</p><p>A CPA can look at your basis, how long you owned the house, and whether any exclusion applies. We will not estimate tax on a call or on this page. Take the closing papers from the title company to that CPA. Nothing here is a tax position.</p>"
+          },
+          {
+            "q": "How do I get paid at closing?",
+            "a": "<p>A title company handles the closing. If there is a mortgage, that company sends the payoff to the lender.</p>",
+            "answer_id": "faq_payment_method"
+          }
+        ]
+      },
+      {
+        "id": "as-is",
+        "title": "As-is, condition, occupancy",
+        "items": [
+          {
+            "q": "What types of properties do you buy?",
+            "a": "<p>We buy single-family houses and multi-family properties with 2–4 units, from the owner.</p><p>Townhouses, condos, mobile or manufactured homes, apartments, and vacant land get a short, quiet screen instead of an offer. A listed house is not rejected. The form does not ask for a purchase price. Wholesalers, investors, and agents should not use the owner form.</p>"
+          },
+          {
+            "q": "What does \"as-is\" actually mean?",
+            "a": "<p>As-is means you do not repair or clean the house for us.</p><p>Leave what you do not want, including a bad roof, fire damage, or a house that needs a lot of work. We will not ask you to paint, haul junk, or get it ready for showings. What you must disclose is a legal question for an attorney.</p>"
+          },
+          {
+            "q": "Can I sell a house with tenants in it?",
+            "a": "<p>You can ask us about a rental. Tired landlords are already one of the situations we talk about. We have not published a rule for tenants who are still living there.</p>",
+            "answer_id": "faq_tenants_stay"
+          },
+          {
+            "q": "Can I stay in the house for a while after closing?",
+            "answer_id": "faq_stay_after_closing"
+          },
+          {
+            "q": "Do I need to disclose problems with the house?",
+            "a": "<p>Do not use this page as the list of what you must disclose.</p><p>Disclosure rules depend on the state and the facts. An attorney can tell you what has to be in writing. Tell us about problems you know so the conversation is about the real house. We are not attorneys, and we will not hand you a form and call it legal advice.</p>"
+          }
+        ]
+      },
+      {
+        "id": "foreclosure",
+        "title": "Foreclosure and hard situations",
+        "items": [
+          {
+            "q": "Is it too late to sell if I've got a foreclosure sale date?",
+            "a": "<p>A sale date does not, by itself, mean it is too late. It also does not mean a sale will stop the foreclosure.</p><p>A sale helps only when there is time and the numbers work. We do not promise that foreclosure stops, or anything about your credit. Lender, counselor, cash, and market-sale options are on the <a href=\"/stop-foreclosure/\">stop foreclosure</a> page. For legal advice, use a foreclosure attorney or a HUD-approved counselor at <a href=\"https://www.hud.gov/counseling\">hud.gov/counseling</a>. We are not attorneys.</p>"
+          },
+          {
+            "q": "Will selling hurt or help my credit?",
+            "a": "<p>We will not tell you that selling helps your credit, or that it saves it.</p><p>We do not know what a lender will report. A sale is not a credit-repair product. If you are worried about a foreclosure on your record, a HUD-approved housing counselor or a foreclosure attorney can talk through that. We are neither.</p>"
+          },
+          {
+            "q": "Can I sell an inherited house that's still in probate?",
+            "a": "<p>Inherited houses are a common reason people call. Whether you can sell while probate is still open is a legal question, and we are not answering it here.</p>",
+            "answer_id": "faq_probate_open"
+          },
+          {
+            "q": "What if I'm going through a divorce, or co-owners disagree?",
+            "a": "<p>We can talk with you. We cannot settle a dispute between owners.</p><p>If a spouse, heir, or other co-owner has to sign, that is a question for an attorney. We will not tell one owner to sign over someone else's rights. The other owner, or your attorney, can be on the call. There is no fee to ask, and no obligation to sell.</p>"
+          }
+        ]
+      },
+      {
+        "id": "trust",
+        "title": "Legitimacy and trust",
+        "items": [
+          {
+            "q": "Do you buy the house yourselves, or assign the contract to another investor?",
+            "a": "<p>The site says we buy property as principals. It also says we are not a licensed brokerage unless stated.</p>",
+            "answer_id": "faq_contract_assignment"
+          },
+          {
+            "q": "How can I tell a legitimate cash buyer from a scam?",
+            "a": "<p>See who you are dealing with before you sign anything.</p><p>Fair &amp; Simple Home Offer is operated by Andrew Collier LLC. The footer says we buy as principals and are not a licensed brokerage unless stated. Use <a href=\"tel:+19106366669\">(910) 636-6669</a> and offer@fairandsimplehomeoffer.com. Read the contract, compare it with another option, and open the BBB profile linked from the site. This page does not claim star ratings.</p>"
+          },
+          {
+            "q": "Will you pressure me or keep calling?",
+            "a": "<p>You should not be pushed, and you can say no.</p><p>The consent box is optional, unchecked, and the form still submits if you leave it blank. Consent is not required to get an offer. We are not publishing how often anyone will call. There is no fee to hear an offer, and hearing it does not obligate you to accept it.</p>"
+          },
+          {
+            "q": "Who will I actually be working with?",
+            "a": "<p>Andrew Collier is the owner and the public face of the company. More about him is on the <a href=\"/our-company/\">Our Company</a> page.</p>",
+            "answer_id": "faq_who_handles_file"
+          }
+        ]
+      },
+      {
+        "id": "after-yes",
+        "title": "After you say yes",
+        "items": [
+          {
+            "q": "Can I back out after I sign?",
+            "a": "<p>This page cannot tell you whether you can cancel after you sign. An attorney can read the contract. We are not attorneys.</p>",
+            "answer_id": "faq_cancel_after_signing"
+          },
+          {
+            "q": "Can you help with moving or getting cash before closing?",
+            "answer_id": "faq_moving_or_advance"
+          },
+          {
+            "q": "What do I need to have ready to sell?",
+            "a": "<p>To start, you need the address and a way for us to reach you. You do not need to clean or repair first.</p><p>The form asks for your name, the property address, phone, and email. It does not ask for a price. If you go forward, the title company tells you which documents it needs. Bring a co-owner's questions, or your attorney's, to the conversation. Do not put account numbers in the form.</p>"
+          }
+        ]
+      }
+    ]
+  },
+  "_faq_note": "The grouped public FAQ is faq_page, rendered only on /faq/ by {{faq_page}}. Each unanswered slot is one string in faq_answers, keyed by a stable id such as faq_who_lists_market_sale. Replace that string with the answer. A plain sentence is wrapped in a paragraph; start the string with < to write HTML. An empty string, or text that is still a placeholder note (Placeholder, waiting / [F] / [C] / Not confirmed:), is left out of /faq/ and its JSON-LD. A question with no other copy is left out entirely until its string is a real answer. The eight ad and situational landing pages keep their own faq blocks and still emit FAQPage JSON-LD. Do not put this grouped FAQ back on the homepage, how it works, stop foreclosure, or state pages.",
   "cta": {
     "heading": "Ready to see your options?",
     "text": "Get a no-obligation offer. Talk to a real person, not a call center.",

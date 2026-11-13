@@ -26,6 +26,6 @@ faq:
 
 <section class="wrap pad">{{qualifier}}</section>
 
-<section class="alt"><div class="wrap pad"><h2 class="c">Questions people ask while they compare</h2>{{faq}}</div></section>
+<section class="alt"><div class="wrap pad"><h2 class="c">Questions people ask while they compare</h2>{{faq}}<p class="c"><a href="/faq/">More answers are on the FAQ page.</a></p></div></section>
 
 {{cta}}

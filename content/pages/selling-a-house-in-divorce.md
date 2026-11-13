@@ -22,6 +22,6 @@ faq:
 
 <section class="alt"><div class="wrap pad">{{qualifier}}</div></section>
 
-<section class="wrap pad"><h2 class="c">Questions about selling during a divorce</h2>{{faq}}</section>
+<section class="wrap pad"><h2 class="c">Questions about selling during a divorce</h2>{{faq}}<p class="c"><a href="/faq/">More answers are on the FAQ page.</a></p></section>
 
 {{cta}}

@@ -111,18 +111,118 @@ def walk_text(obj, out):
     elif isinstance(obj, list):
         for v in obj: walk_text(v, out)
 
-def faq_ld_items(body, slug):
-    """FAQPage JSON-LD only for /faq/, taken from the details on that page. Other pages do not get it."""
-    if slug != 'faq':
-        return []
+# Dashed [F]/[C] notes and blank strings are not answers. A question that has nothing else is left off /faq/.
+_PLACEHOLDER_ANSWER = re.compile(r'placeholder,\s*waiting|\[(?:F/C|F|C)\]|not confirmed:', re.I)
+
+def is_placeholder_answer(text):
+    raw = html.unescape(re.sub(r'<[^>]+>', ' ', text or ''))
+    raw = re.sub(r'\s+', ' ', raw).strip()
+    if not raw:
+        return True
+    return bool(_PLACEHOLDER_ANSWER.search(raw))
+
+def answer_markup(text):
+    text = (text or '').strip()
+    if not text:
+        return ''
+    if text.startswith('<'):
+        return text
+    return '<p>' + html.escape(text, quote=False) + '</p>'
+
+def faq_item_html(item, answers):
+    """Confirmed copy, plus one faq_answers string when that string is a real answer."""
+    parts = []
+    base = item.get('a') or ''
+    if not is_placeholder_answer(base):
+        parts.append(answer_markup(base))
+    aid = item.get('answer_id') or ''
+    extra = answers.get(aid, '') if aid else ''
+    if isinstance(extra, str) and not is_placeholder_answer(extra):
+        parts.append(answer_markup(extra))
+    return ''.join(parts)
+
+def render_faq_page(site):
+    """Grouped /faq/ body. Unanswered slots in faq_answers are omitted, not rendered as notes."""
+    page = site.get('faq_page') or {}
+    answers = site.get('faq_answers') or {}
+    visible = []
+    for group in page.get('groups') or []:
+        items = []
+        for item in group.get('items') or []:
+            body = faq_item_html(item, answers)
+            if item.get('q') and body:
+                items.append((item['q'], body))
+        if items:
+            visible.append((group, items))
+    blocks = []
+    if page.get('reviewed'):
+        blocks.append(f'<p class="fine reviewed">{page["reviewed"]}</p>')
+    blocks.append('<nav class="faq-toc" aria-label="FAQ sections">' + ''.join(
+        f'<a href="#{g["id"]}">{g["title"]}</a>' for g, _items in visible) + '</nav>')
+    for group, items in visible:
+        details = ''.join(f'<details><summary>{q}</summary>{a}</details>' for q, a in items)
+        blocks.append(f'<h2 id="{group["id"]}">{group["title"]}</h2><div class="faq">{details}</div>')
+    return ''.join(blocks)
+
+def faq_details(body):
     items = []
     for q, inner in re.findall(r'<details><summary>(.*?)</summary>(.*?)</details>', body or '', re.S):
         qtext = html.unescape(re.sub(r'<[^>]+>', '', q)).strip()
         atext = html.unescape(re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', inner)))
         atext = re.sub(r'\s+([.,;:])', r'\1', atext).strip()
-        if qtext and atext:
+        if qtext and atext and not is_placeholder_answer(atext):
             items.append({'q': qtext, 'a': atext})
     return items
+
+def faq_ld_items(rendered, own, source_body, slug):
+    """FAQPage JSON-LD for /faq/ from the details that shipped, and for a page with its own faq.
+    The shared FAQ is not repeated on the homepage, how-it-works, stop-foreclosure, or state pages.
+    Ad landing pages keep the faq in their frontmatter, so they still get the schema."""
+    if slug == 'faq':
+        return faq_details(rendered)
+    items = [f for f in (own or []) if isinstance(f, dict) and f.get('q') and f.get('a') and not is_placeholder_answer(f.get('a'))]
+    if not items:
+        return []
+    renders = re.findall(r'\{\{faq(?::(\d+))?\}\}', source_body or '')
+    if renders and all(n for n in renders):
+        items = items[:max(int(n) for n in renders)]
+    return items
+
+def check_faq_content(site, E):
+    answers = site.get('faq_answers')
+    page = site.get('faq_page')
+    if not isinstance(answers, dict):
+        E.append('content/site.json: faq_answers must be an object of answer strings')
+        answers = {}
+    else:
+        for key, val in answers.items():
+            if not re.fullmatch(r'faq_[a-z0-9_]+', str(key)) or not isinstance(val, str):
+                E.append(f'content/site.json: faq_answers.{key} must be a faq_* string')
+    if not isinstance(page, dict) or not isinstance(page.get('groups'), list) or not page.get('groups'):
+        E.append('content/site.json: faq_page.groups must be a non-empty list')
+        return
+    seen = set()
+    for group in page['groups']:
+        gid = group.get('id') if isinstance(group, dict) else ''
+        if not isinstance(group, dict) or not gid or not group.get('title') or not isinstance(group.get('items'), list):
+            E.append('content/site.json: each faq_page group needs id, title, and items')
+            continue
+        for item in group['items']:
+            if not isinstance(item, dict) or not item.get('q'):
+                E.append(f'content/site.json: faq_page {gid} item needs q')
+                continue
+            aid = item.get('answer_id') or ''
+            if aid:
+                if aid in seen:
+                    E.append(f'content/site.json: duplicate faq answer id {aid}')
+                seen.add(aid)
+                if aid not in answers:
+                    E.append(f'content/site.json: {aid} is missing from faq_answers')
+            elif is_placeholder_answer(item.get('a') or ''):
+                E.append(f'content/site.json: faq question has no publishable answer and no answer_id ({item.get("q")})')
+    for key in answers:
+        if key not in seen:
+            E.append(f'content/site.json: faq_answers.{key} is not used by a question')
 
 def ld_script(obj):
     raw = json.dumps(obj, ensure_ascii=False, separators=(',', ':')).replace('</', '<\\/')
@@ -628,7 +728,8 @@ def check(site, pages, markets, redirects, errs):
     if not isinstance(consent, str) or 'Consent isn\u2019t required to buy or sell' not in consent or 'msg &amp; data rates' not in consent:
         E.append('content/site.json: consent must keep the approved communication disclosure')
     for f in site.get('faq', []):
-        if not f.get('q') or not f.get('a'): E.append('content/site.json: faq item needs q and a')
+        if not isinstance(f, dict) or not f.get('q') or not f.get('a'): E.append('content/site.json: faq item needs q and a')
+    check_faq_content(site, E)
     check_form1(site, E)
     check_reviews(site, E)
     slugs, titles = {}, {}
@@ -891,6 +992,7 @@ def build(site, pages, markets, redirects, live):
             if k == 'reviews': return reviewsh(S.get('reviews') or [])
             if k == 'trust': return trust
             if k == 'faq': return faqh(faq_items, int(arg) if arg else 99)
+            if k == 'faq_page': return render_faq_page(S)
             if k == 'cta': return cta(arg or cta_label or None, offer_href)
             if k == 'states': return states
             if k == 'step2_form': return step2()
@@ -982,7 +1084,7 @@ def build(site, pages, markets, redirects, live):
             body = hero(p['hero_headline'], p['hero_sub'], intake=True) + body
         page(path, p['title'], p.get('meta_description') or '', body, bool(p.get('noindex', False) or p.get('draft')),
              canonical=p.get('canonical') or None, og_title=p.get('og_title') or None, og_image=p.get('og_image') or None,
-             faq_ld=faq_ld_items(body, p['slug']), file_rel=file_rel, offer_href=offer)
+             faq_ld=faq_ld_items(body, p.get('faq'), p.get('body'), p['slug']), file_rel=file_rel, offer_href=offer)
         built += 1
         if p.get('sitemap', True) and not p.get('noindex') and not p.get('draft') and p['slug'] not in SITEMAP_SKIP and p['slug'] != '404': urls.append('/' if not p['slug'] else f'/{p["slug"]}/')
     for m in markets:
