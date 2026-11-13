@@ -8,7 +8,7 @@ cta_label: "Want to talk about a house in probate?"
 noindex: false
 faq:
   - q: "Can a house be sold while probate is open?"
-    a: "Sometimes the person with authority can sell, and sometimes the court has to approve the sale. That depends on the estate and the state. We do not give that advice. Ask the estate's attorney or the court. We are not attorneys."
+    a: "Generally, no. Probate is what produces the estate documents needed to sell. In some states, the property can be distributed sooner if all heirs agree. We are not attorneys."
   - q: "What if probate has not started?"
     a: "We can still hear about the house. Who is allowed to sign is a legal question, and we will not guess. Get that answer before anyone agrees to sell."
   - q: "How is this different from an inherited house?"

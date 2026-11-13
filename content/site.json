@@ -193,23 +193,21 @@
   ],
   "faq": [],
   "faq_answers": {
-    "faq_who_lists_market_sale": "Placeholder, waiting on Andrew or Taylor and on counsel. Not confirmed: who lists the house on the market-sale path, and whether Fair & Simple acts as an agent.",
-    "faq_show_price_math": "We have not confirmed, for this preview, whether you get a written breakdown of the price. Placeholder, waiting on Andrew or Taylor. Do not treat this as a promise that we show the math, or that we do not.",
-    "faq_who_calls": "Placeholder, waiting on Andrew or Taylor. Not confirmed: who calls, how soon they call, and whether someone walks the house.",
-    "faq_see_inside": "We have not confirmed whether someone needs to see the inside before making an offer. Placeholder, waiting on Andrew or Taylor. This is not a yes or a no, and it is not a description of an inspection.",
-    "faq_offer_negotiable": "We have not confirmed whether an offer can be negotiated, or whether a visit or inspection changes it. Placeholder, waiting on Andrew or Taylor. No bargaining rules are stated on this page.",
-    "faq_offer_duration": "We have not confirmed how long an offer stays open. Placeholder, waiting on Andrew or Taylor. Do not assume a number of days.",
-    "faq_proceeds_amounts": "Placeholder, waiting on Andrew or Taylor. Not confirmed: which other amounts, if any, could still come out of your proceeds.",
-    "faq_how_liens_paid": "Placeholder, waiting on Andrew or Taylor. Not confirmed: how each lien, judgment, or tax bill is paid at closing.",
-    "faq_underwater_loan": "Placeholder, waiting on Andrew or Taylor and on counsel. This is not a short-sale policy and not a promise that a sale can close.",
-    "faq_payment_method": "Placeholder, waiting on Andrew or Taylor. Not confirmed: whether you are paid by wire, check, or another method.",
-    "faq_tenants_stay": "Placeholder, waiting on Andrew or Taylor. Not confirmed: leases, notice, or whether tenants stay through closing. This is not a tenant program.",
-    "faq_stay_after_closing": "We have not confirmed any option to stay after closing. Nothing here is a rent-back or an occupancy program. Placeholder, waiting on Andrew or Taylor. Do not plan on days in the house after closing unless they confirm it in writing.",
-    "faq_probate_open": "Placeholder, waiting on Andrew or Taylor and on counsel. This is not a statement that we can buy during probate, or that you should wait until it closes.",
-    "faq_contract_assignment": "Placeholder, waiting on counsel. Not confirmed: whether a contract is ever assigned to another investor. This page does not claim that we never assign, and it does not claim that we always do.",
-    "faq_who_handles_file": "Placeholder, waiting on Andrew or Taylor. Not confirmed: who else, if anyone, handles a file day to day. This is not a staffing chart.",
-    "faq_cancel_after_signing": "Placeholder, waiting on counsel. No cancellation terms, deadlines, or penalties are stated here.",
-    "faq_moving_or_advance": "We have not confirmed help with moving, or any way to receive cash before closing. This page does not describe a program for either one. Placeholder, waiting on Andrew or Taylor. Do not plan on an advance or a moving service unless they confirm it in writing."
+    "faq_who_lists_market_sale": "On the market-sale path, a licensed real estate partner in your market lists the house. Fair and Simple Home Offer is not a licensed real estate agent or brokerage.",
+    "faq_show_price_math": "Yes. Your offer comes in writing. It shows what you cover (your mortgage payoff, property taxes, liens, and judgments) and shows that we cover the remaining closing costs, which are already built into the number.",
+    "faq_who_calls": "Someone from our acquisition team usually calls within 1–3 minutes. They may ask for a few photos. Most of the time, we can buy the house without walking through it.",
+    "faq_see_inside": "Usually not, especially if the house is vacant. Most of the time we go by what you tell us about its condition. On tighter deals, we may ask for photos or more detail first.",
+    "faq_offer_negotiable": "Once we're under contract, the price stays the same in most cases. It changes only if an inspection turns up problems that weren't disclosed.",
+    "faq_offer_duration": "Your offer stays open for 3 days, because we're always reviewing other homes too.",
+    "faq_proceeds_amounts": "We cover the closing costs for the sale. Anything already owed on the property is paid from your proceeds at closing: your mortgage, property taxes, liens, judgments, code violations, and other encumbrances.",
+    "faq_how_liens_paid": "They're paid off from your proceeds at closing, and each one is listed on your closing breakdown.",
+    "faq_underwater_loan": "We can't handle short sales because we aren't licensed agents, but we work with partners who can. Ask your acquisition rep about those connections.",
+    "faq_payment_method": "You choose at signing: a same-day wire, or a check sent overnight that arrives the next day.",
+    "faq_tenants_stay": "It depends on the situation, so ask your acquisition rep. We'll need to be in touch with the tenants directly, and in some cases we can offer relocation help.",
+    "faq_stay_after_closing": "It's not typical, but we look at it case by case. Our priority is fitting the closing around your move.",
+    "faq_probate_open": "Generally, no. Probate is what produces the estate documents needed to sell. In some states, the property can be distributed sooner if all heirs agree.",
+    "faq_who_handles_file": "Besides Andrew, our operations team of Kaylin, Connor, and Taylor works with sellers and checks in on every file daily.",
+    "faq_moving_or_advance": "Yes. We can help with moving, and we can provide cash before closing. Just bring it up early, before contracts are signed, and we'll work out the details together."
   },
   "faq_page": {
     "reviewed": "Last reviewed: November 2026 by Andrew Collier.",
@@ -287,17 +285,17 @@
           },
           {
             "q": "Can you buy a house with liens, judgments, or back taxes?",
-            "a": "<p>Yes, we consider houses with liens, judgments, or back taxes. That is already how we describe the houses we look at.</p><p>That is not a promise that every lien can be paid off, or that the numbers will work.</p>",
+            "a": "<p>Yes, we consider houses with liens, judgments, or back taxes. That is already how we describe the houses we look at.</p>",
             "answer_id": "faq_how_liens_paid"
           },
           {
             "q": "What if I owe more than the house is worth?",
-            "a": "<p>We cannot tell you from this page what happens if the loan is higher than the price. If a foreclosure date is involved, talk with a foreclosure attorney or a HUD-approved counselor. We are not attorneys.</p>",
+            "a": "<p>If a foreclosure date is involved, talk with a foreclosure attorney or a HUD-approved counselor. We are not attorneys.</p>",
             "answer_id": "faq_underwater_loan"
           },
           {
             "q": "Will I owe capital gains tax when I sell?",
-            "a": "<p>We do not give tax advice. This is not a statement about whether you will owe capital gains.</p><p>A CPA can look at your basis, how long you owned the house, and whether any exclusion applies. We will not estimate tax on a call or on this page. Take the closing papers from the title company to that CPA. Nothing here is a tax position.</p>"
+            "a": "Capital gains taxes aren't paid up front at closing. They're handled with the IRS when you file for the year you sell. Talk to a CPA about your situation."
           },
           {
             "q": "How do I get paid at closing?",
@@ -320,7 +318,7 @@
           },
           {
             "q": "Can I sell a house with tenants in it?",
-            "a": "<p>You can ask us about a rental. Tired landlords are already one of the situations we talk about. We have not published a rule for tenants who are still living there.</p>",
+            "a": "<p>You can ask us about a rental. Tired landlords are already one of the situations we talk about.</p>",
             "answer_id": "faq_tenants_stay"
           },
           {
@@ -347,7 +345,7 @@
           },
           {
             "q": "Can I sell an inherited house that's still in probate?",
-            "a": "<p>Inherited houses are a common reason people call. Whether you can sell while probate is still open is a legal question, and we are not answering it here.</p>",
+            "a": "<p>Inherited houses are a common reason people call.</p>",
             "answer_id": "faq_probate_open"
           },
           {
@@ -360,11 +358,6 @@
         "id": "trust",
         "title": "Legitimacy and trust",
         "items": [
-          {
-            "q": "Do you buy the house yourselves, or assign the contract to another investor?",
-            "a": "<p>The site says we buy property as principals. It also says we are not a licensed brokerage unless stated.</p>",
-            "answer_id": "faq_contract_assignment"
-          },
           {
             "q": "How can I tell a legitimate cash buyer from a scam?",
             "a": "<p>See who you are dealing with before you sign anything.</p><p>Fair &amp; Simple Home Offer is operated by Andrew Collier LLC. The footer says we buy as principals and are not a licensed brokerage unless stated. Use <a href=\"tel:+19106366669\">(910) 636-6669</a> and offer@fairandsimplehomeoffer.com. Read the contract, compare it with another option, and open the BBB profile linked from the site. This page does not claim star ratings.</p>"
@@ -384,11 +377,6 @@
         "id": "after-yes",
         "title": "After you say yes",
         "items": [
-          {
-            "q": "Can I back out after I sign?",
-            "a": "<p>This page cannot tell you whether you can cancel after you sign. An attorney can read the contract. We are not attorneys.</p>",
-            "answer_id": "faq_cancel_after_signing"
-          },
           {
             "q": "Can you help with moving or getting cash before closing?",
             "answer_id": "faq_moving_or_advance"
