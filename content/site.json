@@ -20,7 +20,7 @@
     "endpoint_planned": "/.netlify/functions/create-lead",
     "_note": "Public heroes (homepage, situation pages, and state landers) use the two-stage form. It posts to /.netlify/functions/intake-producer when the build env FSHO_USE_REAL_ADAPTER is 1. This older endpoint stays empty. The create-lead function and honeypot are on branch cursor/carrot-lead-routing-f5f7 and are awaiting verified CRM mapping (campaign, assignee, source). Do not put a CRM token or mapping ids in this file."
   },
-  "gtm_id": "GTM-WWPBQGDZ",
+  "gtm_id": "GTM-TM6JSDLB",
   "clickcease_id": "",
   "tracking": false,
   "whatconverts": {
@@ -31,7 +31,7 @@
   },
   "pixels": {
     "enabled": true,
-    "gtm_id": "GTM-WWPBQGDZ",
+    "gtm_id": "GTM-TM6JSDLB",
     "ads_call_send_to": "AW-16781895992/YrLzCKa9g4sdELjSncI-",
     "meta_pixel_id": "959620977142967",
     "openai_pixel_id": "AMsRexCaeaxScDiV9SGJcP",

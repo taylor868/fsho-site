@@ -14,7 +14,7 @@
   var SIGNAL_KEYS = "gclid,gbraid,wbraid,fbclid,msclkid,ttclid,li_fat_id,utm_source,utm_medium,utm_campaign,utm_term,utm_content,utm_id,campaignid,adgroupid,keyword,matchtype,network,device,creative,placement,loc_physical_ms,gad_source".split(",");
   var CLICK_IDS = SIGNAL_KEYS.slice(0, 4), EXTRA_CLICKS = SIGNAL_KEYS.slice(4, 7), UTM_KEYS = SIGNAL_KEYS.slice(7, 13);
   var TRACKING = {
-    gtm_id: "GTM-WWPBQGDZ",
+    gtm_id: "GTM-TM6JSDLB",
     ga4: false,
     meta_pixel: false,
     lazy: true,
@@ -39,7 +39,7 @@
     townhouse_route: "quiet",
     use_real_adapter: false,
     producer_path: "/.netlify/functions/intake-producer",
-    gtm_id: "GTM-WWPBQGDZ"
+    gtm_id: "GTM-TM6JSDLB"
   };
   var NOT_FIT = {
     headline: "Thanks for the details.",

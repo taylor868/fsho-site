@@ -38,7 +38,7 @@ Attribution is config-driven on `TRACKING` in `build/two-stage.js`. The page sto
 
 `lead_id` is created with `crypto.randomUUID()` once per browser session and kept in `sessionStorage` under `fsho_ts_lead`. A value already in that key is kept. The same id is sent on every stage. The real adapter also refuses to overwrite a click id, UTM, or lead id it has already sent.
 
-`CONFIG.gtm_id` and `TRACKING.gtm_id` are `GTM-WWPBQGDZ`. GA4 is off. The Meta pixel is off. The container script is not in the HTML and is not requested at page load. The first `pointerdown` or `keydown` inserts one async `gtm.js` script. The dry-run Google marker is still the JSON script inserted after `owner = yes`. Site-wide tracking stays off, so the shared pages do not load this container.
+`CONFIG.gtm_id` and `TRACKING.gtm_id` are `GTM-TM6JSDLB`. GA4 is off. The Meta pixel is off. The container script is not in the HTML and is not requested at page load. The first `pointerdown` or `keydown` inserts one async `gtm.js` script. The dry-run Google marker is still the JSON script inserted after `owner = yes`. Site-wide tracking stays off, so the shared pages do not load this container.
 
 ## Conversion
 

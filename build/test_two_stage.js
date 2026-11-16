@@ -138,8 +138,8 @@ function payloads(adapter) {
 const CLICK = "?test=1&gclid=G-FIRST&gbraid=GB1&wbraid=WB1&fbclid=FB1&utm_source=google&utm_medium=cpc&utm_campaign=sell&utm_term=cash-offer&utm_content=ad1";
 
 test("click ids and UTMs stick on first touch and ride every stage payload", () => {
-  assert.equal(flow.TRACKING.gtm_id, "GTM-WWPBQGDZ");
-  assert.equal(flow.CONFIG.gtm_id, "GTM-WWPBQGDZ");
+  assert.equal(flow.TRACKING.gtm_id, "GTM-TM6JSDLB");
+  assert.equal(flow.CONFIG.gtm_id, "GTM-TM6JSDLB");
   assert.equal(flow.CONFIG.use_real_adapter, false);
   assert.equal(flow.TRACKING.ga4, false);
   assert.equal(flow.TRACKING.meta_pixel, false);
@@ -833,8 +833,8 @@ test("the public homepage flag is separate from test=1", () => {
   assert.equal(flow.testModeAllowed("production", "?test=1"), false);
   assert.equal(flow.CONFIG.use_real_adapter, false);
   assert.equal(flow.CONFIG.producer_path, "/.netlify/functions/intake-producer");
-  assert.equal(flow.CONFIG.gtm_id, "GTM-WWPBQGDZ");
-  assert.equal(flow.TRACKING.gtm_id, "GTM-WWPBQGDZ");
+  assert.equal(flow.CONFIG.gtm_id, "GTM-TM6JSDLB");
+  assert.equal(flow.TRACKING.gtm_id, "GTM-TM6JSDLB");
 });
 
 test("production does not open the test form, and the real adapter flag still posts", async () => {

@@ -31,14 +31,14 @@ content/
 | `preview` | bool | **false on the live site.** When true, adds `noindex,nofollow` to every page, a red PREVIEW banner, `robots.txt Disallow: /`, and an `X-Robots-Tag` header. Netlify production runs `python3 build/gen.py` with no `--live` flag, so this field is the public switch. |
 | `lead_form.enabled` | bool | false keeps the older market/situation hero and the qualifier from posting. The homepage uses the two-stage form and `/.netlify/functions/intake-producer` when `FSHO_USE_REAL_ADAPTER` is `1`. The create-lead function is on `cursor/carrot-lead-routing-f5f7`, awaiting verified CRM mapping (campaign, assignee, source). |
 | `lead_form.endpoint` | string | Serverless endpoint URL (only used when enabled). |
-| `gtm_id` | string | `GTM-WWPBQGDZ` only. |
+| `gtm_id` | string | `GTM-TM6JSDLB` only. |
 | `clickcease_id` | string | Stays empty. The official ClickCease snippet does not use this id. A non-empty value is only read by the old footer demo. |
 | `tracking` | bool | Leave **false.** The footer demo would load a second `gtm.js` and a second `stat.js` if this were true. It does not gate the approved pixels. |
 | `whatconverts.enabled` | bool | **true.** When true, each public page gets the official WhatConverts standard snippet for profile 176490. Does not enable `tracking`, `lead_form`, or the test form. |
 | `whatconverts.profile_id` | string | `176490` only. |
 | `whatconverts.script_host` | string | `//s.ksrndkehqnwntyxlhgto.com` only. The profile URL stays protocol-relative. |
 | `pixels.enabled` | bool | **true.** Public pages get ClickCease visitor monitoring, the GTM noscript iframe, Meta Pixel init plus PageView, and OpenAI Pixel init. `/test-intake/` and redirect stubs do not. |
-| `pixels.gtm_id` | string | `GTM-WWPBQGDZ` only. Same container as `gtm_id`. |
+| `pixels.gtm_id` | string | `GTM-TM6JSDLB` only. Same container as `gtm_id`. |
 | `pixels.ads_call_send_to` | string | `AW-16781895992/YrLzCKa9g4sdELjSncI-` only. Used when a `tel:` link is tapped and `gtag` is already a function. |
 | `pixels.meta_pixel_id` | string | `959620977142967` only. |
 | `pixels.openai_pixel_id` | string | `AMsRexCaeaxScDiV9SGJcP` only. |
@@ -117,7 +117,7 @@ When `pixels.enabled` is true, those same public pages also get, after the WhatC
 - Meta Pixel `959620977142967`: init and `PageView` only.
 - OpenAI Pixel `AMsRexCaeaxScDiV9SGJcP` from `https://bzrcdn.openai.com/sdk/oaiq.min.js`: init only. No `page_viewed` on load.
 
-Immediately after `<body>`, the GTM noscript iframe for `GTM-WWPBQGDZ`. The container script is still the existing lazy `armGtm()` in `two-stage.js` (first `pointerdown` or `keydown`, and only on pages that include that file). `tracking: false` does not remove these snippets.
+Immediately after `<body>`, the GTM noscript iframe for `GTM-TM6JSDLB`. The container script is still the existing lazy `armGtm()` in `two-stage.js` (first `pointerdown` or `keydown`, and only on pages that include that file). `tracking: false` does not remove these snippets.
 
 ClickCease `cccontrack.js` is not in the initial HTML. That script records a conversion when it loads, using `window.ccConVal`. Putting it on every page, or on `/step-2` or `/thank-you`, would count a page view. The matching no-JS image (`https://monitor.clickcease.com/conversions/conversions.aspx?value=0`) is not requested either: the form cannot finish without JS, and requesting the image after the script loads would count the same lead twice. After a reserved public `seller_form_completed`, the page sets `window.ccConVal = 0` and loads `cccontrack.js` once.
 
