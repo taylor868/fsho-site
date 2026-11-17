@@ -25,6 +25,7 @@ content/
 | `domain` | string | Canonical origin, no trailing slash. |
 | `phone` | string | Display phone, `(910) 636-6669`. |
 | `tel` | string | E.164, `+19106366669`. Validated `+1XXXXXXXXXX`. |
+| `email` | string | Public contact email, `offer@fsho.co`. Footer mailto, RealEstateAgent JSON-LD `email` and `contactPoint.email`, and `dist/llms.txt`. |
 | `brand.orange` | `#RRGGBB` | Accent/CTA color. `#B8501C` is the darkened accessible version **pending approval** (original `#E67A45`). Swap here only. |
 | `brand.navy` | `#RRGGBB` | Primary text/heading color. |
 | `logo`, `favicon` | path | Files in `content/media/`, copied to site root. |
@@ -43,7 +44,7 @@ content/
 | `pixels.meta_pixel_id` | string | `959620977142967` only. |
 | `pixels.openai_pixel_id` | string | `AMsRexCaeaxScDiV9SGJcP` only. |
 | `nav[]` | `{label, href}` | Header nav and footer "Company" column. |
-| `footer.about` | HTML | Footer blurb. |
+| `footer.about` | HTML | Footer blurb. The contact line under it is the phone plus a mailto for `email`. |
 | `footer.company_extra[]` | `{label, href}` | Extra links after nav in footer. |
 | `footer.legal[]` | `{label, href}` | Legal column. |
 | `footer.copyright` | HTML | Bottom line. |

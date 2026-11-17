@@ -1308,6 +1308,46 @@ cta_label: "Page specific heading"
         self.assertNotIn('<h1>Sell your house fast, for a fair price, on your timeline.</h1>', mains['sell-your-house-fast'])
 
 
+    def test_offer_email_is_in_footer_schema_and_llms(self):
+        self.build(live=False)
+        out = Path(gen.OUT)
+        email = 'offer@fsho.co'
+        footer_bit = (
+            '<p class="contact"><a href="tel:+19106366669">(910) 636-6669</a> · call or text · '
+            f'<a class="mail" href="mailto:{email}">Email {email}</a></p>'
+        )
+        pages = list(out.rglob('*.html'))
+        self.assertGreater(len(pages), 10)
+        footed = 0
+        for path in pages:
+            doc = path.read_text(encoding='utf-8')
+            self.assertNotIn('GTM-WWPBQGDZ', doc, str(path))
+            if '<footer' not in doc:
+                continue
+            footed += 1
+            self.assertIn(footer_bit, doc, str(path))
+            blocks = ld_blocks(doc)
+            agent = next(b for b in blocks if b.get('@type') == 'RealEstateAgent')
+            self.assertEqual(agent['email'], email, str(path))
+            self.assertEqual(agent['contactPoint']['@type'], 'ContactPoint', str(path))
+            self.assertEqual(agent['contactPoint']['email'], email, str(path))
+            self.assertEqual(agent['contactPoint']['telephone'], '+19106366669', str(path))
+            self.assertEqual(agent['contactPoint']['contactType'], 'customer service', str(path))
+            raw = re.search(r'<script type="application/ld\+json">(.*?)</script>', doc).group(1)
+            json.loads(raw)
+        self.assertGreater(footed, 10)
+        llms = (out / 'llms.txt').read_text(encoding='utf-8')
+        self.assertIn('# Fair & Simple Home Offer', llms)
+        self.assertIn('https://fsho.co/', llms)
+        self.assertIn('real estate solutions and investment firm that helps homeowners sell burdensome houses.', llms)
+        self.assertIn('Contact: offer@fsho.co', llms)
+        for rel in ('contact-us/index.html', 'our-company/index.html', 'privacy/index.html', 'terms-conditions/index.html', 'text-messaging-terms/index.html', '404.html'):
+            self.assertIn(f'href="mailto:{email}"', (out / rel).read_text(encoding='utf-8'), rel)
+        home = (out / 'index.html').read_text(encoding='utf-8')
+        self.assertEqual(home.count('ns.html?id=GTM-TM6JSDLB'), 1)
+        self.assertIn('/.netlify/functions/intake-producer', home)
+
+
 def home_h1(html):
     return re.search(r'<h1>(.*?)</h1>', html).group(1)
 
