@@ -717,13 +717,14 @@ def guard_test_page():
 def check(site, pages, markets, redirects, errs):
     E = list(errs) + check_qualifier(site.get('_qualifier'))
     W = []
-    for k in ['company', 'phone', 'tel', 'domain', 'brand', 'nav', 'footer', 'trust_badges', 'faq', 'situations', 'steps', 'comparison', 'testimonials', 'cta']:
+    for k in ['company', 'phone', 'tel', 'email', 'domain', 'brand', 'nav', 'footer', 'trust_badges', 'faq', 'situations', 'steps', 'comparison', 'testimonials', 'cta']:
         if k not in site: E.append(f'content/site.json: missing "{k}"')
     check_whatconverts(site, E)
     check_pixels(site, E)
     for c in ('orange', 'navy'):
         if not re.fullmatch(r'#[0-9A-Fa-f]{6}', str(site.get('brand', {}).get(c, ''))): E.append(f'content/site.json: brand.{c} must be #RRGGBB')
     if not re.fullmatch(r'\+1\d{10}', str(site.get('tel', ''))): E.append('content/site.json: tel must be +1XXXXXXXXXX')
+    if not re.fullmatch(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}', str(site.get('email', ''))): E.append('content/site.json: email must be a plain address such as offer@fsho.co')
     consent = site.get('consent')
     if not isinstance(consent, str) or 'Consent isn\u2019t required to buy or sell' not in consent or 'msg &amp; data rates' not in consent:
         E.append('content/site.json: consent must keep the approved communication disclosure')
@@ -781,8 +782,22 @@ def check(site, pages, markets, redirects, errs):
     return E, W
 
 # ---------- rendering ----------
+def llms_text(S):
+    """Short AI-facing file. Description is the first sentence of the footer about blurb."""
+    about = html.unescape(re.sub(r'<[^>]+>', '', S['footer']['about']))
+    desc = about.split('. ')[0].strip()
+    if desc and not desc.endswith('.'):
+        desc += '.'
+    return (
+        f"# {S['company']}\n\n"
+        f"> {desc}\n\n"
+        f"Site: {S['domain']}/\n"
+        f"Contact: {S['email']}\n"
+        f"Phone: {S['phone']}\n"
+    )
+
 def build(site, pages, markets, redirects, live):
-    S = site; PH, TEL = S['phone'], S['tel']; preview = S.get('preview', True) and not live
+    S = site; PH, TEL = S['phone'], S['tel']; EMAIL = html.escape(S['email'], quote=True); preview = S.get('preview', True) and not live
     include_drafts = show_drafts(S, live)
     media_idx = {it['file']: it for it in (S.get('_media') or []) if isinstance(it, dict) and it.get('file')}
     logo_info = media_idx.get(os.path.basename(str(S.get('logo') or '')))
@@ -861,16 +876,6 @@ def build(site, pages, markets, redirects, live):
             '#ts-app h2{font-size:1.35rem;margin:18px 0 10px}'
             '#ts-app .qo{display:block;width:100%;text-align:left;margin:0 0 10px;min-height:48px;padding:14px 16px;border-radius:12px}'
             '#ts-abandon{display:block;width:100%;margin-top:4px;min-height:44px;font-weight:700}'
-            '#ts-sorry:empty,#ts-followup:empty,#ts-thanks:empty{display:none}'
-            '#ts-sorry,#ts-followup,#ts-thanks{border-radius:14px;padding:18px 16px;margin:8px 0 18px}'
-            '#ts-sorry{background:#fff7f2;border-left:5px solid var(--o)}'
-            '#ts-followup,#ts-thanks{background:#f4f8f4;border-left:5px solid var(--n)}'
-            '#ts-sorry h2,#ts-followup h2,#ts-thanks h2{margin:0 0 8px}'
-            '#ts-sorry p,#ts-followup p,#ts-thanks p{margin:0;font-size:17px;line-height:1.45}'
-            '#ts-kicker{margin:8px 0 0;font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#667}'
-            '#ts-skip{display:block;width:100%;margin-top:4px;min-height:48px;border-radius:12px;border:1.5px solid #c8d1da;background:#fff;font-weight:800;font-size:16px;color:var(--n)}'
-            '#ts-error{background:#fff1f0;border-radius:12px;padding:12px 14px;margin:8px 0;font-weight:700}'
-            '#ts-app button:disabled,#ts-app input:disabled{opacity:.55}'
             '#ts-summary{font-size:15px;line-height:1.4}'
             '#ts-trace{margin:8px 0 0;padding-left:1.2em}'
             '#ts-trace li{margin:8px 0}'
@@ -1042,7 +1047,9 @@ def build(site, pages, markets, redirects, live):
             og += [f'<meta property="og:image" content="{esc(img)}">', f'<meta name="twitter:image" content="{esc(img)}">']
             card = 'summary_large_image'
         og += [f'<meta name="twitter:card" content="{card}">', f'<meta name="twitter:title" content="{esc(ot)}">', f'<meta name="twitter:description" content="{esc(desc)}">']
-        scripts = ld_script({"@context": "https://schema.org", "@type": "RealEstateAgent", "name": site_name, "legalName": S["legal_name"], "telephone": TEL, "url": S["domain"] + "/", "logo": S["domain"] + S["logo"]})
+        # RealEstateAgent is a LocalBusiness and an Organization. Email and contactPoint
+        # use the public phone and offer@ address already published on the site.
+        scripts = ld_script({"@context": "https://schema.org", "@type": "RealEstateAgent", "name": site_name, "legalName": S["legal_name"], "telephone": TEL, "email": S["email"], "url": S["domain"] + "/", "logo": S["domain"] + S["logo"], "contactPoint": {"@type": "ContactPoint", "contactType": "customer service", "telephone": TEL, "email": S["email"]}})
         if faq_ld:
             scripts += ld_script({"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
                 {"@type": "Question", "name": html.unescape(f["q"]), "acceptedAnswer": {"@type": "Answer", "text": html.unescape(f["a"])}} for f in faq_ld]})
@@ -1056,7 +1063,7 @@ def build(site, pages, markets, redirects, live):
 {scripts}</head><body>{gtm_ns}{px}{banner}
 <header class="top"><div class="wrap hd"><a href="/" class="logo"><img src="{S["logo"]}" alt="{logo_alt}" fetchpriority="high"></a><nav>{navl}</nav><a class="btn btn-call" href="tel:{TEL}">📞 {PH}</a></div><nav class="mnav" aria-label="Sections"><a href="/how-it-works/">How It Works</a><a href="/reviews/">Reviews</a><a href="/faq/">FAQ</a></nav></header>
 <main>{body}</main>
-<footer class="ft"><div class="wrap fg"><div><img src="{S["logo"]}" alt="" class="inv" loading="lazy"><p>{S["footer"]["about"]}</p><p><a href="tel:{TEL}">{PH}</a> · call or text</p></div>
+<footer class="ft"><div class="wrap fg"><div><img src="{S["logo"]}" alt="" class="inv" loading="lazy"><p>{S["footer"]["about"]}</p><p class="contact"><a href="tel:{TEL}">{PH}</a> · call or text · <a class="mail" href="mailto:{EMAIL}">Email {EMAIL}</a></p></div>
 <div><strong>Company</strong>{navl}{''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S["footer"]["company_extra"])}</div>
 <div><strong>Legal</strong>{''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S["footer"]["legal"])}</div></div><p class="wrap copy">{S["footer"]["copyright"]}</p></footer>
 <a class="sticky" href="tel:{TEL}">📞 Call Now</a><a class="sticky s2b" href="{offer_href}">Get Offer</a>
@@ -1122,6 +1129,7 @@ def build(site, pages, markets, redirects, live):
         open(os.path.join(OUT, '_headers'), 'w').write('/*\n  X-Robots-Tag: noindex, nofollow\n')
     else:
         open(os.path.join(OUT, 'robots.txt'), 'w').write(f'User-agent: *\nDisallow: /step-2/\nDisallow: /thank-you/\nSitemap: {S["domain"]}/sitemap.xml\n')
+    open(os.path.join(OUT, 'llms.txt'), 'w', encoding='utf-8').write(llms_text(S))
     for fp in glob.glob(os.path.join(C, 'media', '*')):
         if os.path.basename(fp) == 'media.json': continue
         shutil.copy(fp, OUT)

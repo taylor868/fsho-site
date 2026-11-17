@@ -105,7 +105,7 @@ noindex: false
 
 <p><strong>Contacting Us</strong></p>
 
-<p>If there are any questions regarding this privacy policy you may contact us with the information on our <a href="/contact-us/">contact page</a>.</p>
+<p>If there are any questions regarding this privacy policy you may contact us at <a href="mailto:offer@fsho.co">offer@fsho.co</a>, or with the information on our <a href="/contact-us/">contact page</a>.</p>
 
 <p>[Andrew Collier LLC dba Fair And Simple Home Offer]</p>
 </section>

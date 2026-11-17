@@ -32,5 +32,5 @@ noindex: false
 
 <p>We do not share or sell your mobile number or your consent to receive texts. See our <a href="/privacy/">Privacy Policy</a>.</p>
 
-<p><strong>Fair and Simple Home Offer</strong></p>
+<p><strong>Fair and Simple Home Offer</strong><br>Email: <a href="mailto:offer@fsho.co">offer@fsho.co</a></p>
 </section>

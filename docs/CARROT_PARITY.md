@@ -41,7 +41,7 @@ Status key:
 | 29 | SEO: canonical | Covered | Auto from `domain` + slug. Optional `canonical` frontmatter (absolute https URL) overrides it. |
 | 30 | SEO: noindex | Covered | Per-page `noindex` + global `preview`. |
 | 31 | SEO: Open Graph / Twitter cards | Covered | Optional `og_image` and `og_title` (defaults to title). Head emits og: and twitter: tags. No extra scripts. |
-| 32 | SEO: schema.org JSON-LD | Covered | RealEstateAgent sitewide, plus FAQPage JSON-LD when the page has `faq` items or renders `{{faq}}` and falls back to the site FAQ (capped by `{{faq:N}}`). |
+| 32 | SEO: schema.org JSON-LD | Covered | RealEstateAgent sitewide (LocalBusiness/Organization subtype) with `email` and a `contactPoint` for `offer@fsho.co`, plus FAQPage JSON-LD when the page has `faq` items or renders `{{faq}}` and falls back to the site FAQ (capped by `{{faq:N}}`). |
 | 33 | XML sitemap | Covered | `dist/sitemap.xml` from pages that are not `noindex` and not `draft`. |
 | 34 | robots.txt | Covered | Preview: Disallow all; live: disallow step-2/thank-you. |
 | 35 | Redirects (301) | Covered | `content/redirects.json` → forced Netlify rules + stubs. |
@@ -61,7 +61,7 @@ Status key:
 | 49 | Duplicate "for-cash-in" + "-2" state pages | Covered | Consolidated; 301s in `redirects.json`. |
 | 50 | City pages | Schema | `cities[]` renders a line now; add `content/cities/<slug>.json` + `template: city` linked from its state, only with real local content. |
 | 51 | Menus / nav | Covered | `site.json nav[]`. |
-| 52 | Footer | Covered | `site.json footer` (about, company_extra, legal, copyright). |
+| 52 | Footer | Covered | `site.json footer` (about, company_extra, legal, copyright) plus the phone and `mailto:offer@fsho.co`. |
 | 53 | Header phone / CTA buttons | Covered | `phone`, `tel` sitewide. |
 | 54 | Brand colors | Covered | `brand.orange` / `brand.navy`; orange #B8501C pending approval. |
 | 55 | Logo / favicon | Covered | `logo`, `favicon` in `content/media/`. |

@@ -111,5 +111,5 @@ noindex: false
 
 <p>For questions about these Terms and Conditions, please contact us at:</p>
 
-<p><strong>Fair and Simple Home Offer</strong><br>Phone: <a href="tel:+19106366669">(910) 636-6669</a></p>
+<p><strong>Fair and Simple Home Offer</strong><br>Phone: <a href="tel:+19106366669">(910) 636-6669</a><br>Email: <a href="mailto:offer@fsho.co">offer@fsho.co</a></p>
 </section>
