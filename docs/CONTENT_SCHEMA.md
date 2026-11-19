@@ -99,7 +99,7 @@ Templates:
 
 Body: blocks separated by blank lines. A block starting with `<` or `{{` is passed through as HTML. Otherwise it's minimal markdown: `#`/`##` headings, `- ` bullet lists, `**bold**`, `[link](/url/)`, and paragraphs.
 
-Shortcodes: `{{qualifier}}` `{{situations}}` `{{steps}}` `{{comparison}}` `{{videos}}` `{{testimonials}}` `{{reviews}}` `{{trust}}` `{{faq}}` `{{faq:5}}` (first N) `{{cta}}` `{{cta:Custom heading}}` `{{states}}` (links to every market that this build includes) `{{step2_form}}` `{{qualifier_form}}` `{{phone}}`. Unknown shortcodes fail the build.
+Shortcodes: `{{qualifier}}` `{{situations}}` `{{steps}}` `{{comparison}}` `{{videos}}` `{{testimonials}}` `{{reviews}}` `{{trust}}` `{{faq}}` `{{faq:5}}` (first N) `{{cta}}` `{{cta:Custom heading}}` `{{states}}` (links to every market that this build includes) `{{step2_form}}` `{{qualifier_form}}` `{{phone}}` `{{tel}}` (tel: link value, e.g. `href="tel:{{tel}}"`). A `meta_description` may also use `{{phone}}`. Unknown shortcodes fail the build.
 
 `{{cta}}` uses this page's `cta_label` when set, otherwise `site.json` `cta.heading`. `{{cta:Custom heading}}` still wins. Market pages pass `cta_label` the same way. The button label stays `cta.button`. The button and the sticky "Get Offer" control use `#offer` when that page renders the hero form (home, situation, and every market page) and `/#offer` on every other page, including legal pages, `/thank-you/`, `/step-2/`, and the 404. That opens the homepage form. The generator does not add a form to those pages.
 

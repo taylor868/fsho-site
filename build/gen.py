@@ -1004,6 +1004,7 @@ def build(site, pages, markets, redirects, live):
             if k == 'qualifier_form': return qualifier_form()
             if k == 'test_intake': return test_intake()
             if k == 'phone': return PH
+            if k == 'tel': return TEL
             raise ValueError(f'unknown shortcode {{{{{k}}}}}')
         return re.sub(r'\{\{([a-z0-9_]+(?::[^}]*)?)\}\}', rep, body)
 
@@ -1089,7 +1090,7 @@ def build(site, pages, markets, redirects, live):
         body = md(shortcodes(p['body'], faq_items, p.get('cta_label'), offer))
         if p['template'] in ('home', 'situation'):
             body = hero(p['hero_headline'], p['hero_sub'], intake=True) + body
-        page(path, p['title'], p.get('meta_description') or '', body, bool(p.get('noindex', False) or p.get('draft')),
+        page(path, p['title'], (p.get('meta_description') or '').replace('{{phone}}', PH), body, bool(p.get('noindex', False) or p.get('draft')),
              canonical=p.get('canonical') or None, og_title=p.get('og_title') or None, og_image=p.get('og_image') or None,
              faq_ld=faq_ld_items(body, p.get('faq'), p.get('body'), p['slug']), file_rel=file_rel, offer_href=offer)
         built += 1
