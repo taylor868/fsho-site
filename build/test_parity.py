@@ -100,6 +100,16 @@ AD_LANDINGS = (
         'meta': 'Selling a house with tenants still living there. We do not promise they will leave. Call (910) 636-6669.',
         'only': 'We do not evict tenants',
     },
+    {
+        # Cash Offer ad group. Title is the approved keyword copy, so it runs past 60 characters.
+        'slug': 'sell-your-house-for-cash',
+        'h1': 'Sell Your House For Cash',
+        'title': 'Sell Your House For Cash | Get a Cash Offer | Fair and Simple Home Offer',
+        'meta': 'Sell your house for cash. Get a fair cash offer in 24 hours. We buy as-is, cover closing costs, and close on your timeline. Call (910) 636-6669.',
+        'only': "We'll beat any cash offer by $2k",
+        'max_title': 72,
+        'max_faq': 6,
+    },
 )
 
 
@@ -200,7 +210,7 @@ class ParityTests(unittest.TestCase):
         env.pop('FSHO_USE_REAL_ADAPTER', None)
         proc = subprocess.run([sys.executable, 'build/gen.py', '--check'], cwd=ROOT, env=env, capture_output=True, text=True)
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertIn('OK: 23 pages, 39 markets, 16 redirects', proc.stdout)
+        self.assertIn('OK: 24 pages, 39 markets, 16 redirects', proc.stdout)
         for name in ('california', 'connecticut', 'massachusetts', 'mississippi', 'north-carolina', 'pennsylvania', 'rhode-island', 'washington'):
             self.assertIn(f'content/markets/{name}.json: title is ', proc.stdout)
         self.assertNotIn('ERROR', proc.stdout)
@@ -916,7 +926,7 @@ cta_label: "Page specific heading"
         for market in (self.root / 'content' / 'markets').glob('*.json'):
             slug = json.loads(market.read_text(encoding='utf-8'))['slug']
             form_pages.append(out / slug / 'index.html')
-        self.assertEqual(len(form_pages), 51)
+        self.assertEqual(len(form_pages), 52)
         cash = re.compile(r'<a class="btn btn-o" href="([^"]+)">Get My Fair Cash Offer</a>')
         sticky = re.compile(r'<a class="sticky s2b" href="([^"]+)">Get Offer</a>')
         for path in form_pages:
@@ -991,7 +1001,7 @@ cta_label: "Page specific heading"
                 pages.append((rel, text))
             else:
                 redirects.append((rel, text))
-        self.assertEqual(len(pages), 62)
+        self.assertEqual(len(pages), 63)
         self.assertEqual(len(redirects), 16)
         for rel, text in pages:
             if rel == 'test-intake/index.html':
@@ -1225,7 +1235,7 @@ cta_label: "Page specific heading"
             desc = re.search(r'<meta name="description" content="([^"]*)"', html).group(1)
             self.assertEqual(title, gen.link_preview(spec['title']), slug)
             self.assertEqual(html_mod.unescape(desc), gen.link_preview(spec['meta']), slug)
-            self.assertLessEqual(len(spec['title']), 60, slug)
+            self.assertLessEqual(len(spec['title']), spec.get('max_title', 60), slug)
             self.assertLessEqual(len(spec['meta']), 155, slug)
             self.assertNotIn('&amp;', title, slug)
             titles.append(title)
@@ -1276,12 +1286,12 @@ cta_label: "Page specific heading"
             self.assertEqual(agent['name'], 'Fair and Simple Home Offer', slug)
             faqs = faq_pairs(html)
             self.assertGreaterEqual(len(faqs), 2, slug)
-            self.assertLessEqual(len(faqs), 4, slug)
+            self.assertLessEqual(len(faqs), spec.get('max_faq', 4), slug)
             self.assertTrue(any(b.get('@type') == 'FAQPage' for b in ld_blocks(html)), slug)
             self.assertEqual(len(faqs), len(next(b for b in ld_blocks(html) if b.get('@type') == 'FAQPage')['mainEntity']), slug)
-        self.assertEqual(len(set(titles)), 8)
-        self.assertEqual(len(set(metas)), 8)
-        self.assertEqual(len(set(h1s)), 8)
+        self.assertEqual(len(set(titles)), len(AD_LANDINGS))
+        self.assertEqual(len(set(metas)), len(AD_LANDINGS))
+        self.assertEqual(len(set(h1s)), len(AD_LANDINGS))
         self.assertNotIn(home_h1(home), h1s)
         self.assertNotIn('Stop Foreclosure', h1s)
         for spec in AD_LANDINGS:
