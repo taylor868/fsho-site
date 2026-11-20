@@ -1006,6 +1006,26 @@ cta_label: "Page specific heading"
         bad = dict(site, gtm_id='GTM-PLACEHOLDER')
         self.assertEqual(gen.gtm_loader(bad), '')
 
+    def test_whatconverts_form_set_is_on_public_form_pages_only(self):
+        self.build(live=False)
+        out = Path(gen.OUT)
+        home = (out / 'index.html').read_text(encoding='utf-8')
+        probate = (out / 'selling-a-house-in-probate' / 'index.html').read_text(encoding='utf-8')
+        faq = (out / 'faq' / 'index.html').read_text(encoding='utf-8')
+        test_page = (out / 'test-intake' / 'index.html').read_text(encoding='utf-8')
+        tag = '<script>window.FSHO_WC_FORM_SET="209270";</script>'
+        self.assertEqual(home.count(tag), 1)
+        self.assertEqual(probate.count(tag), 1)
+        self.assertNotIn('<script>window.FSHO_WC_FORM_SET=', faq)
+        self.assertNotIn('<script>window.FSHO_WC_FORM_SET=', test_page)
+        site = json.loads((ROOT / 'content' / 'site.json').read_text(encoding='utf-8'))
+        self.assertEqual(gen.wc_form_set(site), '209270')
+        self.assertEqual(gen.wc_form_set(dict(site, whatconverts=dict(site['whatconverts'], form_set_id=''))), '')
+        self.assertEqual(gen.wc_form_set(dict(site, whatconverts=dict(site['whatconverts'], enabled=False))), '')
+        errs = []
+        gen.check_whatconverts(dict(site, whatconverts=dict(site['whatconverts'], form_set_id='12a')), errs)
+        self.assertTrue(any('form_set_id' in e for e in errs), errs)
+
     def test_whatconverts_profile_is_enabled_on_public_pages(self):
         init = (
             '<script>var $wc_load=function(a){return JSON.parse(JSON.stringify(a))},'

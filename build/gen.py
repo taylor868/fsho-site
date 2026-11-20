@@ -252,6 +252,16 @@ def check_whatconverts(site, E):
         E.append(f'{src}: whatconverts.profile_id must be {WC_PROFILE}')
     if wc.get('script_host') != WC_HOST:
         E.append(f'{src}: whatconverts.script_host must be {WC_HOST}')
+    fs = wc.get('form_set_id', '')
+    if not isinstance(fs, str) or (fs and not re.fullmatch(r'[0-9]{1,12}', fs)):
+        E.append(f'{src}: whatconverts.form_set_id must be a string of digits or ""')
+
+def wc_form_set(site):
+    """Form set id for $wc_leads.track.form, only when the profile snippet is on."""
+    if not whatconverts_snippet(site):
+        return ''
+    fs = site['whatconverts'].get('form_set_id', '')
+    return fs if isinstance(fs, str) and re.fullmatch(r'[0-9]{1,12}', fs) else ''
 
 def whatconverts_snippet(site):
     """Empty unless the official profile is explicitly enabled. Never emits another host or id."""
@@ -1082,6 +1092,9 @@ def build(site, pages, markets, redirects, live):
         # /test-intake/ is the noindex harness, not a public page. Redirect stubs are written later and stay excluded.
         public = path.rstrip('/') != '/test-intake'
         wc = whatconverts_snippet(S) if public else ''
+        # Form set for $wc_leads.track.form, only on public pages that carry the public form.
+        if wc and wc_form_set(S) and 'data-public="1"' in body:
+            wc += f'<script>window.FSHO_WC_FORM_SET="{wc_form_set(S)}";</script>'
         extra = approved_head(S) if public else ''
         gtml = gtm_loader(S) if public else ''
         gtm_ns = gtm_noscript(S) if public else ''

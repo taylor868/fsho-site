@@ -25,7 +25,7 @@ Flagged for Taylor: this is the existing qualifier ending. It says “may not be
 
 Q1 single-family or multi-family waits for Q2. The tag is still not loaded. The client uses the answers only to choose the next screen. After Q2 it sends the raw ownership answer and calls claim. The claim response decides:
 
-- `tier: "hot"` is the form fill. The dry-run records the tag, then the expected path is the Zap Hot path (WhatConverts, CRM, Slack). The real adapter then builds reserve.
+- `tier: "hot"` is the form fill. The dry-run records the tag, then the expected path is the Zap Hot path (CRM, Slack). On the public form the page also sends one WhatConverts form lead (see `docs/CONTENT_SCHEMA.md`). The test page never does. The real adapter then builds reserve.
 - `tier: "follow_up"` is CRM follow-up. No tag and no conversion. The exit event is `seller_form_disqualified` with reason `not_owner`.
 - `already_claimed` stops. No reserve and no Zap.
 - `not_qualified` or `not_non_owner` follows the server. The test trace logs the disagreement when that tier differs from the screen the client was about to show.
