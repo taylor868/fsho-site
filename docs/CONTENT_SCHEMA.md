@@ -118,11 +118,21 @@ When `pixels.enabled` is true, those same public pages also get, after the WhatC
 - Meta Pixel `959620977142967`: init and `PageView` only.
 - OpenAI Pixel `AMsRexCaeaxScDiV9SGJcP` from `https://bzrcdn.openai.com/sdk/oaiq.min.js`: init only. No `page_viewed` on load.
 
-Immediately after `<body>`, the GTM noscript iframe for `GTM-TM6JSDLB`. The container script is still the existing lazy `armGtm()` in `two-stage.js` (first `pointerdown` or `keydown`, and only on pages that include that file). `tracking: false` does not remove these snippets.
+Immediately after `<body>`, the GTM noscript iframe for `GTM-TM6JSDLB`. Every public page loads the container on page load: `gtm_loader()` in `build/gen.py` puts a small inline script in the head that sets `window.dataLayer` first (so early pushes queue), then after `window` `load` waits for `requestIdleCallback` (2 s timeout), or `setTimeout` 1.5 s where that API is missing, and inserts one async `gtm.js?id=GTM-TM6JSDLB`. A `pointerdown` or `keydown` before then loads it at once. `window.__fshoGtm` is shared with `armGtm()` in `two-stage.js`, so a page requests `gtm.js` once. `/test-intake/` has no head loader; there `armGtm()` still waits for the first `pointerdown` or `keydown`. `armGtm()` keeps its `GTM-PLACEHOLDER` guard, and `gen.py` only emits the head loader when `gtm_id` is exactly `GTM-TM6JSDLB`. `tracking: false` does not remove these snippets.
 
 ClickCease `cccontrack.js` is not in the initial HTML. That script records a conversion when it loads, using `window.ccConVal`. Putting it on every page, or on `/step-2` or `/thank-you`, would count a page view. The matching no-JS image (`https://monitor.clickcease.com/conversions/conversions.aspx?value=0`) is not requested either: the form cannot finish without JS, and requesting the image after the script loads would count the same lead twice. After a reserved public `seller_form_completed`, the page sets `window.ccConVal = 0` and loads `cccontrack.js` once.
 
-That same success path, and not a view of `/step-2` or `/thank-you`, also fires Meta `Lead` and OpenAI `lead_created` plus the custom `seller_form_completed` measure. Each is guarded by lead id so a repeat for the same lead does not fire again. A `tel:` tap pushes `click_to_call` onto `dataLayer` and, when `gtag` is already a function, sends the Ads click-to-call conversion with `transport_type: "beacon"`. If `gtag` is not ready, the conversion stays queued until `gtag` appears. No `gtag('config', ...)` is added.
+That same success path, and not a view of `/step-2` or `/thank-you`, also fires Meta `Lead` and OpenAI `lead_created` plus the custom `seller_form_completed` measure. Each is guarded by lead id so a repeat for the same lead does not fire again. **Form events on `dataLayer`.** The public two-stage form pushes:
+
+| Event | When | Fields | Google Ads conversion? |
+|---|---|---|---|
+| `seller_form_partial` | Stage 1 (name, address, phone, email) parked OK | `transaction_id` (lead id), `gclid`, `gbraid`, `wbraid` | **No.** Reporting only. |
+| `seller_form_completed` | Hot path: `sfh` or `multi_2_4` and an owner, after reserve | `transaction_id` (lead id), `gclid`, `gbraid`, `wbraid` | Yes. The only conversion event name. |
+| `seller_form_disqualified` | Quiet property, non-owner, nurture, DQ | `transaction_id`, `reason`, `property_type` | No. |
+
+Each of `seller_form_partial` and `seller_form_completed` fires once per lead id. The marker is stored under `fsho_ts_fired` in both `localStorage` and `sessionStorage` (either counts), so a reload, or a second run of the form in the same session, does not push it again. The click-id fields are always present (empty string when unknown). They come from `fsho_ad_clicks` in `localStorage`: the latest landing URL that carried any of `gclid`, `gbraid`, or `wbraid` replaces the whole set, and it expires 90 days after that click. This is separate from the write-once first-touch record in `fsho_ts_attr` that goes to the CRM. Any GTM trigger for Ads conversions must match the exact event name `seller_form_completed`, never a regex or prefix like `seller_form_.*` or All Custom Events, or partials would count.
+
+A `tel:` tap pushes `click_to_call` onto `dataLayer` and, when `gtag` is already a function, sends the Ads click-to-call conversion with `transport_type: "beacon"`. If `gtag` is not ready, the conversion stays queued until `gtag` appears. No `gtag('config', ...)` is added.
 
 `draft` (pages and markets):
 - The key is exactly `draft`. The only allowed value is boolean `true`.

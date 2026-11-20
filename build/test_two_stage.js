@@ -51,7 +51,7 @@ test("hot single-family and multi-family owners fire the tag only after owner=ye
   }
 });
 
-test("quiet property types go to the self-serve sweep after 10 minutes and never load the tag", () => {
+test("quiet property types go to the self-serve sweep after 3 minutes and never load the tag", () => {
   const qualifier = require("../content/forms/qualifier.json");
   assert.equal(flow.NOT_FIT.headline, qualifier.endings.not_fit.headline);
   assert.equal(flow.NOT_FIT.body, qualifier.endings.not_fit.body);
@@ -82,7 +82,7 @@ test("a non-owner is logged with no conversion", () => {
   assert.equal(tag.loaded, false);
 });
 
-test("abandoning after stage 1 is tagged timeout for the 10 minute sweep and does not load the tag", () => {
+test("abandoning after stage 1 is tagged timeout for the 3 minute sweep and does not load the tag", () => {
   const { tag, adapter, session } = run();
   session.submitContact(contact);
   const left = session.abandon();
@@ -202,12 +202,19 @@ test("the hot path records one seller_form_completed and dedupes on lead id", ()
   const hot = flow.createFlow(adapter, tag, { search: CLICK, localStorage: local, sessionStorage: sessionStore, dataLayer });
   hot.submitContact(contact);
   hot.answer("type", "sfh");
-  assert.equal(dataLayer.length, 0);
+  assert.deepEqual(dataLayer.map((e) => e.event), ["seller_form_partial"]);
   assert.equal(tag.loaded, false);
   hot.answer("ownership", "sole_owner");
   assert.equal(tag.loaded, true);
-  assert.deepEqual(dataLayer.map((e) => e.event), ["seller_form_completed"]);
+  assert.deepEqual(dataLayer.map((e) => e.event), ["seller_form_partial", "seller_form_completed"]);
   assert.equal(dataLayer[0].transaction_id, hot.state.leadId);
+  assert.equal(dataLayer[1].transaction_id, hot.state.leadId);
+  for (const e of dataLayer) {
+    assert.equal(e.gclid, "G-FIRST");
+    assert.equal(e.gbraid, "GB1");
+    assert.equal(e.wbraid, "WB1");
+    assert.equal("fbclid" in e, false);
+  }
   assert.equal(JSON.stringify(dataLayer).includes(contact.email), false);
   assert.equal(JSON.stringify(dataLayer).includes(contact.phone), false);
   assert.equal(JSON.stringify(dataLayer).includes(contact.name), false);
@@ -224,6 +231,7 @@ test("the hot path records one seller_form_completed and dedupes on lead id", ()
   second.answer("type", "multi_2_4");
   second.answer("ownership", "all_agree");
   assert.equal(dataLayer.filter((e) => e.event === "seller_form_completed").length, 1);
+  assert.equal(dataLayer.filter((e) => e.event === "seller_form_partial").length, 1);
   assert.equal(second.state.leadId, hot.state.leadId);
 });
 
@@ -248,27 +256,28 @@ test("non-hot paths never convert and exits carry a reason code", () => {
     routed.submitContact(contact);
     routed.answer("type", property);
     assert.equal(tag.loaded, false);
-    assert.deepEqual(dataLayer.map((e) => e.event), ["seller_form_disqualified"]);
-    assert.equal(dataLayer[0].reason, "quiet_property");
-    assert.equal(dataLayer[0].property_type, property);
-    assert.equal(dataLayer[0].transaction_id, routed.state.leadId);
+    assert.deepEqual(dataLayer.map((e) => e.event), ["seller_form_partial", "seller_form_disqualified"]);
+    assert.equal(dataLayer[1].reason, "quiet_property");
+    assert.equal(dataLayer[1].property_type, property);
+    assert.equal(dataLayer[1].transaction_id, routed.state.leadId);
     assert.equal(JSON.stringify(dataLayer).includes(contact.email), false);
   }
   const dataLayer = [];
   const { tag, session } = run();
   const owner = flow.createFlow(session.adapter, tag, { dataLayer });
   owner.submitContact(contact);
-  assert.equal(dataLayer.length, 0);
+  assert.deepEqual(dataLayer.map((e) => e.event), ["seller_form_partial"]);
   owner.answer("type", "sfh");
   owner.answer("ownership", "no");
   assert.equal(tag.loaded, false);
   assert.equal(owner.state.downstream, "crm_follow_up");
-  assert.deepEqual(dataLayer.map((e) => e.reason), ["not_owner"]);
+  assert.deepEqual(dataLayer.map((e) => e.event), ["seller_form_partial", "seller_form_disqualified"]);
+  assert.deepEqual(dataLayer.map((e) => e.reason), [undefined, "not_owner"]);
   const leftLayer = [];
   const left = flow.createFlow(flow.createMockAdapter(), { loaded: false, load() { this.loaded = true; } }, { dataLayer: leftLayer });
   left.submitContact(contact);
   left.abandon();
-  assert.equal(leftLayer.length, 0);
+  assert.deepEqual(leftLayer.map((e) => e.event), ["seller_form_partial"]);
   assert.equal(left.state.downstream, "self_serve_timeout");
 });
 
@@ -279,7 +288,7 @@ test("enrichment is skippable, stays on the hot lead, and does not move the conv
   hot.submitContact(contact);
   hot.answer("type", "multi_2_4");
   hot.answer("ownership", "all_agree");
-  assert.equal(dataLayer.length, 1);
+  assert.deepEqual(dataLayer.map((e) => e.event), ["seller_form_partial", "seller_form_completed"]);
   assert.equal(hot.state.stage, "enrich");
   assert.equal(hot.skip().view.screen, "condition");
   assert.equal(hot.skip().view.screen, "listed");
@@ -1945,7 +1954,13 @@ test("first and last touch, cookies, and device stay off the dataLayer", async (
   hot.submitContact(contact);
   hot.answer("type", "sfh");
   hot.answer("ownership", "sole_owner");
-  assert.deepEqual(dataLayer, [{ event: "seller_form_completed", transaction_id: hot.state.leadId }]);
+  // First-touch click ids stay off the dataLayer. Only the 90-day latest-click record
+  // (fsho_ad_clicks) feeds gclid, gbraid, and wbraid, and none was captured here.
+  const blank = { gclid: "", gbraid: "", wbraid: "" };
+  assert.deepEqual(dataLayer, [
+    Object.assign({ event: "seller_form_partial", transaction_id: hot.state.leadId }, blank),
+    Object.assign({ event: "seller_form_completed", transaction_id: hot.state.leadId }, blank)
+  ]);
 });
 
 const HOOK_CONTEXT_KEYS = [
@@ -2235,4 +2250,62 @@ test("the catch hook lists every attribution key, keeps edge first touch, and sa
   assert.equal(wide.attr_referrer.length, 500);
   assert.equal(bulky.capture.find((row) => row.url.endsWith("/park")).body.payload.gclid, longId);
   assert.equal(bulky.capture.find((row) => row.url.endsWith("/park")).body.payload.touch, undefined);
+});
+
+test("Google Ads click ids persist 90 days and ride on partial and completed events", () => {
+  const local = memory();
+  const t0 = 1700000000000;
+  const day = 24 * 60 * 60 * 1000;
+  assert.deepEqual(flow.AD_CLICK_KEYS, ["gclid", "gbraid", "wbraid"]);
+  assert.deepEqual(flow.captureAdClicks("?gclid=TEST123&gbraid=G1&wbraid=W1&fbclid=F", local, t0), { gclid: "TEST123", gbraid: "G1", wbraid: "W1" });
+  assert.deepEqual(flow.captureAdClicks("", local, t0 + 89 * day), { gclid: "TEST123", gbraid: "G1", wbraid: "W1" });
+  assert.deepEqual(flow.captureAdClicks("", local, t0 + 90 * day), { gclid: "", gbraid: "", wbraid: "" });
+  assert.deepEqual(flow.captureAdClicks("?utm_source=google", local, t0 + day), { gclid: "TEST123", gbraid: "G1", wbraid: "W1" });
+  // A newer ad click replaces the whole set, so ids never mix across clicks.
+  assert.deepEqual(flow.captureAdClicks("?gbraid=G2", local, t0 + 2 * day), { gclid: "", gbraid: "G2", wbraid: "" });
+});
+
+test("partial and completed events fire once per lead id and survive a reload", () => {
+  const local = memory();
+  const sessionStore = memory();
+  const tag = () => ({ loaded: false, load() { this.loaded = true; } });
+  const first = [];
+  const page = flow.createFlow(flow.createMockAdapter(), tag(), { search: "?gclid=TEST123&gbraid=G1&wbraid=W1", localStorage: local, sessionStorage: sessionStore, dataLayer: first });
+  page.submitContact(contact);
+  page.answer("type", "sfh");
+  page.answer("ownership", "sole_owner");
+  assert.deepEqual(first.map((e) => e.event), ["seller_form_partial", "seller_form_completed"]);
+  assert.deepEqual(first.map((e) => [e.gclid, e.gbraid, e.wbraid]), [["TEST123", "G1", "W1"], ["TEST123", "G1", "W1"]]);
+  // Reload: a fresh dataLayer and a fresh flow, same browser storage.
+  const reloaded = [];
+  const again = flow.createFlow(flow.createMockAdapter(), tag(), { search: "", localStorage: local, sessionStorage: sessionStore, dataLayer: reloaded });
+  assert.equal(again.state.leadId, page.state.leadId);
+  assert.deepEqual(again.state.adClicks, { gclid: "TEST123", gbraid: "G1", wbraid: "W1" });
+  again.submitContact(contact);
+  again.answer("type", "sfh");
+  again.answer("ownership", "sole_owner");
+  assert.deepEqual(reloaded, []);
+  // localStorage blocked (memory fallback is empty), sessionStorage still holds the marker.
+  const blocked = [];
+  const noLocal = flow.createFlow(flow.createMockAdapter(), tag(), { localStorage: memory(), sessionStorage: sessionStore, dataLayer: blocked });
+  noLocal.submitContact(contact);
+  noLocal.answer("type", "sfh");
+  noLocal.answer("ownership", "sole_owner");
+  assert.deepEqual(blocked, []);
+  // A new lead id (new tab or session) is a new lead and fires again.
+  const other = [];
+  const fresh = flow.createFlow(flow.createMockAdapter(), tag(), { localStorage: local, sessionStorage: memory(), dataLayer: other });
+  assert.notEqual(fresh.state.leadId, page.state.leadId);
+  fresh.submitContact(contact);
+  fresh.answer("type", "sfh");
+  fresh.answer("ownership", "sole_owner");
+  assert.deepEqual(other.map((e) => e.event), ["seller_form_partial", "seller_form_completed"]);
+  assert.equal(other[1].gclid, "TEST123");
+});
+
+test("only seller_form_completed is a conversion event name", () => {
+  const src = fs.readFileSync(path.join(__dirname, "two-stage.js"), "utf8");
+  assert.equal(flow.conversionName({ type: "sfh", ownership: "sole_owner" }), "seller_form_completed");
+  assert.equal(/seller_form_completed/.test("seller_form_partial"), false);
+  assert.equal(src.includes("GTM-WWPBQGDZ"), false);
 });

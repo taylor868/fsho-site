@@ -1,6 +1,6 @@
 ---
 title: "FAQ | Fair & Simple Home Offer"
-meta_description: "Cash offer or market sale: timelines, costs, and what we still need Andrew or Taylor to confirm. Call (910) 636-6669."
+meta_description: "Cash offer or market sale: how our 24-hour offer works, selling as-is with no repairs or fees, and closing on your timeline. Call (910) 636-6669."
 template: basic
 noindex: false
 ---

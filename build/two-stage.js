@@ -11,6 +11,11 @@
   var ENRICH_STEPS = ["occupancy", "condition", "listed", "timeline"];
   var PAYLOAD_FIELDS = ["lead_id", "stage", "gclid", "gbraid", "wbraid", "fbclid", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
   var PUBLIC_EVENT_KEYS = { event: 1, transaction_id: 1, reason: 1, property_type: 1 };
+  /* Google Ads click ids that ride on seller_form_partial and seller_form_completed. */
+  var AD_CLICK_KEYS = ["gclid", "gbraid", "wbraid"];
+  var CLICK_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+  var CLICK_KEY = "fsho_ad_clicks";
+  var FIRED_KEY = "fsho_ts_fired";
   var SIGNAL_KEYS = "gclid,gbraid,wbraid,fbclid,msclkid,ttclid,li_fat_id,utm_source,utm_medium,utm_campaign,utm_term,utm_content,utm_id,campaignid,adgroupid,keyword,matchtype,network,device,creative,placement,loc_physical_ms,gad_source".split(",");
   var CLICK_IDS = SIGNAL_KEYS.slice(0, 4), EXTRA_CLICKS = SIGNAL_KEYS.slice(4, 7), UTM_KEYS = SIGNAL_KEYS.slice(7, 13);
   var TRACKING = {
@@ -20,6 +25,8 @@
     lazy: true,
     storage_key: "fsho_ts_attr",
     lead_key: "fsho_ts_lead",
+    click_key: CLICK_KEY,
+    fired_key: FIRED_KEY,
     click_ids: CLICK_IDS,
     utm: UTM_KEYS
   };
@@ -66,10 +73,10 @@
   };
   var PATHS = {
     zap_hot: "Zap Hot path: WhatConverts + CRM + Slack",
-    pg_cron_sweep: "Self-serve sweep after 10 minutes, tagged q1_decline",
+    pg_cron_sweep: "Self-serve sweep after 3 minutes, tagged q1_decline",
     crm_follow_up: "CRM follow-up, logged, no conversion",
     staying_parked: "Parked until the next answer, or if they leave",
-    self_serve_timeout: "Self-serve sweep after 10 minutes, tagged timeout"
+    self_serve_timeout: "Self-serve sweep after 3 minutes, tagged timeout"
   };
 
   function testModeAllowed(context, search) {
@@ -205,6 +212,47 @@
     return id;
   }
 
+  /* Latest Google Ads click ids, kept 90 days in localStorage. A landing URL that carries
+     any of gclid, gbraid, or wbraid replaces the whole set, so the ids always come from one
+     click. This is separate from the write-once first-touch record in fsho_ts_attr. */
+  function captureAdClicks(search, storage, now) {
+    var store = storage || memoryStorage(), query = parseQuery(search), t = typeof now === "number" && isFinite(now) ? now : Date.now();
+    var fresh = {}, any = false;
+    AD_CLICK_KEYS.forEach(function (k) { if (query[k]) { fresh[k] = String(query[k]).slice(0, 256); any = true; } });
+    if (any) {
+      fresh.t = t;
+      writeJson(store, CLICK_KEY, fresh);
+    }
+    var saved = readJson(store, CLICK_KEY);
+    var out = {};
+    var live = typeof saved.t === "number" && t - saved.t >= 0 && t - saved.t < CLICK_TTL_MS;
+    AD_CLICK_KEYS.forEach(function (k) { out[k] = live && saved[k] ? String(saved[k]) : ""; });
+    return out;
+  }
+
+  /* Once-per-lead guard that survives a reload. Each marker is written to localStorage and
+     sessionStorage, and either one counts, so the guard holds when one store is blocked. */
+  function firedBefore(stores, leadId, name) {
+    if (!leadId) return false;
+    return stores.some(function (store) {
+      var done = readJson(store, FIRED_KEY)[leadId];
+      return !!(done && done[name]);
+    });
+  }
+
+  function markFired(stores, leadId, name) {
+    if (!leadId) return;
+    stores.forEach(function (store) {
+      var all = readJson(store, FIRED_KEY);
+      var row = all[leadId] && typeof all[leadId] === "object" ? all[leadId] : {};
+      row[name] = 1;
+      all[leadId] = row;
+      var ids = Object.keys(all);
+      if (ids.length > 20) ids.slice(0, ids.length - 20).forEach(function (id) { delete all[id]; });
+      writeJson(store, FIRED_KEY, all);
+    });
+  }
+
   function conversionName(answers) {
     var a = answers || {};
     return CONTINUE[a.type] && OWNERS[a.ownership] ? "seller_form_completed" : "";
@@ -300,11 +348,12 @@
     };
   }
 
-  function pushPublic(dataLayer, event) {
+  function pushPublic(dataLayer, event, clicks) {
     var clean = {};
     Object.keys(event).forEach(function (k) {
       if (PUBLIC_EVENT_KEYS[k] && event[k]) clean[k] = event[k];
     });
+    if (clicks) AD_CLICK_KEYS.forEach(function (k) { clean[k] = clicks[k] ? String(clicks[k]) : ""; });
     dataLayer.push(clean);
   }
 
@@ -319,10 +368,12 @@
     var page = config.page || {};
     var attr = captureAttribution(config.search || "", localStore, tracking, page);
     var leadId = loadLeadId(sessionStore, tracking);
+    var adClicks = captureAdClicks(config.search || "", localStore, typeof page.now === "function" ? page.now() : page.now);
+    var firedStores = [localStore, sessionStore];
     var state = {
       stage: "contact", parked: false, branch: null, googleTagFired: false, downstream: null,
       answers: {}, trace: [], contact: null, sorry: null, followup: null, thanks: null,
-      leadId: leadId, attr: attr, priority: "", serverTier: "", conversionFired: false, enrichIndex: 0, skipped: {},
+      leadId: leadId, attr: attr, adClicks: adClicks, partialFired: false, priority: "", serverTier: "", conversionFired: false, enrichIndex: 0, skipped: {},
       dataLayer: dataLayer
     };
     function goesQuiet(value) {
@@ -352,10 +403,18 @@
       if (!hook || typeof hook.onReserved !== "function") return;
       try { hook.onReserved(leadId); } catch (e) {}
     }
+    function firePartial() {
+      if (state.partialFired || firedBefore(firedStores, state.leadId, "seller_form_partial")) { state.partialFired = true; return; }
+      state.partialFired = true;
+      markFired(firedStores, state.leadId, "seller_form_partial");
+      pushPublic(dataLayer, { event: "seller_form_partial", transaction_id: state.leadId }, state.adClicks);
+      note(state, "partial", "seller_form_partial once per lead id. Not a Google Ads conversion.");
+    }
     function fireConversion() {
-      if (state.conversionFired || seenConversion()) { state.conversionFired = true; return; }
+      if (state.conversionFired || seenConversion() || firedBefore(firedStores, state.leadId, "seller_form_completed")) { state.conversionFired = true; return; }
       state.conversionFired = true;
-      pushPublic(dataLayer, { event: "seller_form_completed", transaction_id: state.leadId });
+      markFired(firedStores, state.leadId, "seller_form_completed");
+      pushPublic(dataLayer, { event: "seller_form_completed", transaction_id: state.leadId }, state.adClicks);
       note(state, "conversion", "seller_form_completed once. transaction_id is the lead id.");
       if (config.publicForm) notifyReservedPixels(state.leadId);
     }
@@ -527,7 +586,7 @@
       adapter.branch(branch);
       adapter.google(state.googleTagFired);
       adapter.downstream(path);
-      note(state, "branch", branch === "hot" ? "Hot. This is the form fill." : (branch === "quiet_property" ? "Quiet property branch. The sweep moves this to self-serve after 10 minutes, tagged q1_decline." : "Quiet non-owner branch. Logged, no conversion."));
+      note(state, "branch", branch === "hot" ? "Hot. This is the form fill." : (branch === "quiet_property" ? "Quiet property branch. The sweep moves this to self-serve after 3 minutes, tagged q1_decline." : "Quiet non-owner branch. Logged, no conversion."));
       note(state, "google", googleText);
       note(state, "downstream", "Expected path: " + PATHS[path]);
     }
@@ -571,6 +630,7 @@
           }
           state.parked = true;
           state.stage = "q_type";
+          firePartial();
           state.downstream = "staying_parked";
           note(state, "park", "Parked in the staged table. No CRM lead. No Google tag.");
           note(state, "downstream", "Expected path: " + PATHS.staying_parked + ".");
@@ -586,7 +646,7 @@
         adapter.branch("abandoned");
         adapter.google(false);
         adapter.downstream("self_serve_timeout");
-        note(state, "abandon", "Left after stage 1. The sweep moves this to self-serve after 10 minutes, tagged timeout. No CRM lead and no Google tag.");
+        note(state, "abandon", "Left after stage 1. The sweep moves this to self-serve after 3 minutes, tagged timeout. No CRM lead and no Google tag.");
         note(state, "google", "Google tag not loaded.");
         note(state, "downstream", "Expected path: " + PATHS.self_serve_timeout);
         return { ok: true, view: snapshot(state) };
@@ -996,6 +1056,8 @@
     chooseAdapter: chooseAdapter,
     createFlow: createFlow,
     captureAttribution: captureAttribution,
+    captureAdClicks: captureAdClicks,
+    AD_CLICK_KEYS: AD_CLICK_KEYS,
     SIGNAL_KEYS: SIGNAL_KEYS,
     canonicalJson: canonicalJson,
     sha256Hex: sha256Hex,
@@ -1201,10 +1263,11 @@ function boot(api) {
   armGtm(api.CONFIG.gtm_id || api.TRACKING.gtm_id);
   function armGtm(id) {
     if (!id || id === "GTM-PLACEHOLDER") return;
-    var started = false;
     function load() {
-      if (started) return;
-      started = true;
+      /* The page shell (gen.py gtm_loader) loads the container on idle and sets this flag.
+         On pages without that loader, the first pointerdown or keydown still loads it once. */
+      if (globalThis.__fshoGtm) return;
+      globalThis.__fshoGtm = 1;
       globalThis.dataLayer = globalThis.dataLayer || [];
       globalThis.dataLayer.push({ "gtm.start": Date.now(), event: "gtm.js" });
       var s = document.createElement("script");
