@@ -2309,3 +2309,84 @@ test("only seller_form_completed is a conversion event name", () => {
   assert.equal(/seller_form_completed/.test("seller_form_partial"), false);
   assert.equal(src.includes("GTM-WWPBQGDZ"), false);
 });
+
+test("a Hot completion sends one WhatConverts form lead with contact and attribution", () => {
+  const sent = [];
+  const host = { $wc_leads: { track: { form(id, data) { sent.push({ id, data }); } } } };
+  const local = memory();
+  const sessionStore = memory();
+  const tag = () => ({ loaded: false, load() { this.loaded = true; } });
+  const opts = (extra) => Object.assign({
+    localStorage: local, sessionStorage: sessionStore, dataLayer: [], publicForm: true, wcFormSetId: "209270", wcHost: host,
+    page: { href: "https://fsho.co/selling-a-house-in-probate/?gclid=TEST123&utm_source=google&utm_medium=cpc&utm_term=sell%20estate%20house", path: "/selling-a-house-in-probate/" }
+  }, extra || {});
+  const hot = flow.createFlow(flow.createMockAdapter(), tag(), opts({ search: "?gclid=TEST123&utm_source=google&utm_medium=cpc&utm_term=sell%20estate%20house" }));
+  hot.submitContact(Object.assign({}, contact, { name: "Ada  Byron Lovelace", consent: true }));
+  assert.equal(sent.length, 0, "stage 1 does not reach WhatConverts");
+  hot.answer("type", "sfh");
+  hot.answer("ownership", "sole_owner");
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].id, "209270");
+  const d = sent[0].data;
+  assert.equal(d.First, "Ada");
+  assert.equal(d.Last, "Byron Lovelace");
+  assert.equal(d["Email*"], contact.email);
+  assert.equal(d["Phone #*"], contact.phone);
+  assert.equal(d["Street Address"], contact.address);
+  assert.equal(d["Text Consent"], "yes");
+  assert.equal(d.gclid, "TEST123");
+  assert.equal(d.utm_source, "google");
+  assert.equal(d.utm_term, "sell estate house");
+  assert.equal(d["Landing Page"], "https://fsho.co/selling-a-house-in-probate/?gclid=TEST123&utm_source=google&utm_medium=cpc&utm_term=sell%20estate%20house");
+  assert.equal(d["Site Lead ID"], hot.state.leadId);
+  assert.equal(d["Property Type"], "sfh");
+  assert.equal(d.Form, "fsho.co seller form");
+  assert.equal("gbraid" in d, false, "empty values are dropped");
+  // Enrichment answers after the conversion do not send again.
+  hot.answer("occupancy", "vacant");
+  assert.equal(sent.length, 1);
+  // Reload and finish again: same lead id, nothing new.
+  const again = flow.createFlow(flow.createMockAdapter(), tag(), opts());
+  again.submitContact(contact);
+  again.answer("type", "sfh");
+  again.answer("ownership", "sole_owner");
+  assert.equal(sent.length, 1);
+});
+
+test("WhatConverts is skipped for exits, test pages, and an empty form set, and waits for the script", () => {
+  const sent = [];
+  const host = { $wc_leads: { track: { form(id, data) { sent.push({ id, data }); } } } };
+  const tag = () => ({ loaded: false, load() { this.loaded = true; } });
+  const base = () => ({ localStorage: memory(), sessionStorage: memory(), dataLayer: [], publicForm: true, wcFormSetId: "209270", wcHost: host });
+  const quiet = flow.createFlow(flow.createMockAdapter(), tag(), base());
+  quiet.submitContact(contact); quiet.answer("type", "condo");
+  const nonOwner = flow.createFlow(flow.createMockAdapter(), tag(), base());
+  nonOwner.submitContact(contact); nonOwner.answer("type", "sfh"); nonOwner.answer("ownership", "no");
+  const left = flow.createFlow(flow.createMockAdapter(), tag(), base());
+  left.submitContact(contact); left.abandon();
+  const harness = flow.createFlow(flow.createMockAdapter(), tag(), Object.assign(base(), { publicForm: false }));
+  harness.submitContact(contact); harness.answer("type", "sfh"); harness.answer("ownership", "sole_owner");
+  const off = flow.createFlow(flow.createMockAdapter(), tag(), Object.assign(base(), { wcFormSetId: "" }));
+  off.submitContact(contact); off.answer("type", "sfh"); off.answer("ownership", "sole_owner");
+  assert.equal(sent.length, 0);
+  // Script not loaded yet: retry until it appears, then send once.
+  const late = {};
+  const queue = [];
+  const waiting = flow.createFlow(flow.createMockAdapter(), tag(), Object.assign(base(), { wcHost: late, wcWait: (fn) => queue.push(fn) }));
+  waiting.submitContact(contact); waiting.answer("type", "multi_2_4"); waiting.answer("ownership", "all_agree");
+  assert.equal(queue.length, 1);
+  queue.shift()();
+  assert.equal(queue.length, 1);
+  late.$wc_leads = host.$wc_leads;
+  queue.shift()();
+  assert.equal(queue.length, 0);
+  assert.equal(sent.length, 1);
+  // Never loads (blocked): gives up after 30 retries without throwing.
+  const never = [];
+  const blocked = flow.createFlow(flow.createMockAdapter(), tag(), Object.assign(base(), { wcHost: {}, wcWait: (fn) => never.push(fn) }));
+  blocked.submitContact(contact); blocked.answer("type", "sfh"); blocked.answer("ownership", "sole_owner");
+  let n = 0;
+  while (never.length) { never.shift()(); n += 1; }
+  assert.equal(n, 30);
+  assert.equal(sent.length, 1);
+});

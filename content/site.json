@@ -28,6 +28,8 @@
     "enabled": true,
     "profile_id": "176490",
     "script_host": "//s.ksrndkehqnwntyxlhgto.com",
+    "form_set_id": "209270",
+    "_form_set_note": "WhatConverts web form set that receives each Hot completion through $wc_leads.track.form. 209270 is the profile's existing gform_1 form set (its field mapping already reads First, Last, Email*, Phone #*). Swap in a dedicated fsho.co form set id once Andrew creates one. Empty string turns the send off.",
     "_note": "Official standard snippet for profile 176490. The inline script snapshots the landing URL and referrer while HTML parses. 176490.js is deferred so it does not block first paint. Does not enable tracking, lead_form, or the public test form. Redirect stubs and /test-intake/ do not get the snippet. ClickCease, Meta, OpenAI, and the GTM noscript are the pixels block."
   },
   "pixels": {

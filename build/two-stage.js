@@ -46,7 +46,8 @@
     townhouse_route: "quiet",
     use_real_adapter: false,
     producer_path: "/.netlify/functions/intake-producer",
-    gtm_id: "GTM-TM6JSDLB"
+    gtm_id: "GTM-TM6JSDLB",
+    wc_form_set_id: ""
   };
   var NOT_FIT = {
     headline: "Thanks for the details.",
@@ -72,7 +73,7 @@
     ability: ["Anything that could hold up a sale?", [["ready", "Nothing, ready to go"], ["need_time", "Need a little extra time"], ["cant_move", "Can't move out by closing"]]]
   };
   var PATHS = {
-    zap_hot: "Zap Hot path: WhatConverts + CRM + Slack",
+    zap_hot: "Zap Hot path: CRM + Slack. WhatConverts form lead from the page",
     pg_cron_sweep: "Self-serve sweep after 3 minutes, tagged q1_decline",
     crm_follow_up: "CRM follow-up, logged, no conversion",
     staying_parked: "Parked until the next answer, or if they leave",
@@ -253,6 +254,29 @@
     });
   }
 
+  /* WhatConverts lead fields for one completed seller form. Keys are the labels the
+     existing WhatConverts form set already maps (First, Last, Email*, Phone #*, Street Address),
+     plus attribution as additional fields. Values are strings; empty ones are dropped. */
+  function whatconvertsFields(contact, answers, attr, clicks, leadId) {
+    var c = contact || {}, a = answers || {}, t = attr || {}, k = clicks || {};
+    var name = String(c.name || "").trim().split(/\s+/);
+    var first = name.shift() || "", last = name.join(" ");
+    var visits = Array.isArray(t.visits) ? t.visits : [];
+    var landing = visits.length && visits[0] && visits[0].h ? String(visits[0].h) : "";
+    var rows = [
+      ["First", first], ["Last", last], ["Email*", c.email], ["Phone #*", c.phone],
+      ["Street Address", c.address], ["Text Consent", c.consent === true ? "yes" : (c.consent === false ? "no" : "")],
+      ["Property Type", a.type], ["Ownership", a.ownership],
+      ["gclid", k.gclid || t.gclid], ["gbraid", k.gbraid || t.gbraid], ["wbraid", k.wbraid || t.wbraid],
+      ["fbclid", t.fbclid], ["utm_source", t.utm_source], ["utm_medium", t.utm_medium],
+      ["utm_campaign", t.utm_campaign], ["utm_term", t.utm_term], ["utm_content", t.utm_content],
+      ["Landing Page", landing], ["Site Lead ID", leadId], ["Form", "fsho.co seller form"]
+    ];
+    var out = {};
+    rows.forEach(function (row) { var v = row[1] == null ? "" : String(row[1]).trim(); if (v) out[row[0]] = v.slice(0, 500); });
+    return out;
+  }
+
   function conversionName(answers) {
     var a = answers || {};
     return CONTINUE[a.type] && OWNERS[a.ownership] ? "seller_form_completed" : "";
@@ -410,6 +434,33 @@
       pushPublic(dataLayer, { event: "seller_form_partial", transaction_id: state.leadId }, state.adClicks);
       note(state, "partial", "seller_form_partial once per lead id. Not a Google Ads conversion.");
     }
+    /* One WhatConverts web-form lead per site lead id, after a reserved Hot completion,
+       through the profile script's own $wc_leads.track.form(form_set_id, fields). Waits up to
+       about 15 s for the profile script. Same reload-proof marker store as the dataLayer events. */
+    function sendWhatConverts() {
+      var setId = String(config.wcFormSetId || CONFIG.wc_form_set_id || "");
+      if (!config.publicForm || !/^[0-9]+$/.test(setId)) return;
+      if (state.wcSent || firedBefore(firedStores, state.leadId, "whatconverts")) { state.wcSent = true; return; }
+      var fields = whatconvertsFields(state.contact, state.answers, state.attr, state.adClicks, state.leadId);
+      var host = config.wcHost || globalThis;
+      var wait = config.wcWait || function (fn) { setTimeout(fn, 500); };
+      var tries = 0;
+      state.wcSent = true;
+      function attempt() {
+        var wc = host.$wc_leads;
+        if (wc && wc.track && typeof wc.track.form === "function") {
+          if (firedBefore(firedStores, state.leadId, "whatconverts")) return;
+          markFired(firedStores, state.leadId, "whatconverts");
+          try { wc.track.form(setId, fields); } catch (e) {}
+          note(state, "whatconverts", "WhatConverts form lead sent once (form set " + setId + ").");
+          return;
+        }
+        tries += 1;
+        if (tries <= 30) wait(attempt);
+        else note(state, "whatconverts", "WhatConverts script not ready. No lead sent.");
+      }
+      attempt();
+    }
     function fireConversion() {
       if (state.conversionFired || seenConversion() || firedBefore(firedStores, state.leadId, "seller_form_completed")) { state.conversionFired = true; return; }
       state.conversionFired = true;
@@ -417,6 +468,7 @@
       pushPublic(dataLayer, { event: "seller_form_completed", transaction_id: state.leadId }, state.adClicks);
       note(state, "conversion", "seller_form_completed once. transaction_id is the lead id.");
       if (config.publicForm) notifyReservedPixels(state.leadId);
+      if (config.publicForm) sendWhatConverts();
     }
     function fireExit(branch) {
       var event = exitEvent(branch, state.answers);
@@ -1057,6 +1109,7 @@
     createFlow: createFlow,
     captureAttribution: captureAttribution,
     captureAdClicks: captureAdClicks,
+    whatconvertsFields: whatconvertsFields,
     AD_CLICK_KEYS: AD_CLICK_KEYS,
     SIGNAL_KEYS: SIGNAL_KEYS,
     canonicalJson: canonicalJson,
@@ -1108,6 +1161,7 @@ function boot(api) {
     sessionStorage: safeStore(sessionStorage),
     dataLayer: dl,
     publicForm: publicForm,
+    wcFormSetId: String(globalThis.FSHO_WC_FORM_SET || ""),
     page: currentPage()
   });
   function currentPage() { var loc = globalThis.location || {}, nav = globalThis.navigator || {}, path = String(loc.pathname || ""), search = String(loc.search || ""); return { href: String(loc.href || ""), path: (path || search) ? (path || "/") + search : "", hostname: String(loc.hostname || ""), referrer: String(document.referrer || ""), cookie: String(document.cookie || ""), userAgent: String(nav.userAgent || "") }; }
