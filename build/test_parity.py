@@ -796,7 +796,8 @@ cta_label: "Page specific heading"
         self.assertIn(f'href="{facebook}" {link}', company)
         self.assertIn(f'href="{bbb}" {link}', company)
         self.assertNotIn('5-star', faq)
-        self.assertIn('offer@fairandsimplehomeoffer.com', faq)
+        self.assertIn('<a href="mailto:offer@fsho.co">offer@fsho.co</a>', faq)
+        self.assertNotIn('offer@fairandsimplehomeoffer.com', faq)
         self.assertIn('tel:+19106366669', faq)
         step2 = quiet['step-2'].read_text(encoding='utf-8')
         self.assertNotIn('id="qf"', step2)
@@ -811,12 +812,13 @@ cta_label: "Page specific heading"
         privacy = quiet['privacy'].read_text(encoding='utf-8')
         terms = (Path(gen.OUT) / 'terms-conditions' / 'index.html').read_text(encoding='utf-8')
         sms = (Path(gen.OUT) / 'text-messaging-terms' / 'index.html').read_text(encoding='utf-8')
-        help_line = 'email offer@fairandsimplehomeoffer.com.'
+        help_line = 'email offer@fsho.co.'
         for html in (privacy, terms, sms):
             self.assertNotIn('PLACEHOLDER', html)
             self.assertNotIn('(888) 892-3602', html)
             self.assertNotIn('info@fairandsimplehomeoffer.com', html)
             self.assertNotIn('andrew@fairandsimplehomeoffer.com', html)
+            self.assertNotIn('offer@fairandsimplehomeoffer.com', html)
             self.assertIn(help_line, html)
             self.assertIn('href="/privacy/"', html)
             self.assertIn('Google Analytics', html) if html is privacy else None
@@ -983,6 +985,27 @@ cta_label: "Page specific heading"
         self.assertNotIn('Brett C.', ohio)
         self.assertFalse(any(b.get('@type') == 'FAQPage' for b in ld_blocks(ohio)))
 
+    def test_andrew_fixes_faq_meta_email_and_idle_gtm(self):
+        self.build(live=False)
+        out = Path(gen.OUT)
+        want = 'Cash offer or market sale: how our 24-hour offer works, selling as-is with no repairs or fees, and closing on your timeline. Call (910) 636-6669.'
+        faq = (out / 'faq' / 'index.html').read_text(encoding='utf-8')
+        self.assertIn(f'<meta name="description" content="{want}">', faq)
+        self.assertIn(f'<meta property="og:description" content="{want}">', faq)
+        self.assertIn(f'<meta name="twitter:description" content="{want}">', faq)
+        self.assertNotIn('what we still need Andrew or Taylor to confirm', faq)
+        for p in out.rglob('*.html'):
+            doc = p.read_text(encoding='utf-8')
+            self.assertNotIn('offer@fairandsimplehomeoffer.com', doc, str(p))
+            self.assertNotIn('GTM-WWPBQGDZ', doc, str(p))
+        self.assertIn('<a href="mailto:offer@fsho.co">offer@fsho.co</a>', faq)
+        test_page = (out / 'test-intake' / 'index.html').read_text(encoding='utf-8')
+        self.assertNotIn('requestIdleCallback(go', test_page)
+        site = json.loads((ROOT / 'content' / 'site.json').read_text(encoding='utf-8'))
+        self.assertIn('"GTM-TM6JSDLB"', gen.gtm_loader(site))
+        bad = dict(site, gtm_id='GTM-PLACEHOLDER')
+        self.assertEqual(gen.gtm_loader(bad), '')
+
     def test_whatconverts_profile_is_enabled_on_public_pages(self):
         init = (
             '<script>var $wc_load=function(a){return JSON.parse(JSON.stringify(a))},'
@@ -1090,7 +1113,13 @@ cta_label: "Page specific heading"
             self.assertIsNone(curly.search(head[head.index('<meta name="viewport"'):head.index('<title>')]), name)
             self.assertIsNone(curly.search(body_open), name)
             self.assertIn('<body>' + gtm_ns, doc, name)
-            self.assertEqual(doc.count('https://www.googletagmanager.com/gtm.js?id='), 2 if 'function armGtm' in doc else 1, name)
+            # app.js demo (tracking off), the head idle loader, and armGtm on form pages.
+            self.assertEqual(doc.count('https://www.googletagmanager.com/gtm.js?id='), 3 if 'function armGtm' in doc else 2, name)
+            self.assertEqual(head.count('<script>window.dataLayer=window.dataLayer||[];(function(w,d,id){'), 1, name)
+            self.assertIn('requestIdleCallback(go,{timeout:2000})', head, name)
+            self.assertIn('setTimeout(go,1500)', head, name)
+            self.assertIn('})(window,document,"GTM-TM6JSDLB")</script>', head, name)
+            self.assertNotIn('GTM-WWPBQGDZ', doc, name)
             self.assertEqual(doc.count('ns.html?id=GTM-TM6JSDLB'), 1, name)
             self.assertNotIn('googletagmanager.com/gtag/js', doc, name)
             self.assertNotIn("gtag('config'", doc, name)

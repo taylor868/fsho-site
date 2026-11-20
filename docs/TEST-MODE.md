@@ -8,11 +8,11 @@ The test page does not call Supabase, Zapier, WhatConverts, CRM, or Slack. The m
 
 ## Stage 1 and the two qualifying questions
 
-Stage 1 parks name, address, phone, and email. That records a staged-table insert and does not create a CRM lead, load a Google tag, or fire a conversion. Leaving after stage 1 does not fire a conversion. The sweep moves that lead to self-serve after 10 minutes, tagged timeout.
+Stage 1 parks name, address, phone, and email. That records a staged-table insert and does not create a CRM lead, load a Google tag, or fire a conversion. Leaving after stage 1 does not fire a conversion. The sweep moves that lead to self-serve after 3 minutes, tagged timeout.
 
 Q1 and Q2 use the live qualifier values: `sfh`, `townhouse`, `multi_2_4`, `condo`, `mobile`, `land`, and ownership `sole_owner`, `all_agree`, `decision_maker`, `no`.
 
-Only `sfh` and `multi_2_4` continue to ownership. Townhouse, condo, mobile, land, and any other listed Q1 value show the sorry screen. No Google tag and no conversion. The sweep moves that quiet lead to self-serve after 10 minutes, tagged q1_decline. Those exits push `seller_form_disqualified` with reason `quiet_property` and the property type.
+Only `sfh` and `multi_2_4` continue to ownership. Townhouse, condo, mobile, land, and any other listed Q1 value show the sorry screen. No Google tag and no conversion. The sweep moves that quiet lead to self-serve after 3 minutes, tagged q1_decline. Those exits push `seller_form_disqualified` with reason `quiet_property` and the property type.
 
 Taylor decided townhouses take that quiet path. `townhouse_route` defaults to `quiet`. Setting it to `hot` is the only switch that lets a townhouse continue to the dry-run tag. It is not the current decision, and it still does not emit `seller_form_completed`, because a townhouse is not the Hot conversion path.
 
@@ -38,15 +38,17 @@ Attribution is config-driven on `TRACKING` in `build/two-stage.js`. The page sto
 
 `lead_id` is created with `crypto.randomUUID()` once per browser session and kept in `sessionStorage` under `fsho_ts_lead`. A value already in that key is kept. The same id is sent on every stage. The real adapter also refuses to overwrite a click id, UTM, or lead id it has already sent.
 
-`CONFIG.gtm_id` and `TRACKING.gtm_id` are `GTM-TM6JSDLB`. GA4 is off. The Meta pixel is off. The container script is not in the HTML and is not requested at page load. The first `pointerdown` or `keydown` inserts one async `gtm.js` script. The dry-run Google marker is still the JSON script inserted after `owner = yes`. Site-wide tracking stays off, so the shared pages do not load this container.
+`CONFIG.gtm_id` and `TRACKING.gtm_id` are `GTM-TM6JSDLB`. GA4 is off. The Meta pixel is off. On public pages the head `gtm_loader()` from `gen.py` requests `gtm.js` once after page load, on idle (`requestIdleCallback`, 2 s timeout, else `setTimeout` 1.5 s), or sooner on a `pointerdown` or `keydown`. This test page has no head loader, so here the first `pointerdown` or `keydown` inserts one async `gtm.js` script through `armGtm()`. The dry-run Google marker is still the JSON script inserted after `owner = yes`. `site.json` `tracking` stays false. That flag only drives the old `app.js` demo loader, which would request a second `gtm.js`.
 
 ## Conversion
 
-`seller_form_completed` is pushed to `dataLayer` exactly once, and only when the property type is `sfh` or `multi_2_4` and the ownership answer is an owner. `transaction_id` is the `lead_id`, so a second Hot completion in the same session does not push again.
+`seller_form_completed` is pushed to `dataLayer` exactly once, and only when the property type is `sfh` or `multi_2_4` and the ownership answer is an owner. `transaction_id` is the `lead_id`. The once-per-lead marker is kept in `fsho_ts_fired` in `localStorage` and `sessionStorage`, so a reload or a second Hot completion for the same lead does not push again.
 
-It does not fire on stage 1, abandon, a quiet or sorry property type, a non-owner, nurture, or DQ. Those exits (quiet property, non-owner, nurture, DQ) push `seller_form_disqualified` with a reason code: `quiet_property`, `not_owner`, `nurture`, or `dq`. Abandon pushes neither conversion event. The sweep moves an abandoned lead to self-serve after 10 minutes, tagged timeout, and a quiet property lead to self-serve after 10 minutes, tagged q1_decline.
+`seller_form_partial` is pushed once per lead id when stage 1 parks. It is not a conversion. Both events carry `gclid`, `gbraid`, and `wbraid` from the 90-day latest-click record `fsho_ad_clicks` (empty strings when unknown).
 
-`dataLayer` payloads are limited to `event`, `transaction_id`, `reason`, and `property_type`. Name, address, phone, and email never go on the data layer.
+`seller_form_completed` does not fire on stage 1, abandon, a quiet or sorry property type, a non-owner, nurture, or DQ. Those exits (quiet property, non-owner, nurture, DQ) push `seller_form_disqualified` with a reason code: `quiet_property`, `not_owner`, `nurture`, or `dq`. Abandon pushes neither `seller_form_completed` nor `seller_form_disqualified` (its `seller_form_partial` already fired at stage 1). The sweep moves an abandoned lead to self-serve after 3 minutes, tagged timeout, and a quiet property lead to self-serve after 3 minutes, tagged q1_decline.
+
+`dataLayer` payloads are limited to `event`, `transaction_id`, `reason`, `property_type`, and (partial and completed only) `gclid`, `gbraid`, `wbraid`. Name, address, phone, and email never go on the data layer.
 
 ## Enrichment and priority
 

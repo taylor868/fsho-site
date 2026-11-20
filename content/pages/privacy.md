@@ -23,7 +23,7 @@ noindex: false
 
 <p>Message frequency varies. Message and data rates may apply.</p>
 
-<p>You can stop at any time: reply STOP and we will send one message confirming you are unsubscribed. For help, reply HELP or email offer@fairandsimplehomeoffer.com.</p>
+<p>You can stop at any time: reply STOP and we will send one message confirming you are unsubscribed. For help, reply HELP or email offer@fsho.co.</p>
 
 <p>Carriers are not liable for delayed or undelivered messages.</p>
 

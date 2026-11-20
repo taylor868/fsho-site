@@ -371,6 +371,30 @@ def gtm_noscript(site):
         + '" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>'
     )
 
+def gtm_loader(site):
+    """GTM container on page load, deferred to idle. The dataLayer exists first so early
+    pushes queue. requestIdleCallback (2 s timeout) after window load, else setTimeout 1.5 s.
+    A pointerdown or keydown before then loads it at once. window.__fshoGtm is shared with
+    two-stage.js armGtm, so the page requests gtm.js once."""
+    if not pixels_on(site):
+        return ''
+    gid = str(site.get('gtm_id') or '')
+    if not re.fullmatch(r'GTM-[A-Z0-9]+', gid):
+        return ''
+    return (
+        '<script>window.dataLayer=window.dataLayer||[];(function(w,d,id){'
+        'if(!id)return;'
+        'function go(){if(w.__fshoGtm)return;w.__fshoGtm=1;'
+        'w.dataLayer.push({"gtm.start":Date.now(),event:"gtm.js"});'
+        'var s=d.createElement("script");s.async=true;'
+        's.src="https://www.googletagmanager.com/gtm.js?id="+encodeURIComponent(id);d.head.appendChild(s)}'
+        'function idle(){if(w.requestIdleCallback)w.requestIdleCallback(go,{timeout:2000});else setTimeout(go,1500)}'
+        'if(d.readyState==="complete")idle();else w.addEventListener("load",idle,{once:true});'
+        'w.addEventListener("pointerdown",go,{once:true,passive:true});'
+        'w.addEventListener("keydown",go,{once:true,passive:true})'
+        '})(window,document,' + json.dumps(gid) + ')</script>'
+    )
+
 def pixels_script(site):
     if not pixels_on(site):
         return ''
@@ -841,7 +865,8 @@ def build(site, pages, markets, redirects, live):
     def two_stage_assets():
         ctx = deploy_context(live)
         real_flag = '1' if os.environ.get('FSHO_USE_REAL_ADAPTER') == '1' else ''
-        src = re.sub(r'\n\s*\n', '\n', open(os.path.join(B, 'two-stage.js'), encoding='utf-8').read().strip()).replace('</', '<\\/')
+        # Drop blank lines and leading indentation (the file has no template or multi-line strings).
+        src = re.sub(r'\n[ \t]+', '\n', re.sub(r'\n\s*\n', '\n', open(os.path.join(B, 'two-stage.js'), encoding='utf-8').read().strip())).replace('</', '<\\/')
         return ctx, real_flag, src
     def test_intake():
         ctx, real_flag, src = two_stage_assets()
@@ -1058,9 +1083,10 @@ def build(site, pages, markets, redirects, live):
         public = path.rstrip('/') != '/test-intake'
         wc = whatconverts_snippet(S) if public else ''
         extra = approved_head(S) if public else ''
+        gtml = gtm_loader(S) if public else ''
         gtm_ns = gtm_noscript(S) if public else ''
         px = pixels_script(S) if public else ''
-        doc = f'''<!doctype html><html lang="en"><head>{robots}<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{wc}{extra}<title>{esc(title)}</title><meta name="description" content="{esc(desc)}"><link rel="icon" href="/favicon.png"><link rel="canonical" href="{esc(canon)}">{''.join(og)}<style>{CSS}</style>
+        doc = f'''<!doctype html><html lang="en"><head>{robots}<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{wc}{extra}{gtml}<title>{esc(title)}</title><meta name="description" content="{esc(desc)}"><link rel="icon" href="/favicon.png"><link rel="canonical" href="{esc(canon)}">{''.join(og)}<style>{CSS}</style>
 {scripts}</head><body>{gtm_ns}{px}{banner}
 <header class="top"><div class="wrap hd"><a href="/" class="logo"><img src="{S["logo"]}" alt="{logo_alt}" fetchpriority="high"></a><nav>{navl}</nav><a class="btn btn-call" href="tel:{TEL}">📞 {PH}</a></div><nav class="mnav" aria-label="Sections"><a href="/how-it-works/">How It Works</a><a href="/reviews/">Reviews</a><a href="/faq/">FAQ</a></nav></header>
 <main>{body}</main>

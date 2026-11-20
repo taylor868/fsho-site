@@ -69,7 +69,7 @@ Status key:
 | 57 | Popups / exit-intent / sticky bars | Covered (sticky) / Drop (popups) | Mobile sticky Call/Offer bar built in; no popups. |
 | 58 | Live chat widget | Drop | Not used; heavy third-party script. |
 | 59 | A/B split testing | Drop | Not used; revisit via Ads experiments if needed. |
-| 60 | Legal pages (privacy, terms, SMS terms) | Covered | Verbatim old-site copy on `/privacy/`, `/terms-conditions/`, and `/text-messaging-terms/`. Website line is https://fsho.co/. Phone is (910) 636-6669. SMS help email is offer@fairandsimplehomeoffer.com. |
+| 60 | Legal pages (privacy, terms, SMS terms) | Covered | Verbatim old-site copy on `/privacy/`, `/terms-conditions/`, and `/text-messaging-terms/`. Website line is https://fsho.co/. Phone is (910) 636-6669. SMS help email is offer@fsho.co. |
 | 61 | 404 page | Covered | `content/pages/404.md` builds to `dist/404.html` (noindex) with a home link and a get-offer CTA. `dist/_redirects` ends with `/* /404.html 404`. |
 | 62 | Multiple sites (FSHO + Motivated House Sellers) | Schema + Sentinel | Add `sites/<site>/content/` support (`gen.py --site`); Sentinel site switcher. Second site out of scope until asked. |
 | 63 | User roles (owner/editor) | Sentinel | Sentinel console login/roles (Andrew = editor, Taylor = publisher). |
