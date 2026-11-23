@@ -717,7 +717,7 @@ cta_label: "Page specific heading"
 
 
     def test_consent_guard_fails_a_form_without_required_consent(self):
-        good = ('<form id="x"><label class="consent" data-consent-size="8"><input type="checkbox" name="consent" required aria-describedby="consent-err">'
+        good = ('<form id="x"><label class="consent" data-consent-size="12"><input type="checkbox" name="consent" required aria-describedby="consent-err">'
                 '<small>Text. Address suggestions are powered by Google Maps; <a href="https://policies.google.com/terms">T</a> <a href="https://policies.google.com/privacy">P</a></small></label>'
                 '<p class="consent-err" id="consent-err" role="alert"></p></form>')
         self.assertEqual(gen.form_consent_problems(good), [])
@@ -725,6 +725,9 @@ cta_label: "Page specific heading"
         self.assertTrue(gen.form_consent_problems(good.replace(' required', '')))
         self.assertTrue(gen.form_consent_problems(good.replace(' required', ' required checked')))
         self.assertTrue(gen.form_consent_problems(good.replace('https://policies.google.com/privacy', '/privacy/')))
+        self.assertTrue(gen.consent_font_problems('<style>label.consent{font-size:8px}</style>'))
+        self.assertTrue(gen.consent_font_problems('<style>#ts-form label.consent small{font-size:.5rem}</style>'))
+        self.assertEqual(gen.consent_font_problems('<style>label.consent{font-size:.75rem}label.consent small{font-size:1em}</style>'), [])
         self.build(live=False)
         for fp in Path(gen.OUT).rglob('*.html'):
             self.assertEqual(gen.form_consent_problems(fp.read_text(encoding='utf-8')), [], str(fp))
@@ -777,7 +780,7 @@ cta_label: "Page specific heading"
             self.assertIn('class="mnav"', html, name)
             self.assertIn(phone, html, name)
             # Taylor, Nov 22, 2026: the consent box is required on every form, never pre-checked, and names Google Maps.
-            box = re.search(r'<label class="consent" data-consent-size="8"><input type="checkbox" name="consent" required aria-describedby="consent-err">(.*?)</label>', html)
+            box = re.search(r'<label class="consent" data-consent-size="12"><input type="checkbox" name="consent" required aria-describedby="consent-err">(.*?)</label>', html)
             self.assertIsNotNone(box, name)
             self.assertNotIn('checked', box.group(0).split('<small>')[0], name)
             self.assertIn('Address suggestions are powered by Google Maps', box.group(0), name)
@@ -790,7 +793,9 @@ cta_label: "Page specific heading"
             self.assertIn('href="/privacy/"', box.group(0), name)
             self.assertNotIn('font-size:7px', html, name)
             self.assertNotIn('font-size:7.5px', html, name)
-            self.assertIn('font-size:8px', html, name)
+            self.assertIn('font-size:.75rem;line-height:1.45', html, name)
+            self.assertNotIn('font-size:8px', html, name)
+            self.assertEqual(gen.consent_font_problems(html), [], name)
             self.assertIn('<title>', html, name)
             self.assertNotIn('&amp;', re.search(r'<title>.*?</title>', html).group(0), name)
             self.assertNotIn('&amp;', re.search(r'property="og:title" content="[^"]*"', html).group(0), name)
@@ -896,7 +901,7 @@ cta_label: "Page specific heading"
             self.assertNotIn('class="ph"', html)
         test_page = (Path(gen.OUT) / 'test-intake' / 'index.html').read_text(encoding='utf-8')
         self.assertNotIn('data-public="1"', test_page)
-        test_box = re.search(r'<label class="consent" data-consent-size="8"><input type="checkbox" name="consent" required aria-describedby="consent-err">', test_page)
+        test_box = re.search(r'<label class="consent" data-consent-size="12"><input type="checkbox" name="consent" required aria-describedby="consent-err">', test_page)
         self.assertIsNotNone(test_box)
         self.assertNotIn('checked', test_box.group(0))
         self.assertIn(disclosure, test_page)
@@ -907,7 +912,7 @@ cta_label: "Page specific heading"
         preview_test = (Path(gen.OUT) / 'test-intake' / 'index.html').read_text(encoding='utf-8')
         self.assertNotIn('?consent-size', home)
         self.assertNotIn('consent-sizes', home)
-        self.assertIn('data-consent-size="8"', home)
+        self.assertIn('data-consent-size="12"', home)
         self.assertIn('data-public="1"', home)
         self.assertIn('id="ts-form"', preview_test)
         self.assertIn("<title>This page isn't in use | Fair and Simple Home Offer</title>", preview_test)
@@ -925,7 +930,7 @@ cta_label: "Page specific heading"
         self.assertNotIn('?consent-size', prod)
         self.assertNotIn('consent-sizes', prod)
         self.assertIn('data-public="1"', prod)
-        self.assertIn('data-consent-size="8"', prod)
+        self.assertIn('data-consent-size="12"', prod)
         self.assert_ownership_label(prod)
         self.assertNotIn('id="ts-form"', prod_test)
         self.assert_unused_test_page(prod_test)

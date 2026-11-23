@@ -811,11 +811,28 @@ def form_consent_problems(raw):
         if 'class="consent-err"' not in body: out.append(f'{tag}: consent error message slot is missing')
     return out
 
+MIN_CONSENT_PX = 12
+
+def consent_font_problems(raw):
+    """Consent text must be at least 12px: every CSS rule aimed at label.consent (or its small) that sets a font-size."""
+    out = []
+    css = ''.join(re.findall(r'<style[^>]*>(.*?)</style>', raw, re.S))
+    for sel, body in re.findall(r'([^{}]*)\{([^{}]*)\}', css):
+        if 'label.consent' not in sel: continue
+        m = re.search(r'font-size:\s*([0-9.]+)(px|rem|em)', body)
+        if not m: continue
+        n, unit = float(m.group(1)), m.group(2)
+        if unit == 'em' and n >= 1: continue  # inherits the label size
+        px = n * 16 if unit in ('rem', 'em') else n
+        if px < MIN_CONSENT_PX: out.append(f'consent text is {m.group(0)} in "{sel.strip()[-60:]}" (minimum {MIN_CONSENT_PX}px)')
+    return out
+
 def check_forms():
     """Build guard: fails if any generated page has a form without the required consent box."""
     bad = []
     for fp in sorted(glob.glob(os.path.join(OUT, '**', '*.html'), recursive=True)):
-        for problem in form_consent_problems(open(fp, encoding='utf-8').read()):
+        raw = open(fp, encoding='utf-8').read()
+        for problem in form_consent_problems(raw) + (consent_font_problems(raw) if '<form' in raw else []):
             bad.append(os.path.relpath(fp, OUT) + ': ' + problem)
     if bad:
         raise SystemExit('consent guard failed:\n' + '\n'.join(bad))
@@ -962,7 +979,7 @@ def build(site, pages, markets, redirects, live):
         return f'<script>window.FSHO_DEPLOY_CONTEXT="{ctx}";window.FSHO_USE_REAL_ADAPTER="{real_flag}";</script><script>{src}</script>'
     def consent_label():
         # The one consent checkbox every form uses. Required, never pre-checked; check_forms() fails the build without it.
-        return (f'<label class="consent" data-consent-size="8"><input type="checkbox" name="consent" required aria-describedby="consent-err">'
+        return (f'<label class="consent" data-consent-size="12"><input type="checkbox" name="consent" required aria-describedby="consent-err">'
                 f'<small>{S.get("consent") or ""} {S.get("consent_google") or ""} <a href="/text-messaging-terms/">Text Terms</a> · <a href="/privacy/">Privacy</a></small></label>'
                 '<p class="consent-err" id="consent-err" role="alert"></p>')
     def two_stage_assets():
