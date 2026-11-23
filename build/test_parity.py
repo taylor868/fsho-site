@@ -1429,6 +1429,133 @@ cta_label: "Page specific heading"
         self.assertEqual(home.count('ns.html?id=GTM-TM6JSDLB'), 1)
         self.assertIn('/.netlify/functions/intake-producer', home)
 
+    # ---- GEO technical batch ----
+    CITY = """---
+state: North Carolina
+city: Testville
+slug: sell-your-house-fast-in-testville-nc
+title: "Sell a House in Testville | Fair & Simple Home Offer"
+meta_description: "Test meta."
+headline: "Test headline"
+hero_sub: "Test sub"
+answer: "Direct answer here."
+%s
+faq:
+  - q: "First local question?"
+    a: "First local answer."
+  - q: "Second local question?"
+    a: "Second local answer."
+---
+"""
+
+    def test_geo_schema_defaults_omit_empty_entity_fields(self):
+        self.build(live=False)
+        out = Path(gen.OUT)
+        home = ld_blocks((out / 'index.html').read_text(encoding='utf-8'))
+        agent = next(b for b in home if b['@type'] == 'RealEstateAgent')
+        self.assertEqual(agent['@id'], 'https://fsho.co/#business')
+        for k in ('sameAs', 'areaServed', 'address'):
+            self.assertNotIn(k, agent)
+        svc = next(b for b in home if b['@type'] == 'Service')
+        self.assertEqual(svc['provider'], {'@id': 'https://fsho.co/#business'})
+        self.assertNotIn('areaServed', svc)
+        crumbs = next(b for b in home if b['@type'] == 'BreadcrumbList')
+        self.assertEqual([i['name'] for i in crumbs['itemListElement']], ['Home'])
+        nc = ld_blocks((out / 'sell-your-house-fast-in-north-carolina/index.html').read_text(encoding='utf-8'))
+        crumbs = next(b for b in nc if b['@type'] == 'BreadcrumbList')
+        self.assertEqual([i['position'] for i in crumbs['itemListElement']], [1, 2, 3])
+        self.assertEqual(next(b for b in nc if b['@type'] == 'Service')['areaServed'], [{'@type': 'State', 'name': 'North Carolina'}])
+        contact = ld_blocks((out / 'contact-us/index.html').read_text(encoding='utf-8'))
+        self.assertFalse([b for b in contact if b['@type'] == 'Service'])
+        self.assertTrue([b for b in contact if b['@type'] == 'BreadcrumbList'])
+        ti = (out / 'test-intake/index.html').read_text(encoding='utf-8')
+        self.assertNotIn('BreadcrumbList', ti)
+
+    def test_entity_fields_are_wired_when_set(self):
+        sj = self.root / 'content' / 'site.json'
+        site = json.loads(sj.read_text(encoding='utf-8'))
+        site['entity'] = {'same_as': ['https://example.com/profile'], 'area_served': ['Wake County'], 'address': {'addressLocality': 'Raleigh', 'addressRegion': 'NC'}}
+        sj.write_text(json.dumps(site), encoding='utf-8')
+        self.build(live=False)
+        home = ld_blocks((Path(gen.OUT) / 'index.html').read_text(encoding='utf-8'))
+        agent = next(b for b in home if b['@type'] == 'RealEstateAgent')
+        self.assertEqual(agent['sameAs'], ['https://example.com/profile'])
+        self.assertEqual(agent['areaServed'], [{'@type': 'Place', 'name': 'Wake County'}])
+        self.assertEqual(agent['address'], {'@type': 'PostalAddress', 'addressLocality': 'Raleigh', 'addressRegion': 'NC'})
+        self.assertEqual(next(b for b in home if b['@type'] == 'Service')['areaServed'], [{'@type': 'Place', 'name': 'Wake County'}])
+
+    def test_entity_fields_reject_bad_values(self):
+        sj = self.root / 'content' / 'site.json'
+        site = json.loads(sj.read_text(encoding='utf-8'))
+        site['entity'] = {'same_as': ['http://insecure.example'], 'address': {'streetAddress': '1 Main St'}}
+        sj.write_text(json.dumps(site), encoding='utf-8')
+        site, pages, markets, redirects, errs = self.load()
+        errors, _ = gen.check(site, pages, markets, redirects, errs)
+        self.assertTrue(any('same_as' in e for e in errors), errors)
+        self.assertTrue(any('addressLocality' in e for e in errors), errors)
+
+    def test_sitemap_is_valid_xml_with_lastmod_and_no_invented_dates(self):
+        import xml.etree.ElementTree as ET
+        orig = gen.git_lastmod
+        try:
+            gen.git_lastmod = lambda rel: '2026-01-02'
+            self.build(live=False)
+            ns = {'s': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
+            root = ET.parse(Path(gen.OUT) / 'sitemap.xml').getroot()
+            rows = root.findall('s:url', ns)
+            self.assertGreater(len(rows), 10)
+            for r in rows:
+                self.assertEqual(r.find('s:lastmod', ns).text, '2026-01-02')
+            gen.git_lastmod = lambda rel: None
+            self.build(live=False)
+            root = ET.parse(Path(gen.OUT) / 'sitemap.xml').getroot()
+            self.assertEqual(root.findall('.//s:lastmod', ns), [])
+        finally:
+            gen.git_lastmod = orig
+
+    def test_city_template_draft_is_hidden_live_and_published_city_is_complete(self):
+        self.write('content/cities/testville.md', self.CITY % 'draft: true')
+        self.build(live=True)
+        out = Path(gen.OUT)
+        self.assertFalse((out / 'sell-your-house-fast-in-testville-nc').exists())
+        self.assertNotIn('testville', (out / 'sitemap.xml').read_text(encoding='utf-8'))
+        self.assertNotIn('Testville', (out / 'sell-your-house-fast-in-north-carolina/index.html').read_text(encoding='utf-8'))
+        self.write('content/cities/testville.md', self.CITY % '')
+        self.build(live=True)
+        doc = (out / 'sell-your-house-fast-in-testville-nc/index.html').read_text(encoding='utf-8')
+        self.assertEqual(gen.form_consent_problems(doc), [])
+        self.assertIn('id="ts-form"', doc)
+        self.assertIn('Direct answer here.', doc)
+        self.assertNotIn('noindex', doc)
+        blocks = ld_blocks(doc)
+        faq = next(b for b in blocks if b['@type'] == 'FAQPage')
+        self.assertEqual(len(faq['mainEntity']), 2)
+        crumbs = next(b for b in blocks if b['@type'] == 'BreadcrumbList')
+        self.assertEqual([i['name'] for i in crumbs['itemListElement']], ['Home', 'Where We Buy Houses', 'North Carolina', 'Testville'])
+        self.assertIn('/sell-your-house-fast-in-testville-nc/', (out / 'sitemap.xml').read_text(encoding='utf-8'))
+        nc = (out / 'sell-your-house-fast-in-north-carolina/index.html').read_text(encoding='utf-8')
+        self.assertIn('<a href="/sell-your-house-fast-in-testville-nc/">Testville</a>', nc)
+        self.assertEqual(doc.count('ns.html?id=GTM-TM6JSDLB'), 1)
+        self.assertNotIn('GTM-WWPBQGDZ', doc)
+        self.assertEqual(doc.count('176490'), 1)
+
+    def test_published_city_with_placeholder_or_thin_faq_fails_the_build_check(self):
+        self.write('content/cities/testville.md', (self.CITY % '').replace('Direct answer here.', '[PLACEHOLDER] answer'))
+        site, pages, markets, redirects, errs = self.load()
+        errors, _ = gen.check(site, pages, markets, redirects, errs)
+        self.assertTrue(any('PLACEHOLDER' in e for e in errors), errors)
+        self.write('content/cities/testville.md', (self.CITY % '').replace('North Carolina', 'Narnia'))
+        site, pages, markets, redirects, errs = self.load()
+        errors, _ = gen.check(site, pages, markets, redirects, errs)
+        self.assertTrue(any('no page in content/markets' in e for e in errors), errors)
+
+    def test_llms_txt_lists_key_pages_without_drafts(self):
+        self.build(live=True)
+        llms = (Path(gen.OUT) / 'llms.txt').read_text(encoding='utf-8')
+        for frag in ('## Key pages', 'https://fsho.co/faq/', 'https://fsho.co/how-it-works/', 'Phone: (910) 636-6669', 'Sitemap: https://fsho.co/sitemap.xml'):
+            self.assertIn(frag, llms)
+        self.assertNotIn('example-city', llms)
+
 
 def home_h1(html):
     return re.search(r'<h1>(.*?)</h1>', html).group(1)

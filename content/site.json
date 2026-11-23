@@ -24,6 +24,12 @@
   "gtm_id": "GTM-TM6JSDLB",
   "clickcease_id": "",
   "tracking": false,
+  "entity": {
+    "_note": "Optional facts for the site's schema.org entity. All EMPTY on purpose: anything left empty is omitted from the page markup, so nothing is guessed. same_as = list of https profile URLs the business owns (Google Business Profile, Facebook, BBB). area_served = list of place names, e.g. cities or counties. address = {streetAddress, addressLocality, addressRegion, postalCode}; leave {} for a service-area business that does not publish an address. Fill these only with details the owner has confirmed.",
+    "same_as": [],
+    "area_served": [],
+    "address": {}
+  },
   "places": {
     "_note": "Address lookup on the seller form's address field (build/addr.js). api_key is a Google Maps Platform browser key with Places API (New) only, restricted to fsho.co referrers. Empty = off: the field is a plain text input exactly like before. Deploy previews (never production) can try a keyless OpenStreetMap demo with ?addrdemo=1. The lookup only fills the address text; the payload, GTM events, and WhatConverts are unchanged.",
     "api_key": "AIzaSyD1pRurKZiEm1KiP_HcOvfNs8y7wv5asSg"

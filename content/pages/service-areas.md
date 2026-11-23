@@ -1,6 +1,6 @@
 ---
 title: "Where We Buy Houses | Fair & Simple Home Offer"
-meta_description: "States where we buy houses."
+meta_description: "See the states where Fair & Simple Home Offer buys houses as-is. Pick your state and ask for a no-obligation cash offer. Call (910) 636-6669."
 template: basic
 noindex: false
 ---

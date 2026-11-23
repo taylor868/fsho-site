@@ -1,6 +1,6 @@
 ---
-title: "Reviews | Fair & Simple Home Offer"
-meta_description: "Reviews from homeowners who sold to Fair & Simple Home Offer."
+title: "Seller Reviews | Fair & Simple Home Offer"
+meta_description: "Read what homeowners say about Fair & Simple Home Offer, with links to our Google, Facebook and BBB profiles and seller video testimonials."
 template: basic
 noindex: false
 ---
