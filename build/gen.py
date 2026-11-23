@@ -748,12 +748,56 @@ def guard_test_page():
     if total > 100 * 1024 or requests >= 10:
         raise SystemExit(f'test-intake budget: {total} bytes, {requests} requests (limit 100KB and under 10 requests)')
 
+ADDR_KEY_RE = r'AIza[0-9A-Za-z_-]{35}'
+
+def check_places(site, E):
+    pl = site.get('places')
+    if pl is None: return
+    if not isinstance(pl, dict): E.append('content/site.json: places must be an object'); return
+    key = pl.get('api_key', '')
+    if not isinstance(key, str) or (key and not re.fullmatch(ADDR_KEY_RE, key)):
+        E.append('content/site.json: places.api_key must be empty or a Google browser API key (AIza...)')
+    try:
+        sb = json.load(open(os.path.join(C, 'state_bounds.json'), encoding='utf-8')).get('states', {})
+    except Exception as e:
+        E.append(f'content/state_bounds.json: {e}'); return
+    for name, box in sb.items():
+        if not (isinstance(box, list) and len(box) == 4 and all(isinstance(x, (int, float)) for x in box) and box[0] < box[2]):
+            E.append(f'content/state_bounds.json: {name} must be [south, west, north, east]')
+
+def state_bias(state):
+    """'s,w,n,e' for a state lander, or '' when the state is not in content/state_bounds.json."""
+    try:
+        box = json.load(open(os.path.join(C, 'state_bounds.json'), encoding='utf-8')).get('states', {}).get(state)
+    except Exception:
+        return ''
+    return ','.join(str(x) for x in box) if box else ''
+
+def addr_src():
+    return re.sub(r'\n[ \t]+', '\n', open(os.path.join(B, 'addr.js'), encoding='utf-8').read().strip()) + '\n'
+
+def addr_boot(site, live, bias=''):
+    """Inline loader for build/addr.js. Loads the lookup only on the first focus or tap of the
+    address field. With no api_key, and outside a ?addrdemo=1 deploy preview, it does nothing."""
+    import hashlib
+    key = ((site.get('places') or {}).get('api_key') or '').strip()
+    demo = deploy_context(live) != 'production'
+    if not key and not demo:
+        return ''
+    ver = hashlib.sha1(addr_src().encode('utf-8')).hexdigest()[:10]
+    cfg = json.dumps({'key': key, 'demo': demo, 'bias': bias}, separators=(',', ':')).replace('</', '<\\/')
+    return ('<script>(function(d,w){var c=' + cfg + ';c.demo=c.demo&&/[?&]addrdemo=1(&|$)/.test(location.search);'
+            'if(!c.key&&!c.demo)return;w.FSHO_ADDR=c;var i=d.querySelector(\'#ts-form input[name="address"]\');if(!i)return;'
+            'function go(){if(w.__fshoAddr)return;w.__fshoAddr=1;var s=d.createElement("script");s.async=true;s.src="/addr.js?v=' + ver + '";d.head.appendChild(s)}'
+            'i.addEventListener("focus",go,{once:true});i.addEventListener("pointerdown",go,{once:true,passive:true})})(document,window)</script>')
+
 def check(site, pages, markets, redirects, errs):
     E = list(errs) + check_qualifier(site.get('_qualifier'))
     W = []
     for k in ['company', 'phone', 'tel', 'email', 'domain', 'brand', 'nav', 'footer', 'trust_badges', 'faq', 'situations', 'steps', 'comparison', 'testimonials', 'cta']:
         if k not in site: E.append(f'content/site.json: missing "{k}"')
     check_whatconverts(site, E)
+    check_places(site, E)
     check_pixels(site, E)
     for c in ('orange', 'navy'):
         if not re.fullmatch(r'#[0-9A-Fa-f]{6}', str(site.get('brand', {}).get(c, ''))): E.append(f'content/site.json: brand.{c} must be #RRGGBB')
@@ -989,7 +1033,7 @@ def build(site, pages, markets, redirects, live):
     def cta(h=None, href='#offer'):
         # href is #offer on pages that render the hero form, and /#offer everywhere else.
         c = S['cta']; return f'<section class="band"><div class="wrap"><h2>{h or c["heading"]}</h2><p>{c["text"]}</p><a class="btn btn-o" href="{href}">{c["button"]}</a> <a class="btn btn-w" href="tel:{TEL}">Call {PH}</a></div></section>'
-    def public_intake():
+    def public_intake(bias=''):
         ctx, real_flag, src = two_stage_assets()
         return (
             '<div class="lead" id="two-stage"><div id="ts-app" data-public="1"><form id="ts-form" action="#" method="post">'
@@ -1006,10 +1050,10 @@ def build(site, pages, markets, redirects, live):
             '<h2 id="ts-trace-title" hidden>Step trace</h2>'
             '<p id="ts-summary" hidden data-google="not-loaded" data-downstream="" data-priority=""></p>'
             '<p id="ts-events" hidden></p><ol id="ts-trace" hidden></ol></div>'
-            + stage_boot(ctx, real_flag, src) + '</div>'
+            + stage_boot(ctx, real_flag, src) + addr_boot(S, live, bias) + '</div>'
         )
-    def hero(h, sub, intake=False):
-        panel = public_intake() if intake else form()
+    def hero(h, sub, intake=False, bias=''):
+        panel = public_intake(bias) if intake else form()
         return f'<section class="hero" id="offer"><div class="wrap hg"><div><p class="eyebrow">{S["hero_eyebrow"]}</p><h1>{h}</h1><p class="lede">{sub}</p>{trust}</div>{panel}</div></section>'
     sits = '<div class="grid3">' + ''.join(f'<div class="card"><div class="ic">{x["icon"]}</div><h3>{x["title"]}</h3><p>{x["text"]}</p></div>' for x in S['situations']) + '</div>'
     steps = '<div class="grid3 steps">' + ''.join(f'<div class="card"><b>{x["n"]}</b><h3>{x["title"]}</h3><p>{x["text"]}</p></div>' for x in S['steps']) + '</div>'
@@ -1143,7 +1187,7 @@ def build(site, pages, markets, redirects, live):
         note = (m.get('local_note') or '').strip()
         if note.startswith('[PLACEHOLDER'): note = ''
         local_html = f'<div class="ph">{note}</div>' if note else ''
-        body = (hero(m['headline'], m['hero_sub'], intake=True) + f'<section class="wrap pad"><div class="qual">{S["qualifier"]}</div><h2 class="c">Common reasons {s} homeowners call us</h2>{sits}{cities}</section>'
+        body = (hero(m['headline'], m['hero_sub'], intake=True, bias=state_bias(m['state'])) + f'<section class="wrap pad"><div class="qual">{S["qualifier"]}</div><h2 class="c">Common reasons {s} homeowners call us</h2>{sits}{cities}</section>'
                 + f'<section class="alt"><div class="wrap pad"><h2 class="c">How it works in {s}</h2>{steps}<p class="c"><a href="/faq/">Questions about selling? Read the FAQ.</a></p></div></section>'
                 + f'<section class="wrap pad">{testis(m.get("testimonials") or S["testimonials"])}{local_html}</section>' + cta(m.get('cta_label'), '#offer'))
         page(path, m['title'], m['meta_description'], body, bool(m.get('noindex', False) or m.get('draft')),
@@ -1173,6 +1217,7 @@ def build(site, pages, markets, redirects, live):
     for fp in glob.glob(os.path.join(C, 'media', '*')):
         if os.path.basename(fp) == 'media.json': continue
         shutil.copy(fp, OUT)
+    open(os.path.join(OUT, 'addr.js'), 'w', encoding='utf-8').write(addr_src())
     guard_test_page()
     return built, skipped, drafts_in
 
