@@ -225,7 +225,7 @@ def check_faq_content(site, E):
             E.append(f'content/site.json: faq_answers.{key} is not used by a question')
 
 ENTITY_FIELDS = ('same_as', 'area_served', 'address')
-ADDRESS_KEYS = ('streetAddress', 'addressLocality', 'addressRegion', 'postalCode')
+ADDRESS_KEYS = ('streetAddress', 'addressLocality', 'addressRegion', 'postalCode', 'addressCountry')
 
 ENTITY_ID_SUFFIX = '/#business'
 
@@ -263,6 +263,14 @@ def git_lastmod(rel):
     except Exception:
         return None
     return out if re.fullmatch(r'\d{4}-\d{2}-\d{2}', out) else None
+
+def address_line(S):
+    """One-line visible address from site.json entity.address, or '' when none is set."""
+    a = entity_cfg(S)[2]
+    if not a.get('addressLocality') or not a.get('addressRegion'): return ''
+    first = ' '.join(x for x in (a.get('streetAddress'),) if x)
+    tail = ' '.join(x for x in (a['addressRegion'], a.get('postalCode')) if x)
+    return html.escape(', '.join(x for x in (first, a['addressLocality'], tail) if x))
 
 def short_title(title):
     return html.unescape(re.split(r'\s+\|\s+', str(title))[0]).strip()
@@ -1242,6 +1250,7 @@ def build(site, pages, markets, redirects, live):
             if k == 'step2_form': return step2()
             if k == 'qualifier_form': return qualifier_form()
             if k == 'test_intake': return test_intake()
+            if k == 'address': return (f'<section class="wrap pad"><h2 class="c">Our office</h2><p class="c"><address style="font-style:normal">{address_line(S)}</address></p></section>' if address_line(S) else '')
             if k == 'phone': return PH
             if k == 'tel': return TEL
             raise ValueError(f'unknown shortcode {{{{{k}}}}}')
@@ -1321,11 +1330,12 @@ def build(site, pages, markets, redirects, live):
         gtml = gtm_loader(S) if public else ''
         gtm_ns = gtm_noscript(S) if public else ''
         px = pixels_script(S) if public else ''
+        foot_addr = f'<div class="contact"><address style="font-style:normal">{address_line(S)}</address></div>' if address_line(S) and public else ''
         doc = f'''<!doctype html><html lang="en"><head>{robots}<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{wc}{extra}{gtml}<title>{esc(title)}</title><meta name="description" content="{esc(desc)}"><link rel="icon" href="/favicon.png"><link rel="canonical" href="{esc(canon)}">{''.join(og)}<style>{CSS}</style>
 {scripts}</head><body>{gtm_ns}{px}{banner}
 <header class="top"><div class="wrap hd"><a href="/" class="logo"><img src="{S["logo"]}" alt="{logo_alt}" fetchpriority="high"></a><nav>{navl}</nav><a class="btn btn-call" href="tel:{TEL}">📞 {PH}</a></div><nav class="mnav" aria-label="Sections"><a href="/how-it-works/">How It Works</a><a href="/reviews/">Reviews</a><a href="/faq/">FAQ</a></nav></header>
 <main>{body}</main>
-<footer class="ft"><div class="wrap fg"><div><img src="{S["logo"]}" alt="" class="inv" loading="lazy"><p>{S["footer"]["about"]}</p><p class="contact"><a href="tel:{TEL}">{PH}</a> · call or text · <a class="mail" href="mailto:{EMAIL}">Email {EMAIL}</a></p></div>
+<footer class="ft"><div class="wrap fg"><div><img src="{S["logo"]}" alt="" class="inv" loading="lazy"><p>{S["footer"]["about"]}</p><p class="contact"><a href="tel:{TEL}">{PH}</a> · call or text · <a class="mail" href="mailto:{EMAIL}">Email {EMAIL}</a></p>{foot_addr}</div>
 <div><strong>Company</strong>{navl}{''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S["footer"]["company_extra"])}</div>
 <div><strong>Legal</strong>{''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S["footer"]["legal"])}</div></div><p class="wrap copy">{S["footer"]["copyright"]}</p></footer>
 <a class="sticky" href="tel:{TEL}">📞 Call Now</a><a class="sticky s2b" href="{offer_href}">Get Offer</a>

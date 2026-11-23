@@ -735,7 +735,7 @@ cta_label: "Page specific heading"
     def test_public_two_stage_consent_profiles_and_sotellus(self):
         google = 'https://share.google/xhED38I3oGqYAQE21'
         facebook = 'https://www.facebook.com/profile.php?id=61581144807978'
-        bbb = 'https://www.bbb.org/us/mi/rockford/profile/real-estate-investing/fair-and-simple-home-offer-0372-38321834'
+        bbb = 'https://www.bbb.org/us/mi/grand-rapids/profile/real-estate-investing/fair-and-simple-home-offer-0372-38321834'
         bbb_reviews = bbb + '/customer-reviews'
         link = 'target="_blank" rel="noopener noreferrer"'
         disclosure = 'Reply STOP to opt out, HELP for help.'
@@ -1449,6 +1449,10 @@ faq:
 """
 
     def test_geo_schema_defaults_omit_empty_entity_fields(self):
+        sj = self.root / 'content' / 'site.json'
+        site = json.loads(sj.read_text(encoding='utf-8'))
+        site['entity'] = {'same_as': [], 'area_served': [], 'address': {}}
+        sj.write_text(json.dumps(site), encoding='utf-8')
         self.build(live=False)
         out = Path(gen.OUT)
         home = ld_blocks((out / 'index.html').read_text(encoding='utf-8'))
@@ -1483,6 +1487,20 @@ faq:
         self.assertEqual(agent['areaServed'], [{'@type': 'Place', 'name': 'Wake County'}])
         self.assertEqual(agent['address'], {'@type': 'PostalAddress', 'addressLocality': 'Raleigh', 'addressRegion': 'NC'})
         self.assertEqual(next(b for b in home if b['@type'] == 'Service')['areaServed'], [{'@type': 'Place', 'name': 'Wake County'}])
+
+    def test_site_entity_is_wired_and_address_is_visible(self):
+        self.build(live=False)
+        out = Path(gen.OUT)
+        agent = next(b for b in ld_blocks((out / 'index.html').read_text(encoding='utf-8')) if b['@type'] == 'RealEstateAgent')
+        self.assertEqual(agent['address']['postalCode'], '49505')
+        self.assertEqual(len(agent['sameAs']), 2)
+        line = '1971 E Beltline Ave NE Ste 106, Grand Rapids, MI 49505'
+        for rel in ('index.html', 'contact-us/index.html', 'reviews/index.html'):
+            self.assertIn(line, (out / rel).read_text(encoding='utf-8'), rel)
+        self.assertIn('Our office', (out / 'contact-us/index.html').read_text(encoding='utf-8'))
+        self.assertNotIn('<address', (out / 'test-intake/index.html').read_text(encoding='utf-8'))
+        for f in out.rglob('*.html'):
+            self.assertNotIn('/mi/rockford/', f.read_text(encoding='utf-8'), str(f))
 
     def test_entity_fields_reject_bad_values(self):
         sj = self.root / 'content' / 'site.json'

@@ -26,9 +26,18 @@
   "tracking": false,
   "entity": {
     "_note": "Optional facts for the site's schema.org entity. All EMPTY on purpose: anything left empty is omitted from the page markup, so nothing is guessed. same_as = list of https profile URLs the business owns (Google Business Profile, Facebook, BBB). area_served = list of place names, e.g. cities or counties. address = {streetAddress, addressLocality, addressRegion, postalCode}; leave {} for a service-area business that does not publish an address. Fill these only with details the owner has confirmed.",
-    "same_as": [],
+    "same_as": [
+      "https://www.bbb.org/us/mi/grand-rapids/profile/real-estate-investing/fair-and-simple-home-offer-0372-38321834",
+      "https://www.facebook.com/profile.php?id=61581144807978"
+    ],
     "area_served": [],
-    "address": {}
+    "address": {
+      "streetAddress": "1971 E Beltline Ave NE Ste 106",
+      "addressLocality": "Grand Rapids",
+      "addressRegion": "MI",
+      "postalCode": "49505",
+      "addressCountry": "US"
+    }
   },
   "places": {
     "_note": "Address lookup on the seller form's address field (build/addr.js). api_key is a Google Maps Platform browser key with Places API (New) only, restricted to fsho.co referrers. Empty = off: the field is a plain text input exactly like before. Deploy previews (never production) can try a keyless OpenStreetMap demo with ?addrdemo=1. The lookup only fills the address text; the payload, GTM events, and WhatConverts are unchanged.",
@@ -101,7 +110,7 @@
   },
   "trust_badges": [
     "<a class=\"badge\" href=\"https://share.google/xhED38I3oGqYAQE21\" target=\"_blank\" rel=\"noopener noreferrer\"><img src=\"/google-ratings.webp\" alt=\"5-star rated on Google\" width=\"195\" height=\"91\"></a>",
-    "<a class=\"badge\" href=\"https://www.bbb.org/us/mi/rockford/profile/real-estate-investing/fair-and-simple-home-offer-0372-38321834\" target=\"_blank\" rel=\"noopener noreferrer\"><img src=\"/bbb-white.webp\" alt=\"A+ BBB rating\" width=\"160\" height=\"112\"></a>",
+    "<a class=\"badge\" href=\"https://www.bbb.org/us/mi/grand-rapids/profile/real-estate-investing/fair-and-simple-home-offer-0372-38321834\" target=\"_blank\" rel=\"noopener noreferrer\"><img src=\"/bbb-white.webp\" alt=\"A+ BBB rating\" width=\"160\" height=\"112\"></a>",
     "<a class=\"badge\" href=\"https://www.facebook.com/profile.php?id=61581144807978\" target=\"_blank\" rel=\"noopener noreferrer\"><img src=\"/fb-white.webp\" alt=\"5-star rated on Facebook\" width=\"100\" height=\"46\"></a>"
   ],
   "hero_eyebrow": "Sell your house as-is · No fees · No repairs",
