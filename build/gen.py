@@ -1250,7 +1250,7 @@ def build(site, pages, markets, redirects, live):
             if k == 'step2_form': return step2()
             if k == 'qualifier_form': return qualifier_form()
             if k == 'test_intake': return test_intake()
-            if k == 'address': return (f'<section class="wrap pad"><h2 class="c">Our office</h2><p class="c"><address style="font-style:normal">{address_line(S)}</address></p></section>' if address_line(S) else '')
+            if k == 'address': return (f'<section class="wrap pad"><h2 class="c">Our office</h2><address class="c" style="font-style:normal;display:block">{address_line(S)}</address></section>' if address_line(S) else '')
             if k == 'phone': return PH
             if k == 'tel': return TEL
             raise ValueError(f'unknown shortcode {{{{{k}}}}}')
