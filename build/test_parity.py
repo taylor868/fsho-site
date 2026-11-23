@@ -735,7 +735,8 @@ cta_label: "Page specific heading"
         bbb = 'https://www.bbb.org/us/mi/rockford/profile/real-estate-investing/fair-and-simple-home-offer-0372-38321834'
         bbb_reviews = bbb + '/customer-reviews'
         link = 'target="_blank" rel="noopener noreferrer"'
-        disclosure = 'Consent isn\u2019t required to buy or sell'
+        disclosure = 'Reply STOP to opt out, HELP for help.'
+        removed = 'required to buy or sell'
         self.build(live=False)
         pages = {
             'index.html': Path(gen.OUT) / 'index.html',
@@ -784,6 +785,7 @@ cta_label: "Page specific heading"
             self.assertIn('href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer"', box.group(0), name)
             self.assertIn('<p class="consent-err" id="consent-err" role="alert"></p>', html, name)
             self.assertIn(disclosure, box.group(0), name)
+            self.assertNotIn(removed, html, name)
             self.assertIn('href="/text-messaging-terms/"', box.group(0), name)
             self.assertIn('href="/privacy/"', box.group(0), name)
             self.assertNotIn('font-size:7px', html, name)

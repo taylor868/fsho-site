@@ -849,8 +849,11 @@ def check(site, pages, markets, redirects, errs):
     if not re.fullmatch(r'\+1\d{10}', str(site.get('tel', ''))): E.append('content/site.json: tel must be +1XXXXXXXXXX')
     if not re.fullmatch(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}', str(site.get('email', ''))): E.append('content/site.json: email must be a plain address such as offer@fsho.co')
     consent = site.get('consent')
-    if not isinstance(consent, str) or 'Consent isn\u2019t required to buy or sell' not in consent or 'msg &amp; data rates' not in consent:
+    # Taylor, Nov 22, 2026: one required consent box; the "isn't required to buy or sell" sentence is removed.
+    if not isinstance(consent, str) or 'msg &amp; data rates' not in consent or 'STOP to opt out' not in consent:
         E.append('content/site.json: consent must keep the approved communication disclosure')
+    elif 'required to buy or sell' in consent:
+        E.append('content/site.json: consent is required on every form, so it must not say consent is not required')
     for f in site.get('faq', []):
         if not isinstance(f, dict) or not f.get('q') or not f.get('a'): E.append('content/site.json: faq item needs q and a')
     check_faq_content(site, E)
