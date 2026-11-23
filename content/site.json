@@ -26,7 +26,7 @@
   "tracking": false,
   "places": {
     "_note": "Address lookup on the seller form's address field (build/addr.js). api_key is a Google Maps Platform browser key with Places API (New) only, restricted to fsho.co referrers. Empty = off: the field is a plain text input exactly like before. Deploy previews (never production) can try a keyless OpenStreetMap demo with ?addrdemo=1. The lookup only fills the address text; the payload, GTM events, and WhatConverts are unchanged.",
-    "api_key": ""
+    "api_key": "AIzaSyD1pRurKZiEm1KiP_HcOvfNs8y7wv5asSg"
   },
   "whatconverts": {
     "enabled": true,
