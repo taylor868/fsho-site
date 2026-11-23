@@ -15,7 +15,7 @@ plus Netlify deploy-preview, branch-deploy, and netlify dev (CONTEXT). Live/prod
 (except those Netlify preview contexts, which still include drafts). Omit `draft` when
 published. Never write `draft: false`. The home page (empty slug) cannot be draft.
 """
-import os, re, sys, json, glob, shutil, html
+import os, re, sys, json, glob, shutil, html, subprocess
 
 def _scalar(v):
     v = v.strip()
@@ -223,6 +223,57 @@ def check_faq_content(site, E):
     for key in answers:
         if key not in seen:
             E.append(f'content/site.json: faq_answers.{key} is not used by a question')
+
+ENTITY_FIELDS = ('same_as', 'area_served', 'address')
+ADDRESS_KEYS = ('streetAddress', 'addressLocality', 'addressRegion', 'postalCode', 'addressCountry')
+
+ENTITY_ID_SUFFIX = '/#business'
+
+def entity_cfg(S):
+    """Optional entity facts from site.json "entity". Empty by default; anything empty is left out of the schema."""
+    e = S.get('entity') or {}
+    same = [u for u in (e.get('same_as') or []) if isinstance(u, str) and u.strip()]
+    area = [a for a in (e.get('area_served') or []) if isinstance(a, str) and a.strip()]
+    addr = e.get('address') or {}
+    addr = {k: addr[k].strip() for k in ADDRESS_KEYS if isinstance(addr.get(k), str) and addr[k].strip()} if isinstance(addr, dict) else {}
+    return same, area, addr
+
+def check_entity(site, E):
+    e = site.get('entity')
+    if e is None: return
+    if not isinstance(e, dict): E.append('content/site.json: entity must be an object'); return
+    for k in e:
+        if k != "_note" and k not in ENTITY_FIELDS: E.append(f'content/site.json: entity.{k} is not a known field ({", ".join(ENTITY_FIELDS)})')
+    for k in ('same_as', 'area_served'):
+        v = e.get(k, [])
+        if not isinstance(v, list) or any(not isinstance(x, str) for x in v): E.append(f'content/site.json: entity.{k} must be a list of strings')
+    for u in e.get('same_as') or []:
+        if isinstance(u, str) and u.strip() and not u.startswith('https://'): E.append(f'content/site.json: entity.same_as needs absolute https URLs: {u}')
+    a = e.get('address', {})
+    if not isinstance(a, dict): E.append('content/site.json: entity.address must be an object'); return
+    a = {k: v for k, v in a.items() if isinstance(v, str) and v.strip()}
+    for k in a:
+        if k not in ADDRESS_KEYS: E.append(f'content/site.json: entity.address.{k} is not a known field')
+    if a and not all(k in a for k in ('addressLocality', 'addressRegion')): E.append('content/site.json: entity.address needs at least addressLocality and addressRegion when used')
+
+def git_lastmod(rel):
+    """Date (YYYY-MM-DD) of the last commit that touched this file. None when git has no answer, so no lastmod is invented."""
+    try:
+        out = subprocess.run(['git', 'log', '-1', '--format=%cs', '--', rel], cwd=ROOT, capture_output=True, text=True, timeout=20).stdout.strip()
+    except Exception:
+        return None
+    return out if re.fullmatch(r'\d{4}-\d{2}-\d{2}', out) else None
+
+def address_line(S):
+    """One-line visible address from site.json entity.address, or '' when none is set."""
+    a = entity_cfg(S)[2]
+    if not a.get('addressLocality') or not a.get('addressRegion'): return ''
+    first = ' '.join(x for x in (a.get('streetAddress'),) if x)
+    tail = ' '.join(x for x in (a['addressRegion'], a.get('postalCode')) if x)
+    return html.escape(', '.join(x for x in (first, a['addressLocality'], tail) if x))
+
+def short_title(title):
+    return html.unescape(re.split(r'\s+\|\s+', str(title))[0]).strip()
 
 def ld_script(obj):
     raw = json.dumps(obj, ensure_ascii=False, separators=(',', ':')).replace('</', '<\\/')
@@ -464,6 +515,11 @@ def load_all():
     for fp in sorted(glob.glob(os.path.join(C, 'markets', '*.json'))):
         try: m = json.load(open(fp, encoding='utf-8')); m['_src'] = os.path.relpath(fp, ROOT); markets.append(m)
         except Exception as e: errs.append(f'{os.path.relpath(fp, ROOT)}: {e}')
+    cities = []
+    for fp in sorted(glob.glob(os.path.join(C, 'cities', '*.md'))):
+        try: c = load_page(fp); c['_src'] = os.path.relpath(fp, ROOT); cities.append(c)
+        except Exception as e: errs.append(f'{os.path.relpath(fp, ROOT)}: {e}')
+    site['_cities'] = cities
     redirects = json.load(open(os.path.join(C, 'redirects.json'), encoding='utf-8'))
     site['_qualifier'] = load_qualifier(errs)
     site['_media'] = load_media(errs)
@@ -827,6 +883,20 @@ def consent_font_problems(raw):
         if px < MIN_CONSENT_PX: out.append(f'consent text is {m.group(0)} in "{sel.strip()[-60:]}" (minimum {MIN_CONSENT_PX}px)')
     return out
 
+# The consent box is required on every form, so no copy may tell a seller it is optional or can be left blank.
+CONSENT_OPTIONAL_RE = re.compile(
+    r"do(?:es)? not have to (?:check|tick|agree)|don't have to (?:check|tick|agree)|does not block the form|doesn't block the form|"
+    r"consent (?:is|isn't|is not) (?:not )?(?:required|optional)(?! to buy| to sell| as a condition)|consent box (?:is|was) optional|optional consent|consent is optional|"
+    r"(?:leave|leaving|left) (?:it|the box) (?:blank|unchecked)|form still (?:submits|sends|works)", re.I)
+
+def consent_optional_hits(text):
+    t = re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]+>', ' ', text or '')))
+    hits = []
+    for m in CONSENT_OPTIONAL_RE.finditer(t):
+        # "Consent is not a condition of purchase" is the approved legal line and stays allowed.
+        hits.append(t[max(0, m.start() - 30):m.end() + 30].strip())
+    return hits
+
 def check_forms():
     """Build guard: fails if any generated page has a form without the required consent box."""
     bad = []
@@ -834,6 +904,12 @@ def check_forms():
         raw = open(fp, encoding='utf-8').read()
         for problem in form_consent_problems(raw) + (consent_font_problems(raw) if '<form' in raw else []):
             bad.append(os.path.relpath(fp, OUT) + ': ' + problem)
+    for fp in sorted(glob.glob(os.path.join(OUT, '**', '*.html'), recursive=True)) + [os.path.join(OUT, 'llms.txt')]:
+        if not os.path.isfile(fp): continue
+        raw = open(fp, encoding='utf-8').read()
+        raw = re.sub(r'<script(?![^>]*ld\+json)[^>]*>.*?</script>|<style[^>]*>.*?</style>', ' ', raw, flags=re.S)
+        for h in consent_optional_hits(raw):
+            bad.append(os.path.relpath(fp, OUT) + f': copy says consent is optional: "{h}"')
     if bad:
         raise SystemExit('consent guard failed:\n' + '\n'.join(bad))
 
@@ -876,6 +952,7 @@ def check(site, pages, markets, redirects, errs):
     check_faq_content(site, E)
     check_form1(site, E)
     check_reviews(site, E)
+    check_entity(site, E)
     slugs, titles = {}, {}
     for p in pages:
         for k in ('title', 'template'):
@@ -905,6 +982,25 @@ def check(site, pages, markets, redirects, errs):
         bad_can = check_seo(m['_src'], m, titles, W)
         if bad_can: E.append(bad_can)
         slugs.setdefault(m.get('slug', ''), []).append(m['_src'])
+    market_states = {m.get('state') for m in markets}
+    for c in site.get('_cities') or []:
+        src = c['_src']
+        for k in ('state', 'city', 'title', 'meta_description', 'headline', 'hero_sub', 'answer'):
+            if not c.get(k): E.append(f'{src}: missing "{k}"')
+        if c.get('state') and c['state'] not in market_states: E.append(f'{src}: state "{c["state"]}" has no page in content/markets/')
+        if c.get('template', 'city') != 'city': E.append(f'{src}: cities always use the city template; remove "template"')
+        if not isinstance(c.get('noindex', False), bool): E.append(f'{src}: noindex must be true/false')
+        check_draft(src, c, E)
+        bad_can = check_seo(src, c, titles, W)
+        if bad_can: E.append(bad_can)
+        if not re.fullmatch(r'[a-z0-9-]+', str(c.get('slug', ''))): E.append(f'{src}: bad slug "{c.get("slug")}"')
+        faq = c.get('faq') or []
+        for f in faq:
+            if not isinstance(f, dict) or not f.get('q') or not f.get('a'): E.append(f'{src}: faq items need q and a')
+        if c.get('draft') is not True:
+            if len(faq) < 2: E.append(f'{src}: a published city page needs at least 2 local FAQ items')
+            if '[PLACEHOLDER' in json.dumps(c, ensure_ascii=False): E.append(f'{src}: remove the [PLACEHOLDER] text before publishing')
+        slugs.setdefault(c.get('slug', ''), []).append(src)
     for s, srcs in slugs.items():
         if len(srcs) > 1: E.append(f'duplicate slug "/{s}/": ' + ', '.join(srcs))
     for r in redirects:
@@ -919,29 +1015,63 @@ def check(site, pages, markets, redirects, errs):
         if sz > MAX_IMG: E.append(f'content/media/{n}: {sz//1024} KB is over the 200 KB limit')
         if not n.lower().endswith('.webp') and n != 'favicon.png': E.append(f'content/media/{n}: images must be .webp (favicon.png is the only exception)')
     check_media(site, pages, markets, E, W)
+    blobs = []
+    walk_text(site, blobs); walk_text([m for m in markets], blobs); walk_text([c for c in site.get('_cities') or []], blobs)
+    for p in pages: walk_text(p, blobs)
+    for b in blobs:
+        for h in consent_optional_hits(b): E.append(f'copy says consent is optional, but the consent box is required on every form: "{h}"')
     check_test_form(E)
     for title, srcs in titles.items():
         if len(srcs) > 1: W.append('duplicate title "%s": %s' % (title, ', '.join(srcs)))
     return E, W
 
 # ---------- rendering ----------
-def llms_text(S):
-    """Short AI-facing file. Description is the first sentence of the footer about blurb."""
+def llms_text(S, pages=(), markets=(), cities=()):
+    """AI-facing summary. Every line comes from site.json or the published pages; nothing is written here that the site does not say."""
     about = html.unescape(re.sub(r'<[^>]+>', '', S['footer']['about']))
-    desc = about.split('. ')[0].strip()
-    if desc and not desc.endswith('.'):
-        desc += '.'
-    return (
-        f"# {S['company']}\n\n"
-        f"> {desc}\n\n"
-        f"Site: {S['domain']}/\n"
-        f"Contact: {S['email']}\n"
-        f"Phone: {S['phone']}\n"
-    )
+    sents = [x.strip() for x in about.split('. ') if x.strip()]
+    desc = sents[0] if sents else ''
+    if desc and not desc.endswith('.'): desc += '.'
+    operator = next((x if x.endswith('.') else x + '.' for x in sents[1:] if 'operated by' in x), '')
+    dom = S['domain']
+    ph = S['phone']
+    def line(p):
+        d = html.unescape((p.get('meta_description') or '').replace('{{phone}}', ph)).strip()
+        return f"- [{short_title(p['title'])}]({dom}{p['path']}): {d}" if d else f"- [{short_title(p['title'])}]({dom}{p['path']})"
+    pub = [dict(p, path='/' if not p['slug'] else f'/{p["slug"]}/') for p in pages
+           if not p.get('draft') and not p.get('noindex') and p.get('sitemap', True) and p['slug'] not in SITEMAP_SKIP and p['slug'] != '404']
+    key_slugs = ['', 'how-it-works', 'faq', 'our-company', 'reviews', 'contact-us', 'service-areas']
+    by = {p['slug']: p for p in pub}
+    legal_slugs = ('privacy', 'terms-conditions', 'text-messaging-terms')
+    topic = [p for p in pub if p['slug'] not in key_slugs and p['slug'] not in legal_slugs]
+    out = [f"# {S['company']}", '', f"> {desc}", '']
+    if operator: out += [operator, '']
+    out += ['## What we do', '',
+            'Homeowners can ask for a no-obligation cash offer on a house, sold as-is, with no fees or commissions, closing on the seller\'s timeline. '
+            'We can also walk sellers through selling on the market. Submitting a form does not obligate anyone to sell.', '',
+            '## Key pages', '']
+    out += [line(by[k]) for k in key_slugs if k in by]
+    if topic:
+        out += ['', '## Situations and guides', ''] + [line(p) for p in topic]
+    live_markets = [m for m in markets if not m.get('draft') and not m.get('noindex')]
+    if live_markets:
+        out += ['', '## Where we buy', '',
+                f"- [Where we buy houses]({dom}/service-areas/): one page per state, {len(live_markets)} states in all, each at {dom}/sell-your-house-fast-in-<state>/"]
+    live_cities = [c for c in cities if not c.get('draft') and not c.get('noindex')]
+    if live_cities:
+        out += [f"- [{c['city']}, {c['state']}]({dom}/{c['slug']}/)" for c in live_cities]
+    out += ['', '## Contact', '', f"Site: {dom}/", f"Contact: {S['email']}", f"Phone: {ph} (call or text)", f"Sitemap: {dom}/sitemap.xml", '']
+    legal = [by[k] for k in legal_slugs if k in by]
+    if legal:
+        out += ['## Legal', ''] + [f"- [{short_title(p['title'])}]({dom}{p['path']})" for p in legal] + ['']
+    return '\n'.join(out)
 
 def build(site, pages, markets, redirects, live):
     S = site; PH, TEL = S['phone'], S['tel']; EMAIL = html.escape(S['email'], quote=True); preview = S.get('preview', True) and not live
     include_drafts = show_drafts(S, live)
+    ENTITY_ID = S['domain'] + ENTITY_ID_SUFFIX
+    cities = [c for c in (S.get('_cities') or []) if include_drafts or not c.get('draft')]
+    lastmods = {}
     media_idx = {it['file']: it for it in (S.get('_media') or []) if isinstance(it, dict) and it.get('file')}
     logo_info = media_idx.get(os.path.basename(str(S.get('logo') or '')))
     logo_alt = esc(logo_info['alt']) if logo_info and isinstance(logo_info.get('alt'), str) and logo_info['alt'].strip() else S['company_html']
@@ -1145,6 +1275,7 @@ def build(site, pages, markets, redirects, live):
             if k == 'step2_form': return step2()
             if k == 'qualifier_form': return qualifier_form()
             if k == 'test_intake': return test_intake()
+            if k == 'address': return (f'<section class="wrap pad"><h2 class="c">Our office</h2><address class="c" style="font-style:normal;display:block">{address_line(S)}</address></section>' if address_line(S) else '')
             if k == 'phone': return PH
             if k == 'tel': return TEL
             raise ValueError(f'unknown shortcode {{{{{k}}}}}')
@@ -1175,7 +1306,7 @@ def build(site, pages, markets, redirects, live):
         if src.startswith('http://') or src.startswith('https://'): return src
         if not src.startswith('/'): src = '/' + src
         return S['domain'] + src
-    def page(path, title, desc, body, noindex, canonical=None, og_title=None, og_image=None, faq_ld=None, file_rel=None, offer_href='#offer'):
+    def page(path, title, desc, body, noindex, canonical=None, og_title=None, og_image=None, faq_ld=None, file_rel=None, offer_href='#offer', crumbs=None, service=None):
         canon = canonical or (S['domain'] + path)
         robots = '<meta name="robots" content="noindex,nofollow">' if (preview or noindex) else ''
         banner = '<div style="background:#c00;color:#fff;text-align:center;font:700 13px system-ui;padding:4px">PREVIEW: not the live site. Form data is only logged, never sent.</div>' if preview else ''
@@ -1192,12 +1323,30 @@ def build(site, pages, markets, redirects, live):
         og += [f'<meta name="twitter:card" content="{card}">', f'<meta name="twitter:title" content="{esc(ot)}">', f'<meta name="twitter:description" content="{esc(desc)}">']
         # RealEstateAgent is a LocalBusiness and an Organization. Email and contactPoint
         # use the public phone and offer@ address already published on the site.
-        scripts = ld_script({"@context": "https://schema.org", "@type": "RealEstateAgent", "name": site_name, "legalName": S["legal_name"], "telephone": TEL, "email": S["email"], "url": S["domain"] + "/", "logo": S["domain"] + S["logo"], "contactPoint": {"@type": "ContactPoint", "contactType": "customer service", "telephone": TEL, "email": S["email"]}})
+        same_as, area_served, address = entity_cfg(S)
+        entity = {"@context": "https://schema.org", "@type": "RealEstateAgent", "name": site_name, "legalName": S["legal_name"], "telephone": TEL, "email": S["email"], "url": S["domain"] + "/", "logo": S["domain"] + S["logo"], "contactPoint": {"@type": "ContactPoint", "contactType": "customer service", "telephone": TEL, "email": S["email"]}}
+        # The /test-intake/ page has a hard 100 KB budget, so it never carries the optional entity facts.
+        if path.rstrip('/') == '/test-intake': address, area_served, same_as = {}, [], []
+        if path.rstrip('/') != '/test-intake': entity = dict(list(entity.items())[:2], **{"@id": ENTITY_ID}, **dict(list(entity.items())[2:]))
+        if address: entity["address"] = dict({"@type": "PostalAddress"}, **address)
+        if area_served: entity["areaServed"] = [{"@type": "Place", "name": a} for a in area_served]
+        if same_as: entity["sameAs"] = same_as
+        scripts = ld_script(entity)
         if faq_ld:
             scripts += ld_script({"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
                 {"@type": "Question", "name": html.unescape(f["q"]), "acceptedAnswer": {"@type": "Answer", "text": html.unescape(f["a"])}} for f in faq_ld]})
         # /test-intake/ is the noindex harness, not a public page. Redirect stubs are written later and stay excluded.
         public = path.rstrip('/') != '/test-intake'
+        if public and not file_rel:
+            trail = crumbs or ([('Home', '/')] + ([(short_title(title), path)] if path != '/' else []))
+            scripts += ld_script({"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
+                {"@type": "ListItem", "position": i, "name": n, "item": S['domain'] + u} for i, (n, u) in enumerate(trail, 1)]})
+            if service is not None:
+                svc = {"@context": "https://schema.org", "@type": "Service", "@id": canon + "#service", "name": "Cash offer for your house", "serviceType": "Cash home offer",
+                       "description": desc, "url": canon, "provider": {"@id": ENTITY_ID}}
+                where = service or [{"@type": "Place", "name": a} for a in area_served]
+                if where: svc["areaServed"] = where
+                scripts += ld_script(svc)
         wc = whatconverts_snippet(S) if public else ''
         # Form set for $wc_leads.track.form, only on public pages that carry the public form.
         if wc and wc_form_set(S) and 'data-public="1"' in body:
@@ -1206,11 +1355,12 @@ def build(site, pages, markets, redirects, live):
         gtml = gtm_loader(S) if public else ''
         gtm_ns = gtm_noscript(S) if public else ''
         px = pixels_script(S) if public else ''
+        foot_addr = f'<div class="contact"><address style="font-style:normal">{address_line(S)}</address></div>' if address_line(S) and public else ''
         doc = f'''<!doctype html><html lang="en"><head>{robots}<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{wc}{extra}{gtml}<title>{esc(title)}</title><meta name="description" content="{esc(desc)}"><link rel="icon" href="/favicon.png"><link rel="canonical" href="{esc(canon)}">{''.join(og)}<style>{CSS}</style>
 {scripts}</head><body>{gtm_ns}{px}{banner}
 <header class="top"><div class="wrap hd"><a href="/" class="logo"><img src="{S["logo"]}" alt="{logo_alt}" fetchpriority="high"></a><nav>{navl}</nav><a class="btn btn-call" href="tel:{TEL}">📞 {PH}</a></div><nav class="mnav" aria-label="Sections"><a href="/how-it-works/">How It Works</a><a href="/reviews/">Reviews</a><a href="/faq/">FAQ</a></nav></header>
 <main>{body}</main>
-<footer class="ft"><div class="wrap fg"><div><img src="{S["logo"]}" alt="" class="inv" loading="lazy"><p>{S["footer"]["about"]}</p><p class="contact"><a href="tel:{TEL}">{PH}</a> · call or text · <a class="mail" href="mailto:{EMAIL}">Email {EMAIL}</a></p></div>
+<footer class="ft"><div class="wrap fg"><div><img src="{S["logo"]}" alt="" class="inv" loading="lazy"><p>{S["footer"]["about"]}</p><p class="contact"><a href="tel:{TEL}">{PH}</a> · call or text · <a class="mail" href="mailto:{EMAIL}">Email {EMAIL}</a></p>{foot_addr}</div>
 <div><strong>Company</strong>{navl}{''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S["footer"]["company_extra"])}</div>
 <div><strong>Legal</strong>{''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S["footer"]["legal"])}</div></div><p class="wrap copy">{S["footer"]["copyright"]}</p></footer>
 <a class="sticky" href="tel:{TEL}">📞 Call Now</a><a class="sticky s2b" href="{offer_href}">Get Offer</a>
@@ -1238,26 +1388,52 @@ def build(site, pages, markets, redirects, live):
             body = hero(p['hero_headline'], p['hero_sub'], intake=True) + body
         page(path, p['title'], (p.get('meta_description') or '').replace('{{phone}}', PH), body, bool(p.get('noindex', False) or p.get('draft')),
              canonical=p.get('canonical') or None, og_title=p.get('og_title') or None, og_image=p.get('og_image') or None,
-             faq_ld=faq_ld_items(body, p.get('faq'), p.get('body'), p['slug']), file_rel=file_rel, offer_href=offer)
+             faq_ld=faq_ld_items(body, p.get('faq'), p.get('body'), p['slug']), file_rel=file_rel, offer_href=offer,
+             service=[] if (p['template'] in ('home', 'situation') and p['slug'] not in ('contact-us', '404')) else None)
         built += 1
-        if p.get('sitemap', True) and not p.get('noindex') and not p.get('draft') and p['slug'] not in SITEMAP_SKIP and p['slug'] != '404': urls.append('/' if not p['slug'] else f'/{p["slug"]}/')
+        if p.get('sitemap', True) and not p.get('noindex') and not p.get('draft') and p['slug'] not in SITEMAP_SKIP and p['slug'] != '404':
+            urls.append('/' if not p['slug'] else f'/{p["slug"]}/'); lastmods[urls[-1]] = [p['_src']]
     for m in markets:
         if m.get('draft') and not include_drafts:
             skipped += 1; continue
         if m.get('draft'): drafts_in += 1
         s = m['state']; path = f'/{m["slug"]}/'
-        cities = ('<p class="c">Cities we buy in: ' + ', '.join(m['cities']) + '</p>') if m.get('cities') else ''
+        cities_txt = ('<p class="c">Cities we buy in: ' + ', '.join(m['cities']) + '</p>') if m.get('cities') else ''
+        # Linked city pages for this state. Draft cities show only in preview builds; production shows none until one is published.
+        city_links = [c for c in cities if c['state'] == s]
+        city_links_html = ('<p class="c">City pages: ' + ' · '.join(f'<a href="/{c["slug"]}/">{c["city"]}</a>' for c in city_links) + '</p>') if city_links else ''
         note = (m.get('local_note') or '').strip()
         if note.startswith('[PLACEHOLDER'): note = ''
         local_html = f'<div class="ph">{note}</div>' if note else ''
-        body = (hero(m['headline'], m['hero_sub'], intake=True, bias=state_bias(m['state'])) + f'<section class="wrap pad"><div class="qual">{S["qualifier"]}</div><h2 class="c">Common reasons {s} homeowners call us</h2>{sits}{cities}</section>'
+        body = (hero(m['headline'], m['hero_sub'], intake=True, bias=state_bias(m['state'])) + f'<section class="wrap pad"><div class="qual">{S["qualifier"]}</div><h2 class="c">Common reasons {s} homeowners call us</h2>{sits}{cities_txt}{city_links_html}</section>'
                 + f'<section class="alt"><div class="wrap pad"><h2 class="c">How it works in {s}</h2>{steps}<p class="c"><a href="/faq/">Questions about selling? Read the FAQ.</a></p></div></section>'
                 + f'<section class="wrap pad">{testis(m.get("testimonials") or S["testimonials"])}{local_html}</section>' + cta(m.get('cta_label'), '#offer'))
         page(path, m['title'], m['meta_description'], body, bool(m.get('noindex', False) or m.get('draft')),
              canonical=m.get('canonical') or None, og_title=m.get('og_title') or None, og_image=m.get('og_image') or None,
-             offer_href='#offer')
+             offer_href='#offer', crumbs=[('Home', '/'), ('Where We Buy Houses', '/service-areas/'), (s, path)],
+             service=[{"@type": "State", "name": s}])
         built += 1
-        if not m.get('noindex') and not m.get('draft'): urls.append(path)
+        if not m.get('noindex') and not m.get('draft'): urls.append(path); lastmods[path] = [m['_src']]
+    for c in cities:
+        if c.get('draft'): drafts_in += 1
+        st = next((m for m in markets if m['state'] == c['state']), None)
+        spath = f'/{st["slug"]}/' if st else '/service-areas/'
+        path = f'/{c["slug"]}/'; cname, sname = c['city'], c['state']
+        faq_items = c.get('faq') or []
+        extra = md(shortcodes(c['body'], faq_items, c.get('cta_label'), '#offer')) if c.get('body', '').strip() else ''
+        body = (hero(c['headline'], c['hero_sub'], intake=True, bias=state_bias(sname))
+                + f'<section class="wrap pad"><div style="max-width:860px;margin:0 auto"><h2 style="margin-top:0">Selling a house in {cname}, {sname}</h2><p>{c["answer"]}</p></div>{extra}</section>'
+                + f'<section class="alt"><div class="wrap pad"><h2 class="c">How it works in {cname}</h2>{steps}</div></section>'
+                + (f'<section class="wrap pad"><h2 class="c">Questions from {cname} homeowners</h2>{faqh(faq_items)}</section>' if faq_items else '')
+                + f'<section class="wrap pad"><p class="c">More in {sname}: <a href="{spath}">{sname} cash offers</a> · <a href="/service-areas/">All states</a> · <a href="/faq/">Full FAQ</a></p></section>'
+                + cta(c.get('cta_label'), '#offer'))
+        page(path, c['title'], c['meta_description'], body, bool(c.get('noindex', False) or c.get('draft')),
+             canonical=c.get('canonical') or None, og_title=c.get('og_title') or None, og_image=c.get('og_image') or None,
+             faq_ld=faq_items or None, offer_href='#offer',
+             crumbs=[('Home', '/'), ('Where We Buy Houses', '/service-areas/'), (sname, spath), (cname, path)],
+             service=[{"@type": "City", "name": cname}])
+        built += 1
+        if not c.get('noindex') and not c.get('draft'): urls.append(path); lastmods[path] = [c['_src']]
 
     # redirects: Netlify _redirects + Apache/nginx copies + meta-refresh stubs
     R = [(r['from'], r['to'], r.get('code', 301)) for r in redirects]
@@ -1270,13 +1446,17 @@ def build(site, pages, markets, redirects, live):
         open(d + 'index.html', 'w').write(f'<!doctype html><meta charset=utf-8><title>Moved</title><meta name=robots content=noindex><link rel=canonical href="{b}"><meta http-equiv=refresh content="0;url={b}"><a href="{b}">Moved here</a>')
     order = ['/', '/how-it-works/', '/our-company/', '/reviews/', '/faq/', '/contact-us/', '/stop-foreclosure/', '/service-areas/', '/privacy/', '/terms-conditions/', '/text-messaging-terms/']
     urls = sorted(urls, key=lambda u: (order.index(u) if u in order else len(order)))
-    open(os.path.join(OUT, 'sitemap.xml'), 'w').write('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ''.join(f'<url><loc>{S["domain"]}{u}</loc></url>' for u in urls) + '</urlset>')
+    if '/service-areas/' in lastmods: lastmods['/service-areas/'] += [m['_src'] for m in markets if not m.get('draft')]
+    def lastmod_tag(u):
+        days = [d for d in (git_lastmod(src) for src in lastmods.get(u, [])) if d]
+        return f'<lastmod>{max(days)}</lastmod>' if days else ''
+    open(os.path.join(OUT, 'sitemap.xml'), 'w').write('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ''.join(f'<url><loc>{S["domain"]}{u}</loc>{lastmod_tag(u)}</url>' for u in urls) + '</urlset>')
     if preview:
         open(os.path.join(OUT, 'robots.txt'), 'w').write('User-agent: *\nDisallow: /\n')
         open(os.path.join(OUT, '_headers'), 'w').write('/*\n  X-Robots-Tag: noindex, nofollow\n')
     else:
         open(os.path.join(OUT, 'robots.txt'), 'w').write(f'User-agent: *\nDisallow: /step-2/\nDisallow: /thank-you/\nSitemap: {S["domain"]}/sitemap.xml\n')
-    open(os.path.join(OUT, 'llms.txt'), 'w', encoding='utf-8').write(llms_text(S))
+    open(os.path.join(OUT, 'llms.txt'), 'w', encoding='utf-8').write(llms_text(S, pages, markets, S.get('_cities') or []))
     for fp in glob.glob(os.path.join(C, 'media', '*')):
         if os.path.basename(fp) == 'media.json': continue
         shutil.copy(fp, OUT)

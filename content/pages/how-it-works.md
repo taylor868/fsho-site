@@ -1,6 +1,6 @@
 ---
 title: "How We Buy Houses | Fair & Simple Home Offer"
-meta_description: "Our simple 3-step process to sell your house as-is."
+meta_description: "Tell us about the house, review a no-obligation cash offer or a market sale, then close on your timeline. See our 3 steps. Call (910) 636-6669."
 template: situation
 hero_headline: "How we buy houses: simple, fair, on your schedule."
 hero_sub: "Submit your info, then review a cash offer or a market sale."
