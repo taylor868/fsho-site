@@ -820,6 +820,19 @@ def check_forms():
     if bad:
         raise SystemExit('consent guard failed:\n' + '\n'.join(bad))
 
+def sticky_guard():
+    """Mobile: hide the fixed Call/Get Offer bar while a form field has focus or the keyboard is open,
+    so it can't ride up over the field or the address suggestions. Fades out; no fade with reduced motion."""
+    return ('<style>.sticky{transition:opacity .18s,transform .18s}html.kb-open .sticky{opacity:0;transform:translateY(110%);pointer-events:none}'
+            '@media(prefers-reduced-motion:reduce){.sticky{transition:none}}</style>'
+            '<script>(function(d,w){var h=d.documentElement,vv=w.visualViewport,base=vv?vv.height:w.innerHeight,f=0;'
+            'function field(t){return t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)&&t.type!=="checkbox"&&t.type!=="radio"&&t.type!=="hidden"&&t.type!=="submit"}'
+            'function set(){var kb=vv&&base-vv.height>150;h.classList.toggle("kb-open",!!(f||kb))}'
+            'd.addEventListener("focusin",function(e){if(field(e.target)){f=1;set()}});'
+            'd.addEventListener("focusout",function(){f=0;setTimeout(function(){var a=d.activeElement;f=field(a)?1:0;set()},60)});'
+            'if(vv)vv.addEventListener("resize",function(){if(!d.activeElement||!field(d.activeElement))base=Math.max(base,vv.height);set()})'
+            '})(document,window)</script>')
+
 def check(site, pages, markets, redirects, errs):
     E = list(errs) + check_qualifier(site.get('_qualifier'))
     W = []
@@ -1080,7 +1093,7 @@ def build(site, pages, markets, redirects, live):
             '<h2 id="ts-trace-title" hidden>Step trace</h2>'
             '<p id="ts-summary" hidden data-google="not-loaded" data-downstream="" data-priority=""></p>'
             '<p id="ts-events" hidden></p><ol id="ts-trace" hidden></ol></div>'
-            + stage_boot(ctx, real_flag, src) + addr_boot(S, live, bias) + '</div>'
+            + stage_boot(ctx, real_flag, src) + addr_boot(S, live, bias) + sticky_guard() + '</div>'
         )
     def hero(h, sub, intake=False, bias=''):
         panel = public_intake(bias) if intake else form()
