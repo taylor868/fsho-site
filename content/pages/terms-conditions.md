@@ -82,6 +82,7 @@ noindex: false
 
 <ul>
 <li>Our website may contain links to third-party websites. We are not responsible for the content, policies, or actions of these third parties.</li>
+<li>Address suggestions on our forms are provided by Google Maps Platform (Places API). Your use of that feature is subject to Google’s <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service<span class="sr-only"> (opens in a new tab)</span></a> and <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy<span class="sr-only"> (opens in a new tab)</span></a>.</li>
 </ul>
 
 
