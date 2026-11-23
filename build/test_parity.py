@@ -1493,7 +1493,8 @@ faq:
         out = Path(gen.OUT)
         agent = next(b for b in ld_blocks((out / 'index.html').read_text(encoding='utf-8')) if b['@type'] == 'RealEstateAgent')
         self.assertEqual(agent['address']['postalCode'], '49505')
-        self.assertEqual(len(agent['sameAs']), 2)
+        self.assertEqual(len(agent['sameAs']), 3)
+        self.assertEqual(agent['sameAs'][2], 'https://share.google/xhED38I3oGqYAQE21')
         line = '1971 E Beltline Ave NE Ste 106, Grand Rapids, MI 49505'
         for rel in ('index.html', 'contact-us/index.html', 'reviews/index.html'):
             self.assertIn(line, (out / rel).read_text(encoding='utf-8'), rel)
@@ -1501,6 +1502,17 @@ faq:
         self.assertNotIn('<address', (out / 'test-intake/index.html').read_text(encoding='utf-8'))
         for f in out.rglob('*.html'):
             self.assertNotIn('/mi/rockford/', f.read_text(encoding='utf-8'), str(f))
+
+    def test_guard_blocks_copy_that_says_consent_is_optional(self):
+        for bad in ('You do not have to check it.', 'It does not block the form.', 'Consent is not required to get an offer.', 'The consent box is optional.', 'Leaving it blank is fine.'):
+            self.assertTrue(gen.consent_optional_hits(f'<p>{bad}</p>'), bad)
+        for ok in ('Consent is not a condition of purchase.', 'The consent box starts unchecked, and it has to be checked before the form will send.'):
+            self.assertEqual(gen.consent_optional_hits(ok), [], ok)
+        sj = self.root / 'content' / 'site.json'
+        raw = sj.read_text(encoding='utf-8').replace('it has to be checked before the form will send', 'You do not have to check it, and leaving it blank does not block the form')
+        sj.write_text(raw, encoding='utf-8')
+        errors, _ = self.check()
+        self.assertTrue(any('consent is optional' in e for e in errors), errors)
 
     def test_entity_fields_reject_bad_values(self):
         sj = self.root / 'content' / 'site.json'

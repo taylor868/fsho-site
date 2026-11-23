@@ -28,7 +28,8 @@
     "_note": "Optional facts for the site's schema.org entity. All EMPTY on purpose: anything left empty is omitted from the page markup, so nothing is guessed. same_as = list of https profile URLs the business owns (Google Business Profile, Facebook, BBB). area_served = list of place names, e.g. cities or counties. address = {streetAddress, addressLocality, addressRegion, postalCode}; leave {} for a service-area business that does not publish an address. Fill these only with details the owner has confirmed.",
     "same_as": [
       "https://www.bbb.org/us/mi/grand-rapids/profile/real-estate-investing/fair-and-simple-home-offer-0372-38321834",
-      "https://www.facebook.com/profile.php?id=61581144807978"
+      "https://www.facebook.com/profile.php?id=61581144807978",
+      "https://share.google/xhED38I3oGqYAQE21"
     ],
     "area_served": [],
     "address": {
@@ -273,7 +274,7 @@
         "items": [
           {
             "q": "What happens after I submit my address?",
-            "a": "<p>The form takes about 60 seconds and does not obligate you to sell. The consent box starts unchecked. You do not have to check it, and leaving it blank does not block the form.</p><p>You can also call or text <a href=\"tel:+19106366669\">(910) 636-6669</a>. There is no purchase-price question. Which property types continue is answered below.</p>",
+            "a": "<p>The form takes about 60 seconds and does not obligate you to sell. The consent box starts unchecked, and it has to be checked before the form will send.</p><p>You can also call or text <a href=\"tel:+19106366669\">(910) 636-6669</a>. There is no purchase-price question. Which property types continue is answered below.</p>",
             "answer_id": "faq_who_calls"
           },
           {
@@ -388,7 +389,7 @@
           },
           {
             "q": "Will you pressure me or keep calling?",
-            "a": "<p>You should not be pushed, and you can say no.</p><p>The consent box is optional, unchecked, and the form still submits if you leave it blank. Consent is not required to get an offer. We are not publishing how often anyone will call. There is no fee to hear an offer, and hearing it does not obligate you to accept it.</p>"
+            "a": "<p>You should not be pushed, and you can say no.</p><p>The consent box starts unchecked and has to be checked to send the online form. If you would rather not, call or text us at <a href=\"tel:+19106366669\">(910) 636-6669</a> instead. We are not publishing how often anyone will call. There is no fee to hear an offer, and hearing it does not obligate you to accept it.</p>"
           },
           {
             "q": "Who will I actually be working with?",

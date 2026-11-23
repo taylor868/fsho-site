@@ -883,6 +883,20 @@ def consent_font_problems(raw):
         if px < MIN_CONSENT_PX: out.append(f'consent text is {m.group(0)} in "{sel.strip()[-60:]}" (minimum {MIN_CONSENT_PX}px)')
     return out
 
+# The consent box is required on every form, so no copy may tell a seller it is optional or can be left blank.
+CONSENT_OPTIONAL_RE = re.compile(
+    r"do(?:es)? not have to (?:check|tick|agree)|don't have to (?:check|tick|agree)|does not block the form|doesn't block the form|"
+    r"consent (?:is|isn't|is not) (?:not )?(?:required|optional)(?! to buy| to sell| as a condition)|consent box (?:is|was) optional|optional consent|consent is optional|"
+    r"(?:leave|leaving|left) (?:it|the box) (?:blank|unchecked)|form still (?:submits|sends|works)", re.I)
+
+def consent_optional_hits(text):
+    t = re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]+>', ' ', text or '')))
+    hits = []
+    for m in CONSENT_OPTIONAL_RE.finditer(t):
+        # "Consent is not a condition of purchase" is the approved legal line and stays allowed.
+        hits.append(t[max(0, m.start() - 30):m.end() + 30].strip())
+    return hits
+
 def check_forms():
     """Build guard: fails if any generated page has a form without the required consent box."""
     bad = []
@@ -890,6 +904,12 @@ def check_forms():
         raw = open(fp, encoding='utf-8').read()
         for problem in form_consent_problems(raw) + (consent_font_problems(raw) if '<form' in raw else []):
             bad.append(os.path.relpath(fp, OUT) + ': ' + problem)
+    for fp in sorted(glob.glob(os.path.join(OUT, '**', '*.html'), recursive=True)) + [os.path.join(OUT, 'llms.txt')]:
+        if not os.path.isfile(fp): continue
+        raw = open(fp, encoding='utf-8').read()
+        raw = re.sub(r'<script(?![^>]*ld\+json)[^>]*>.*?</script>|<style[^>]*>.*?</style>', ' ', raw, flags=re.S)
+        for h in consent_optional_hits(raw):
+            bad.append(os.path.relpath(fp, OUT) + f': copy says consent is optional: "{h}"')
     if bad:
         raise SystemExit('consent guard failed:\n' + '\n'.join(bad))
 
@@ -995,6 +1015,11 @@ def check(site, pages, markets, redirects, errs):
         if sz > MAX_IMG: E.append(f'content/media/{n}: {sz//1024} KB is over the 200 KB limit')
         if not n.lower().endswith('.webp') and n != 'favicon.png': E.append(f'content/media/{n}: images must be .webp (favicon.png is the only exception)')
     check_media(site, pages, markets, E, W)
+    blobs = []
+    walk_text(site, blobs); walk_text([m for m in markets], blobs); walk_text([c for c in site.get('_cities') or []], blobs)
+    for p in pages: walk_text(p, blobs)
+    for b in blobs:
+        for h in consent_optional_hits(b): E.append(f'copy says consent is optional, but the consent box is required on every form: "{h}"')
     check_test_form(E)
     for title, srcs in titles.items():
         if len(srcs) > 1: W.append('duplicate title "%s": %s' % (title, ', '.join(srcs)))
