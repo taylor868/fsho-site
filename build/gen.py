@@ -791,6 +791,48 @@ def addr_boot(site, live, bias=''):
             'function go(){if(w.__fshoAddr)return;w.__fshoAddr=1;var s=d.createElement("script");s.async=true;s.src="/addr.js?v=' + ver + '";d.head.appendChild(s)}'
             'i.addEventListener("focus",go,{once:true});i.addEventListener("pointerdown",go,{once:true,passive:true})})(document,window)</script>')
 
+GOOGLE_TERMS = 'https://policies.google.com/terms'
+GOOGLE_PRIVACY = 'https://policies.google.com/privacy'
+
+def form_consent_problems(raw):
+    """Every <form> must hold a required, unchecked consent checkbox whose label has the Google line."""
+    out = []
+    for i, m in enumerate(re.finditer(r'<form\b[^>]*>(.*?)</form>', raw, re.S | re.I)):
+        body = m.group(1)
+        lab = re.search(r'<label class="consent"[^>]*>(.*?)</label>', body, re.S)
+        box = re.search(r'<input\b[^>]*\bname="consent"[^>]*>', body)
+        tag = re.search(r'<form\b[^>]*>', m.group(0)).group(0)[:60]
+        if not lab or not box: out.append(f'{tag}: no consent checkbox'); continue
+        b = box.group(0)
+        if 'type="checkbox"' not in b or not re.search(r'\srequired(\s|>|=)', b): out.append(f'{tag}: consent checkbox is not required')
+        if re.search(r'\schecked(\s|>|=)', b): out.append(f'{tag}: consent checkbox is pre-checked')
+        if GOOGLE_TERMS not in lab.group(1) or GOOGLE_PRIVACY not in lab.group(1) or 'Google Maps' not in lab.group(1):
+            out.append(f'{tag}: consent text is missing the Google Maps line')
+        if 'class="consent-err"' not in body: out.append(f'{tag}: consent error message slot is missing')
+    return out
+
+def check_forms():
+    """Build guard: fails if any generated page has a form without the required consent box."""
+    bad = []
+    for fp in sorted(glob.glob(os.path.join(OUT, '**', '*.html'), recursive=True)):
+        for problem in form_consent_problems(open(fp, encoding='utf-8').read()):
+            bad.append(os.path.relpath(fp, OUT) + ': ' + problem)
+    if bad:
+        raise SystemExit('consent guard failed:\n' + '\n'.join(bad))
+
+def sticky_guard():
+    """Mobile: hide the fixed Call/Get Offer bar while a form field has focus or the keyboard is open,
+    so it can't ride up over the field or the address suggestions. Fades out; no fade with reduced motion."""
+    return ('<style>.sticky{transition:opacity .18s,transform .18s}html.kb-open .sticky{opacity:0;transform:translateY(110%);pointer-events:none}'
+            '@media(prefers-reduced-motion:reduce){.sticky{transition:none}}</style>'
+            '<script>(function(d,w){var h=d.documentElement,vv=w.visualViewport,base=vv?vv.height:w.innerHeight,f=0;'
+            'function field(t){return t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)&&t.type!=="checkbox"&&t.type!=="radio"&&t.type!=="hidden"&&t.type!=="submit"}'
+            'function set(){var kb=vv&&base-vv.height>150;h.classList.toggle("kb-open",!!(f||kb))}'
+            'd.addEventListener("focusin",function(e){if(field(e.target)){f=1;set()}});'
+            'd.addEventListener("focusout",function(){f=0;setTimeout(function(){var a=d.activeElement;f=field(a)?1:0;set()},60)});'
+            'if(vv)vv.addEventListener("resize",function(){if(!d.activeElement||!field(d.activeElement))base=Math.max(base,vv.height);set()})'
+            '})(document,window)</script>')
+
 def check(site, pages, markets, redirects, errs):
     E = list(errs) + check_qualifier(site.get('_qualifier'))
     W = []
@@ -798,14 +840,20 @@ def check(site, pages, markets, redirects, errs):
         if k not in site: E.append(f'content/site.json: missing "{k}"')
     check_whatconverts(site, E)
     check_places(site, E)
+    cg = site.get('consent_google')
+    if not isinstance(cg, str) or GOOGLE_TERMS not in cg or GOOGLE_PRIVACY not in cg or 'Google Maps' not in cg:
+        E.append('content/site.json: consent_google must name Google Maps and link Google Terms and Privacy')
     check_pixels(site, E)
     for c in ('orange', 'navy'):
         if not re.fullmatch(r'#[0-9A-Fa-f]{6}', str(site.get('brand', {}).get(c, ''))): E.append(f'content/site.json: brand.{c} must be #RRGGBB')
     if not re.fullmatch(r'\+1\d{10}', str(site.get('tel', ''))): E.append('content/site.json: tel must be +1XXXXXXXXXX')
     if not re.fullmatch(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}', str(site.get('email', ''))): E.append('content/site.json: email must be a plain address such as offer@fsho.co')
     consent = site.get('consent')
-    if not isinstance(consent, str) or 'Consent isn\u2019t required to buy or sell' not in consent or 'msg &amp; data rates' not in consent:
+    # Taylor, Nov 22, 2026: one required consent box; the "isn't required to buy or sell" sentence is removed.
+    if not isinstance(consent, str) or 'msg &amp; data rates' not in consent or 'STOP to opt out' not in consent:
         E.append('content/site.json: consent must keep the approved communication disclosure')
+    elif 'required to buy or sell' in consent:
+        E.append('content/site.json: consent is required on every form, so it must not say consent is not required')
     for f in site.get('faq', []):
         if not isinstance(f, dict) or not f.get('q') or not f.get('a'): E.append('content/site.json: faq item needs q and a')
     check_faq_content(site, E)
@@ -908,14 +956,15 @@ def build(site, pages, markets, redirects, live):
     trust = trust_list(S['trust_badges'])
     QC = S.get('_qualifier') or {}
     def consent_box():
-        c = QC.get('consent', {})
-        if not c.get('enabled'): return ''
-        return f'<label class="chk"><input type="checkbox" name="consent"{" required" if c.get("required") else ""}> <small>{c["text"]} <a href="/text-messaging-terms/">Text Terms</a> · <a href="/privacy/">Privacy</a></small></label>'
+        # Legacy hero form (#f): same required consent as every other form.
+        return consent_label()
     def stage_boot(ctx, real_flag, src):
         return f'<script>window.FSHO_DEPLOY_CONTEXT="{ctx}";window.FSHO_USE_REAL_ADAPTER="{real_flag}";</script><script>{src}</script>'
     def consent_label():
-        return (f'<label class="consent" data-consent-size="8"><input type="checkbox" name="consent">'
-                f'<small>{S.get("consent") or ""} <a href="/text-messaging-terms/">Text Terms</a> · <a href="/privacy/">Privacy</a></small></label>')
+        # The one consent checkbox every form uses. Required, never pre-checked; check_forms() fails the build without it.
+        return (f'<label class="consent" data-consent-size="8"><input type="checkbox" name="consent" required aria-describedby="consent-err">'
+                f'<small>{S.get("consent") or ""} {S.get("consent_google") or ""} <a href="/text-messaging-terms/">Text Terms</a> · <a href="/privacy/">Privacy</a></small></label>'
+                '<p class="consent-err" id="consent-err" role="alert"></p>')
     def two_stage_assets():
         ctx = deploy_context(live)
         real_flag = '1' if os.environ.get('FSHO_USE_REAL_ADAPTER') == '1' else ''
@@ -958,10 +1007,7 @@ def build(site, pages, markets, redirects, live):
             '#ts-summary{font-size:15px;line-height:1.4}'
             '#ts-trace{margin:8px 0 0;padding-left:1.2em}'
             '#ts-trace li{margin:8px 0}'
-            '#ts-form label.consent{display:flex;align-items:flex-start;gap:6px;margin:8px 0 0;padding:0;font-weight:400;font-size:8px;line-height:1.3;color:#667}'
             '#ts-form label.consent input{display:inline-block;width:12px;height:12px;min-height:0;margin:0;padding:0;border:0;border-radius:2px;flex:0 0 auto}'
-            '#ts-form label.consent small{font-size:1em;line-height:1.3;font-weight:400;color:inherit}'
-            '#ts-form label.consent a{color:#3d5166;font-weight:600;text-decoration:underline;text-underline-offset:1px}'
             '@media(max-width:860px){#two-stage{padding-bottom:104px}}'
             '</style>'
             f'{stage_boot(ctx, real_flag, src)}</section>'
@@ -1011,7 +1057,7 @@ def build(site, pages, markets, redirects, live):
             else: f += f'<label>{x["label"]}<textarea name="{x["name"]}" rows="3"></textarea></label>\n'
         return ('<form class="lead step2" action="/thank-you/" method="post" novalidate><input type="hidden" name="form_id" value="6"><input type="hidden" name="address"><input type="hidden" name="phone"><input type="hidden" name="email">\n'
                 '<div class="lead-h"><strong>Almost done: tell us about the house</strong><span>Optional details help us make a more accurate offer faster.</span></div>\n'
-                + f + f'<button class="btn btn-o">Submit Details</button><p class="fine">Prefer to talk? Call/text <a href="tel:{TEL}">{PH}</a></p></form>')
+                + f + consent_label() + f'<button class="btn btn-o">Submit Details</button><p class="fine">Prefer to talk? Call/text <a href="tel:{TEL}">{PH}</a></p></form>')
     def testis(lst):
         bits = []
         for t in lst:
@@ -1050,7 +1096,7 @@ def build(site, pages, markets, redirects, live):
             '<h2 id="ts-trace-title" hidden>Step trace</h2>'
             '<p id="ts-summary" hidden data-google="not-loaded" data-downstream="" data-priority=""></p>'
             '<p id="ts-events" hidden></p><ol id="ts-trace" hidden></ol></div>'
-            + stage_boot(ctx, real_flag, src) + addr_boot(S, live, bias) + '</div>'
+            + stage_boot(ctx, real_flag, src) + addr_boot(S, live, bias) + sticky_guard() + '</div>'
         )
     def hero(h, sub, intake=False, bias=''):
         panel = public_intake(bias) if intake else form()
@@ -1219,6 +1265,7 @@ def build(site, pages, markets, redirects, live):
         shutil.copy(fp, OUT)
     open(os.path.join(OUT, 'addr.js'), 'w', encoding='utf-8').write(addr_src())
     guard_test_page()
+    check_forms()
     return built, skipped, drafts_in
 
 if __name__ == '__main__':

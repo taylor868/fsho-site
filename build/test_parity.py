@@ -716,13 +716,27 @@ cta_label: "Page specific heading"
         self.assertTrue(any('pair "broken" must be exactly two consecutive fields' in e for e in errors), errors)
 
 
+    def test_consent_guard_fails_a_form_without_required_consent(self):
+        good = ('<form id="x"><label class="consent" data-consent-size="8"><input type="checkbox" name="consent" required aria-describedby="consent-err">'
+                '<small>Text. Address suggestions are powered by Google Maps; <a href="https://policies.google.com/terms">T</a> <a href="https://policies.google.com/privacy">P</a></small></label>'
+                '<p class="consent-err" id="consent-err" role="alert"></p></form>')
+        self.assertEqual(gen.form_consent_problems(good), [])
+        self.assertTrue(gen.form_consent_problems('<form id="y"><input name="email"></form>'))
+        self.assertTrue(gen.form_consent_problems(good.replace(' required', '')))
+        self.assertTrue(gen.form_consent_problems(good.replace(' required', ' required checked')))
+        self.assertTrue(gen.form_consent_problems(good.replace('https://policies.google.com/privacy', '/privacy/')))
+        self.build(live=False)
+        for fp in Path(gen.OUT).rglob('*.html'):
+            self.assertEqual(gen.form_consent_problems(fp.read_text(encoding='utf-8')), [], str(fp))
+
     def test_public_two_stage_consent_profiles_and_sotellus(self):
         google = 'https://share.google/xhED38I3oGqYAQE21'
         facebook = 'https://www.facebook.com/profile.php?id=61581144807978'
         bbb = 'https://www.bbb.org/us/mi/rockford/profile/real-estate-investing/fair-and-simple-home-offer-0372-38321834'
         bbb_reviews = bbb + '/customer-reviews'
         link = 'target="_blank" rel="noopener noreferrer"'
-        disclosure = 'Consent isn\u2019t required to buy or sell'
+        disclosure = 'Reply STOP to opt out, HELP for help.'
+        removed = 'required to buy or sell'
         self.build(live=False)
         pages = {
             'index.html': Path(gen.OUT) / 'index.html',
@@ -762,11 +776,16 @@ cta_label: "Page specific heading"
             self.assertNotIn('less than 7 years', html, name)
             self.assertIn('class="mnav"', html, name)
             self.assertIn(phone, html, name)
-            box = re.search(r'<label class="consent" data-consent-size="8"><input type="checkbox" name="consent">(.*?)</label>', html)
+            # Taylor, Nov 22, 2026: the consent box is required on every form, never pre-checked, and names Google Maps.
+            box = re.search(r'<label class="consent" data-consent-size="8"><input type="checkbox" name="consent" required aria-describedby="consent-err">(.*?)</label>', html)
             self.assertIsNotNone(box, name)
-            self.assertNotIn('required', box.group(0).split('</label>')[0].split('<small>')[0], name)
             self.assertNotIn('checked', box.group(0).split('<small>')[0], name)
+            self.assertIn('Address suggestions are powered by Google Maps', box.group(0), name)
+            self.assertIn('href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer"', box.group(0), name)
+            self.assertIn('href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer"', box.group(0), name)
+            self.assertIn('<p class="consent-err" id="consent-err" role="alert"></p>', html, name)
             self.assertIn(disclosure, box.group(0), name)
+            self.assertNotIn(removed, html, name)
             self.assertIn('href="/text-messaging-terms/"', box.group(0), name)
             self.assertIn('href="/privacy/"', box.group(0), name)
             self.assertNotIn('font-size:7px', html, name)
@@ -877,9 +896,8 @@ cta_label: "Page specific heading"
             self.assertNotIn('class="ph"', html)
         test_page = (Path(gen.OUT) / 'test-intake' / 'index.html').read_text(encoding='utf-8')
         self.assertNotIn('data-public="1"', test_page)
-        test_box = re.search(r'<label class="consent" data-consent-size="8"><input type="checkbox" name="consent">', test_page)
+        test_box = re.search(r'<label class="consent" data-consent-size="8"><input type="checkbox" name="consent" required aria-describedby="consent-err">', test_page)
         self.assertIsNotNone(test_box)
-        self.assertNotIn('required', test_box.group(0))
         self.assertNotIn('checked', test_box.group(0))
         self.assertIn(disclosure, test_page)
 

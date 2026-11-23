@@ -59,6 +59,8 @@ noindex: false
 
 <p><strong>Third-Party Services</strong><br>In general, the third-party providers used by us will only collect, use and disclose your information to the extent necessary to allow them to perform the services they provide to us.</p>
 
+<p><strong>Address lookup</strong><br>When you type a property address into a form on this site, what you type is sent to Google Maps Platform (Places API) to suggest matching addresses. Google’s <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service<span class="sr-only"> (opens in a new tab)</span></a> and <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy<span class="sr-only"> (opens in a new tab)</span></a> apply to that feature.</p>
+
 <p>However, certain third-party service providers, such as payment gateways and other payment transaction processors, have their own privacy policies with respect to the information we are required to provide to them for your purchase-related transactions.</p>
 
 <p>For these providers, we recommend that you read their privacy policies so you can understand the manner in which your personal information will be handled by these providers.</p>

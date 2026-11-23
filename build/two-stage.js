@@ -1306,10 +1306,23 @@ function boot(api) {
       paint();
     });
   }
+  var consentBox = form.querySelector('input[name="consent"]'), consentErr = form.querySelector(".consent-err");
+  function consentOk(focus) {
+    var bad = !!(consentBox && consentBox.required && !consentBox.checked);
+    if (consentErr) consentErr.textContent = bad ? "Please check the box to continue." : "";
+    if (consentBox && consentBox.setAttribute) consentBox.setAttribute("aria-invalid", bad ? "true" : "false");
+    if (bad && focus && consentBox.focus) consentBox.focus();
+    return !bad;
+  }
+  if (consentBox && consentBox.addEventListener) {
+    consentBox.addEventListener("invalid", function (e) { e.preventDefault(); var f = form.querySelector(":invalid"); consentOk(!f || f === consentBox); });
+    consentBox.addEventListener("change", function () { if (consentBox.checked) consentOk(); });
+  }
   form.onsubmit = function (e) {
     e.preventDefault();
+    if (!consentOk(true)) return;
     var data = new FormData(form);
-    var box = form.querySelector('input[name="consent"]');
+    var box = consentBox;
     runStep(function () {
       return flow.submitContact({ name: data.get("name"), address: data.get("address"), phone: data.get("phone"), email: data.get("email"), consent: !!(box && box.checked) });
     });

@@ -1357,7 +1357,7 @@ function producerFetch(claim, reserve) {
   };
 }
 
-async function withPublicForm(fetchImpl, fn) {
+async function withPublicForm(fetchImpl, fn, setup) {
   const prev = {
     document: global.document,
     location: global.location,
@@ -1369,6 +1369,7 @@ async function withPublicForm(fetchImpl, fn) {
     flag: global.FSHO_USE_REAL_ADAPTER
   };
   const ui = publicDocument();
+  if (setup) setup(ui);
   global.document = ui.doc;
   global.location = { search: "" };
   global.localStorage = memoryStore();
@@ -2389,4 +2390,31 @@ test("WhatConverts is skipped for exits, test pages, and an empty form set, and 
   while (never.length) { never.shift()(); n += 1; }
   assert.equal(n, 30);
   assert.equal(sent.length, 1);
+});
+
+test("a required, unchecked consent box blocks the submit and sends nothing; checking it lets the form go", async () => {
+  const calls = [];
+  const fetchImpl = (url, init) => { calls.push(url); return Promise.resolve(jsonResponse(200, { ok: true, status: "parked", intake_id: "i1" })); };
+  let box;
+  await withPublicForm(fetchImpl, async (ui) => {
+    ui.form.onsubmit({ preventDefault() {} });
+    await settleUi();
+    assert.equal(calls.length, 0);
+    assert.equal(box.getAttribute("aria-invalid"), "true");
+    assert.equal(box.focused, true);
+    assert.equal(ui.form.hidden, false);
+    box.checked = true;
+    ui.form.onsubmit({ preventDefault() {} });
+    await settleUi();
+    assert.equal(box.getAttribute("aria-invalid"), "false");
+    assert.ok(calls.length >= 1);
+  }, (ui) => {
+    box = makeNode("input");
+    box.setAttribute("name", "consent");
+    box.type = "checkbox";
+    box.required = true;
+    box.checked = false;
+    box.focus = function () { this.focused = true; };
+    ui.form.appendChild(box);
+  });
 });

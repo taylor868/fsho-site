@@ -102,7 +102,7 @@
   }
   function ok(r) { if (!r.ok) throw new Error("http " + r.status); return r.json(); }
 
-  var CSS = ".fa-list{position:absolute;left:0;right:0;z-index:30;margin:4px 0 0;padding:0;list-style:none;background:#fff;border:1.5px solid #c8d1da;border-radius:12px;box-shadow:0 12px 30px #0003;overflow:hidden;text-align:left}" +
+  var CSS = ".fa-list{position:absolute;left:0;right:0;z-index:1000;margin:4px 0 0;padding:0;list-style:none;background:#fff;border:1.5px solid #c8d1da;border-radius:12px;box-shadow:0 12px 30px #0003;overflow:hidden;text-align:left}" +
     ".fa-list[hidden]{display:none}.fa-opt{display:flex;align-items:center;gap:12px;min-height:52px;padding:8px 14px;cursor:pointer;border-top:1px solid #eef1f4;color:#1F3C56;font-size:16px;line-height:1.25}" +
     ".fa-opt:first-child{border-top:0}.fa-opt[aria-selected=true],.fa-opt:hover{background:#f2f5f8}.fa-opt svg{flex:0 0 22px;width:22px;height:22px}" +
     ".fa-opt b{display:block;font-weight:700}.fa-opt small{display:block;font-size:14px;color:#556;margin-top:2px}" +
@@ -154,11 +154,13 @@
       if (on) { place(); reveal(); } else setActive(-1);
     }
     function reveal() {
-      var vv = root.visualViewport, h = vv ? vv.height : root.innerHeight;
+      /* Keep the field and its suggestions above the on-screen keyboard (visualViewport is the visible area). */
+      var vv = root.visualViewport, h = vv ? vv.height : root.innerHeight, top0 = vv ? vv.offsetTop : 0;
       if (!h || !box.getBoundingClientRect) return;
-      var over = box.getBoundingClientRect().bottom - h + 8, room = input.getBoundingClientRect().top - 8;
+      var over = box.getBoundingClientRect().bottom - top0 - h + 8, room = input.getBoundingClientRect().top - top0 - 8;
       if (over > 0 && room > 0) root.scrollBy(0, Math.min(over, room));
     }
+    if (root.visualViewport) root.visualViewport.addEventListener("resize", function () { if (doc.activeElement === input && !box.hidden) { place(); reveal(); } });
     function setActive(i) {
       var opts2 = list.querySelectorAll("[role=option]");
       active = i;
