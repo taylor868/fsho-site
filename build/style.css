@@ -47,3 +47,16 @@ button.vid{border:0;padding:0;cursor:pointer;background:#000;width:100%;aspect-r
 .lead select,.lead textarea{display:block;width:100%;margin-top:4px;padding:12px;border:1.5px solid #c8d1da;border-radius:10px;font:inherit;background:#fff}
 .qf .qbar{height:6px;background:#e3e8ee;border-radius:3px;overflow:hidden;margin-bottom:16px}.qf .qbar i{display:block;height:100%;width:0;background:var(--o);transition:width .25s}.qf h2{font-size:21px;color:var(--n);margin:0 0 12px;outline:0}.qo{display:block;width:100%;text-align:left;padding:15px 16px;margin:8px 0;border:1.5px solid #c8d1da;border-radius:10px;background:#fff;font:600 16px/1.3 inherit;color:var(--t);cursor:pointer}.qo:hover,.qo:focus{border-color:var(--o)}.qf textarea{display:block;width:100%;padding:12px;border:1.5px solid #c8d1da;border-radius:10px;font:inherit;margin-bottom:8px}
 .sr-only{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}label.consent,#ts-form label.consent{min-height:44px;align-items:flex-start;gap:10px}label.consent input,#ts-form label.consent input{width:22px!important;height:22px!important;min-width:22px!important}label.consent input[aria-invalid=true]{outline:2px solid #d33;outline-offset:2px}.consent-err:empty{display:none}.consent-err{margin:6px 0 0;padding:8px 10px;border-radius:8px;background:#fff1f0;color:#a4161a;font-weight:700;font-size:14px}
+/* Address-first steps (#ts-s1 address, #ts-s2 contact + consent, then questions). */
+#ts-form fieldset.ts-step{border:0;padding:0;margin:0;min-width:0}
+#ts-form fieldset.ts-step[hidden]{display:none}
+.ts-prog{margin:10px 0 0;font-size:13px;font-weight:700;letter-spacing:.02em;color:#3d5166;text-transform:uppercase}
+#ts-ask .ts-prog{margin:4px 0 0}
+.ts-echo{display:flex;align-items:center;gap:8px;margin:10px 0 2px;padding:6px 4px 6px 12px;border-radius:10px;background:#f3f6f9;font-size:14px;color:#4a5160}
+.ts-echo-t{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
+.ts-echo-t span{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.02em}
+.ts-echo b{font-weight:700;color:var(--n);overflow-wrap:anywhere}
+.ts-back{flex:0 0 auto;min-height:44px;min-width:44px;padding:0 12px;border:0;background:transparent;color:#3d5166;font-weight:700;text-decoration:underline;cursor:pointer}
+#ts-s2 .row label{min-width:0}
+#ts-s2 label.consent{margin:12px 0 0}
+@media(max-width:480px){#ts-s2 .row{grid-template-columns:1fr;gap:0}}
