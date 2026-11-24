@@ -3,7 +3,9 @@ title: "Selling a House in Probate | Fair & Simple Home Offer"
 meta_description: "Probate is the court process. We can talk about the house, and we do not give legal advice. Call (910) 636-6669."
 template: situation
 hero_headline: "Selling a house in probate"
-hero_sub: "Probate is the court process for an estate. Selling during that process has rules. We can talk about the house. We do not give legal advice."
+hero_sub: "Tell us about the house. No obligation, and we do not give legal advice."
+hero_compact: true
+hero_rating: true
 cta_label: "Want to talk about a house in probate?"
 noindex: false
 faq:
@@ -14,6 +16,7 @@ faq:
   - q: "How is this different from an inherited house?"
     a: "Inherited means the house came to you. Probate is the court process that may have to happen first, or alongside a sale. If the court work is done and you can sell, the <a href=\"/selling-an-inherited-house/\">inherited house</a> page may fit better."
 ---
+<style>.hrate{margin:0 0 10px;text-align:center}.hrate a{display:inline-block;background:#fff;color:#1F3C56!important;text-decoration:none;font-weight:600;font-size:15px;padding:8px 14px;border-radius:999px}.hrate .stars{color:#f5a623;letter-spacing:1px}.hrate b{font-weight:800}.hero.compact{padding:36px 0}.hero.compact h1{margin:0 0 8px}.hero.compact .lede{font-size:18px;margin:0}@media(max-width:860px){.hero.compact{padding:14px 0}.hero.compact .eyebrow{display:none}.hero.compact h1{font-size:26px;margin:0 0 6px}.hero.compact .lede{font-size:15px}.hero.compact .trust{display:none}.hero.compact .hg{gap:10px}.hrate{margin:0 0 8px}.hrate a{font-size:14px;padding:6px 12px}.hero.compact#offer{padding-bottom:96px}}</style>
 <section class="wrap pad"><h2>Probate is the court process</h2><p>Probate is how a court handles a person's estate. A house in that estate may need a signature from someone the court recognizes. It may need the court's approval before it can be sold. Those rules change by state and by estate.</p><p>We can talk about the property. We cannot tell you whether you may sign, whether the court has to approve a sale, or what the estate should do. We are not attorneys. Ask the estate's attorney or the court before you rely on a sale.</p></section>
 
 <section class="alt"><div class="wrap pad"><h2 class="c">What we can do, and what we cannot</h2><div class="grid2"><div class="card"><h3>Talk about the house</h3><p>Condition, occupancy, and whether you want an as-is offer. No repairs are required just to ask.</p></div><div class="card"><h3>Wait for the right signer</h3><p>If the person who can decide is not ready, we do not push a signature. Authority is a legal question.</p></div><div class="card"><h3>Not tell you the law</h3><p>We do not interpret wills, court orders, or deadlines. Ask the estate's attorney or the court. We are not a substitute for that conversation.</p></div><div class="card"><h3>Point you to the other page</h3><p>If you already received the house and the court work is finished, read <a href="/selling-an-inherited-house/">selling an inherited house</a>. That page is about the house. This one is about the process.</p></div></div><p class="fine">We are not attorneys. Nothing on this page is legal advice, and a conversation with us does not replace the estate's lawyer.</p></div></section>
