@@ -8,7 +8,7 @@ The test page does not call Supabase, Zapier, WhatConverts, CRM, or Slack. The m
 
 ## Stage 1 and the two qualifying questions
 
-Stage 1 parks name, address, phone, and email. That records a staged-table insert and does not create a CRM lead, load a Google tag, or fire a conversion. Leaving after stage 1 does not fire a conversion. The sweep moves that lead to self-serve after 3 minutes, tagged timeout.
+Stage 1 is now two screens: the address alone (producer `park_address`, no event, see `docs/ADDRESS-PARTIALS.md`), then name, phone, email, and consent, which parks the row. That records a staged-table insert and does not create a CRM lead, load a Google tag, or fire a conversion. Leaving after stage 1 does not fire a conversion. The sweep moves that lead to self-serve after 3 minutes, tagged timeout.
 
 Q1 and Q2 use the live qualifier values: `sfh`, `townhouse`, `multi_2_4`, `condo`, `mobile`, `land`, and ownership `sole_owner`, `all_agree`, `decision_maker`, `no`.
 

@@ -68,6 +68,68 @@ def link_preview(s):
 def pos_int(v):
     return type(v) is int and v > 0
 
+_JS_WORD = re.compile(r'[A-Za-z0-9_$]')
+_JS_REGEX_PREV = set('(,=:[!&|?{};+-*%<>~^')
+_JS_REGEX_KW = ('return', 'typeof', 'case', 'in', 'of', 'delete', 'void', 'throw', 'new', 'else', 'do')
+
+def js_squeeze(src):
+    """Whitespace-only JS squeeze for inlined scripts: drops comments and the spaces between tokens,
+    keeps every string, regex literal, and newline (so ASI never changes). Same tokens, same program."""
+    out, i, n = [], 0, len(src)
+    last = ''  # last significant token, for regex-vs-divide
+    def need_space(a, b):
+        return bool(a) and bool(b) and _JS_WORD.match(a[-1]) and _JS_WORD.match(b[0]) or (a[-1:] in '+-' and b[:1] == a[-1:])
+    def emit(tok):
+        nonlocal last
+        if out and out[-1] == ' ':
+            out.pop()
+            if out and need_space(out[-1], tok): out.append(' ')
+        out.append(tok)
+        if tok != '\n': last = tok
+    while i < n:
+        c = src[i]
+        if c in ' \t\r':
+            if out and out[-1] not in (' ', '\n'): out.append(' ')
+            i += 1; continue
+        if c == '\n':
+            if out and out[-1] == ' ': out.pop()
+            if out and out[-1] != '\n': out.append('\n')
+            i += 1; continue
+        if src.startswith('//', i):
+            j = src.find('\n', i); i = n if j < 0 else j; continue
+        if src.startswith('/*', i):
+            j = src.find('*/', i + 2)
+            if j < 0: raise ValueError('unterminated comment')
+            i = j + 2
+            if out and out[-1] not in (' ', '\n'): out.append(' ')
+            continue
+        if c in '"\'`':
+            j = i + 1
+            while j < n and src[j] != c:
+                if src[j] == '\\': j += 1
+                elif c != '`' and src[j] == '\n': raise ValueError('newline in string')
+                j += 1
+            emit(src[i:j + 1]); i = j + 1; continue
+        if c == '/' and (not last or last[-1] in _JS_REGEX_PREV or last in _JS_REGEX_KW):
+            j, cls = i + 1, False
+            while j < n:
+                d = src[j]
+                if d == '\\': j += 2; continue
+                if d == '\n': raise ValueError('newline in regex')
+                if d == '[': cls = True
+                elif d == ']': cls = False
+                elif d == '/' and not cls: break
+                j += 1
+            j += 1
+            while j < n and _JS_WORD.match(src[j]): j += 1
+            emit(src[i:j]); i = j; continue
+        if _JS_WORD.match(c):
+            j = i
+            while j < n and (_JS_WORD.match(src[j]) or (src[j] == '.' and src[i].isdigit())): j += 1
+            emit(src[i:j]); i = j; continue
+        emit(c); i += 1
+    return ''.join(out).strip() + '\n'
+
 def deploy_context(live):
     """Baked into the test page. Production cannot be overridden by a query string."""
     if live or os.environ.get('CONTEXT') == 'production':
@@ -1114,14 +1176,42 @@ def build(site, pages, markets, redirects, live):
         return (f'<label class="consent" data-consent-size="12"><input type="checkbox" name="consent" required aria-describedby="consent-err">'
                 f'<small>{S.get("consent") or ""} {S.get("consent_google") or ""} <a href="/text-messaging-terms/">Text Terms</a> · <a href="/privacy/">Privacy</a></small></label>'
                 '<p class="consent-err" id="consent-err" role="alert"></p>')
-    def two_stage_assets():
+    def ts_steps(go_label, contact_label):
+        # Address-first form (Andrew + Taylor, Nov 23, 2026): Step 1 is the property address only,
+        # Step 2 is name, phone, email and the one required consent box right above the button,
+        # Step 3 is the qualifying questions (two-stage.js paints them in #ts-ask).
+        # One <form>, so check_forms() still sees the required consent box on it. Step 2 starts
+        # disabled so its required fields do not block the Step 1 submit; two-stage.js swaps the steps.
+        # autocomplete="address-line1" (not street-address) keeps the browser's own autofill menu
+        # from covering the Google Places suggestions; addr.js sets it to off once Places attaches.
+        return (
+            '<p class="ts-prog" id="ts-prog" aria-live="polite">Step 1 of 3 &middot; Property</p>'
+            '<fieldset class="ts-step" id="ts-s1" data-step="1">'
+            '<label>Property address<input name="address" autocomplete="address-line1" required></label>'
+            f'<button class="btn btn-o" type="submit">{go_label}</button>'
+            '</fieldset>'
+            '<fieldset class="ts-step" id="ts-s2" data-step="2" hidden disabled>'
+            '<p class="ts-echo"><span class="ts-echo-t"><span>Property</span><b id="ts-addr-echo"></b></span><button type="button" class="ts-back" id="ts-back" aria-label="Edit the property address">Edit</button></p>'
+            '<label>Name<input name="name" autocomplete="name" required></label>'
+            '<div class="row"><label>Phone<input name="phone" type="tel" autocomplete="tel" inputmode="tel" required></label>'
+            '<label>Email<input name="email" type="email" autocomplete="email" required></label></div>'
+            + consent_label() +
+            f'<button class="btn btn-o" type="submit">{contact_label}</button>'
+            '</fieldset>'
+        )
+    def two_stage_assets(squeeze=False):
         ctx = deploy_context(live)
         real_flag = '1' if os.environ.get('FSHO_USE_REAL_ADAPTER') == '1' else ''
-        # Drop blank lines and leading indentation (the file has no template or multi-line strings).
-        src = re.sub(r'\n[ \t]+', '\n', re.sub(r'\n\s*\n', '\n', open(os.path.join(B, 'two-stage.js'), encoding='utf-8').read().strip())).replace('</', '<\\/')
+        raw = open(os.path.join(B, 'two-stage.js'), encoding='utf-8').read()
+        if squeeze:
+            # /test-intake/ only: it has a hard 100 KB budget. js_squeeze drops comments and spaces between tokens.
+            src = js_squeeze(raw).replace('</', '<\\/')
+        else:
+            # Drop blank lines and leading indentation (the file has no template or multi-line strings).
+            src = re.sub(r'\n[ \t]+', '\n', re.sub(r'\n\s*\n', '\n', raw.strip())).replace('</', '<\\/')
         return ctx, real_flag, src
     def test_intake():
-        ctx, real_flag, src = two_stage_assets()
+        ctx, real_flag, src = two_stage_assets(squeeze=True)
         if ctx == 'production':
             return (
                 '<section class="wrap pad" id="two-stage"><h1>This page isn\'t in use.</h1>'
@@ -1134,13 +1224,9 @@ def build(site, pages, markets, redirects, live):
             '<p class="fine">Test mode only. Needs ?test=1. This page stays noindex.</p>'
             '<p id="ts-off" hidden>Test mode is off. Production builds cannot enable it, and other builds need ?test=1.</p>'
             '<div id="ts-app" hidden><form id="ts-form" action="#" method="post">'
-            '<div class="lead-h"><strong>Stage 1</strong><span>Name, property, phone, and email. This only saves the info.</span></div>'
-            '<label>Name<input name="name" autocomplete="name" required></label>'
-            '<label>Property address<input name="address" autocomplete="street-address" required></label>'
-            '<label>Phone<input name="phone" type="tel" autocomplete="tel" required></label>'
-            '<label>Email<input name="email" type="email" autocomplete="email" required></label>'
-            + consent_label() +
-            '<button class="btn btn-o" type="submit">Save this info</button></form>'
+            '<div class="lead-h"><strong>Stage 1</strong><span>Address first, then contact info. This only saves the info.</span></div>'
+            + ts_steps('Continue', 'Save this info') +
+            '</form>'
             '<div id="ts-sorry"></div><div id="ts-followup"></div><div id="ts-thanks"></div><div id="ts-ask"></div>'
             '<h2 id="ts-trace-title">Step trace</h2><p id="ts-summary" data-google="not-loaded" data-downstream="" data-priority=""></p>'
             '<p id="ts-error" hidden role="alert"></p><p id="ts-events"></p><ol id="ts-trace"></ol></div>'
@@ -1233,12 +1319,7 @@ def build(site, pages, markets, redirects, live):
         return (
             '<div class="lead" id="two-stage"><div id="ts-app" data-public="1"><form id="ts-form" action="#" method="post">'
             '<div class="lead-h"><strong>Get your fair cash offer</strong><span>Takes about 60 seconds. No obligation.</span></div>'
-            '<label>Name<input name="name" autocomplete="name" required></label>'
-            '<label>Property address<input name="address" autocomplete="street-address" required></label>'
-            '<label>Phone<input name="phone" type="tel" autocomplete="tel" required></label>'
-            '<label>Email<input name="email" type="email" autocomplete="email" required></label>'
-            + consent_label() +
-            '<button class="btn btn-o" type="submit">Get My Offer</button>'
+            + ts_steps('Get My Offer &rarr;', 'Continue &rarr;') +
             f'<p class="fine">Your info stays private. Or call/text <a href="tel:{TEL}">{PH}</a></p></form>'
             '<div id="ts-sorry"></div><div id="ts-followup"></div><div id="ts-thanks"></div><div id="ts-ask"></div>'
             '<p id="ts-error" hidden role="alert"></p>'

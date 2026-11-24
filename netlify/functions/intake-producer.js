@@ -529,6 +529,24 @@ function parkContact(input) {
   return { fields, full, line, phone, email };
 }
 
+// Step 1 of the address-first form: address only. Same address rule as parkContact.
+function parkAddress(input) {
+  const line = typeof input.address_line === "string" ? input.address_line.trim() : "";
+  const fields = [];
+  if (line.length < 3 || line.length > 200) fields.push("address_line");
+  if (input.is_test != null && typeof input.is_test !== "boolean") fields.push("is_test");
+  return { fields, line };
+}
+
+// Address-only partials are forwarded to the edge only when INTAKE_ADDRESS_PARTIALS is "1".
+// The deployed intake-park requires name, phone, and email, and stage_intake_contact ignores a
+// re-park (on conflict do nothing), so the flag stays off until the Supabase side is updated
+// (docs/ADDRESS-PARTIALS.md). With the flag off, the address is held in the sealed cookie and rides
+// on the contact park, exactly like today's one-screen form.
+function addressPartialsOn(env) {
+  return String((env && env.INTAKE_ADDRESS_PARTIALS) || "") === "1";
+}
+
 function intakeClosed(state) {
   return !!(state && state.intake_id && (state.zap_sent === true || state.claim_status === "already_claimed"));
 }
@@ -618,7 +636,7 @@ async function handle(event, deps) {
   const refused = banned(input);
   if (refused.length) return bad(400, { ok: false, status: "bad_input", fields: refused });
   const op = String(input.op || "");
-  const ops = { mint: 1, park: 1, answer: 1, claim: 1, enrich: 1, reserve: 1 };
+  const ops = { mint: 1, park: 1, park_address: 1, answer: 1, claim: 1, enrich: 1, reserve: 1 };
   if (!ops[op]) return bad(404, { ok: false, status: "unknown_op" });
   const headers = event.headers || {};
   const jar = cookies(headers.cookie || headers.Cookie || "");
@@ -626,6 +644,10 @@ async function handle(event, deps) {
   let state = open(jar[COOKIE], ckey) || {};
   const base = String(env.INTAKE_EDGE_BASE_URL).replace(/\/$/, "");
   const ip = clientIp(headers);
+  // Step 2 re-sends the address; if a client leaves it off, use the one held from Step 1.
+  if (op === "park" && !(typeof input.address_line === "string" && input.address_line.trim()) && typeof state.address_line === "string") {
+    input.address_line = state.address_line;
+  }
 
   async function edge(path, body) {
     let res;
@@ -653,9 +675,9 @@ async function handle(event, deps) {
   // A later contact submit on an intake that already reserved or was already claimed
   // starts a new intake. An in-progress intake that has not been reserved stays put.
   // Resume without a new park still uses the closed intake, so thanks can still show.
-  if (op === "park" && intakeClosed(state)) {
+  if ((op === "park" || op === "park_address") && intakeClosed(state)) {
     const tracked = trackingErrors(input);
-    const contact = parkContact(input);
+    const contact = op === "park" ? parkContact(input) : parkAddress(input);
     if (!tracked.fields.length && !contact.fields.length) {
       const previous = state.tracking;
       const touch = state.touch;
@@ -663,6 +685,19 @@ async function handle(event, deps) {
       state = { tracking: tracking };
       if (touch && typeof touch === "object" && !Array.isArray(touch)) state.touch = touch;
     }
+  }
+
+  // Held address-only partial: no mint, no edge call, no CRM row, no conversion.
+  if (op === "park_address" && !addressPartialsOn(env)) {
+    const heldTrack = trackingErrors(input);
+    if (heldTrack.fields.length) return respond(env, state, 400, { ok: false, status: "bad_input", fields: heldTrack.fields });
+    const held = parkAddress(input);
+    if (held.fields.length) return respond(env, state, 400, { ok: false, status: "bad_input", fields: held.fields });
+    stick(state, heldTrack.tracking);
+    mergeTouch(state, input.touch);
+    alignTouch(state);
+    state.address_line = held.line;
+    return respond(env, state, 200, { ok: true, status: "address_held" });
   }
 
   if (!state.intake_id) {
@@ -679,12 +714,20 @@ async function handle(event, deps) {
   stick(state, tracked.tracking);
   mergeTouch(state, input.touch);
   alignTouch(state);
-  const needsIp = op === "park" || op === "answer" || op === "claim" || op === "enrich";
+  const needsIp = op === "park" || op === "park_address" || op === "answer" || op === "claim" || op === "enrich";
   if (needsIp && !ip) return respond(env, state, 400, { ok: false, status: "bad_input", fields: ["client_ip"] });
 
   let payload = Object.assign({}, state.tracking);
   if (needsIp) payload.client_ip = ip;
-  if (op === "park") {
+  if (op === "park_address") {
+    const addr = parkAddress(input);
+    if (addr.fields.length) return respond(env, state, 400, { ok: false, status: "bad_input", fields: addr.fields });
+    payload.address_line = addr.line;
+    payload.is_test = input.is_test === true;
+    // Tells the updated intake-park that name, phone, and email come later (docs/ADDRESS-PARTIALS.md).
+    payload.partial = "address";
+    state.address_line = addr.line;
+  } else if (op === "park") {
     const contact = parkContact(input);
     if (contact.fields.length) return respond(env, state, 400, { ok: false, status: "bad_input", fields: contact.fields });
     payload.full_name = contact.full;
@@ -720,7 +763,7 @@ async function handle(event, deps) {
   const stage = op === "reserve" ? (input.stage === "first" ? "first" : "final") : "partial";
   const envFields = envelopeFor(env, state, stage, payload, now);
   const edgeBody = { envelope: envFields, payload };
-  if (op === "park" || op === "reserve") edgeBody.session_binding = state.session_binding;
+  if (op === "park" || op === "park_address" || op === "reserve") edgeBody.session_binding = state.session_binding;
   if (op === "reserve") {
     state.owner_token = state.owner_token || crypto.randomUUID();
     edgeBody.destination = input.destination === "crm_update" ? "crm_update" : "crm_create";
@@ -728,7 +771,7 @@ async function handle(event, deps) {
     edgeBody.lease_seconds = 120;
     state.reserve_stage = stage;
   }
-  const path = op === "reserve" ? "/intake-reserve/reserve" : "/intake-park/" + op;
+  const path = op === "reserve" ? "/intake-reserve/reserve" : (op === "park_address" ? "/intake-park/park" : "/intake-park/" + op);
   let result = await edge(path, edgeBody);
   if (op === "enrich" && result.status === 503) {
     await new Promise((resolve) => setTimeout(resolve, deps && deps.retryMs != null ? deps.retryMs : 40));

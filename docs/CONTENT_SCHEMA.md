@@ -125,11 +125,14 @@ ClickCease `cccontrack.js` is not in the initial HTML. That script records a con
 
 That same success path, and not a view of `/step-2` or `/thank-you`, also fires Meta `Lead` and OpenAI `lead_created` plus the custom `seller_form_completed` measure. Each is guarded by lead id so a repeat for the same lead does not fire again. **WhatConverts form leads.** Profile 176490's script only auto-captures the old Carrot Gravity Forms (`form#gform_1`, `#gform_100002`, `#gform_100003`). The two-stage form (`#ts-form`) is not in that list and posts through `fetch`, so the script never saw it. After a reserved Hot completion (the same point that pushes `seller_form_completed`), `two-stage.js` calls the profile script's own `$wc_leads.track.form(form_set_id, fields)` once per lead id. The marker `whatconverts` lives in `fsho_ts_fired` (localStorage and sessionStorage), so a reload or repeat does not send again. Stage 1, abandon, quiet property, non-owner, and `/test-intake/` never send. If the script is not loaded yet it retries every 500 ms for about 15 s, then gives up. The script adds `wc_profile_id`, `wc_form_set_id`, `wc_client`, `wc_page`, and the GA client and session ids, and posts to `//p.ksrndkehqnwntyxlhgto.com/lead/form`. Fields sent (empty ones dropped): `First`, `Last`, `Email*`, `Phone #*`, `Street Address`, `Text Consent`, `Property Type`, `Ownership`, `gclid`, `gbraid`, `wbraid`, `fbclid`, `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`, `Landing Page` (first-touch URL), `Site Lead ID`, `Form` (`fsho.co seller form`). Do not add `#ts-form` as a web form in WhatConverts: its native listener would then also count every stage-1 submit.
 
+**Address-first steps (Nov 23, 2026).** The public form is three steps: Step 1 is the property address only (`#ts-s1`, `autocomplete="address-line1"`), Step 2 is name, phone, email, and the one required consent box (`#ts-s2`), Step 3 is the qualifying questions (property type, then owner), then the optional follow-ups. Step 1 pushes **nothing** onto `dataLayer`, loads no Google tag, and sends no WhatConverts lead; it posts producer op `park_address` (address + attribution) so the address-only partial can reach the CRM (see `docs/ADDRESS-PARTIALS.md`).
+
 **Form events on `dataLayer`.** The public two-stage form pushes:
 
 | Event | When | Fields | Google Ads conversion? |
 |---|---|---|---|
-| `seller_form_partial` | Stage 1 (name, address, phone, email) parked OK | `transaction_id` (lead id), `gclid`, `gbraid`, `wbraid` | **No.** Reporting only. |
+| (none) | Step 1 address-only submit | | **No.** Nothing is pushed. |
+| `seller_form_partial` | Step 2 (name, phone, email + the Step 1 address) parked OK | `transaction_id` (lead id), `gclid`, `gbraid`, `wbraid` | **No.** Reporting only. |
 | `seller_form_completed` | Hot path: `sfh` or `multi_2_4` and an owner, after reserve | `transaction_id` (lead id), `gclid`, `gbraid`, `wbraid` | Yes. The only conversion event name. |
 | `seller_form_disqualified` | Quiet property, non-owner, nurture, DQ | `transaction_id`, `reason`, `property_type` | No. |
 

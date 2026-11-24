@@ -156,7 +156,8 @@ class ParityTests(unittest.TestCase):
         self.assertNotIn('The live site does not turn the test form on.', page)
 
     def assert_ownership_label(self, page):
-        self.assertIn('["decision_maker", "I\'m an heir, executor, or have power of attorney"]', page)
+        # /test-intake/ inlines a whitespace-squeezed copy (js_squeeze), so allow either spacing.
+        self.assertRegex(page, r'\["decision_maker", ?"I\'m an heir, executor, or have power of attorney"\]')
         self.assertNotIn("I'm an heir, executor, or POA", page)
 
     def write(self, rel, text):
@@ -671,8 +672,9 @@ cta_label: "Page specific heading"
         home = (Path(gen.OUT) / 'index.html').read_text(encoding='utf-8')
         self.assertIn('id="ts-form"', home)
         self.assertIn('<label>Name<input name="name" autocomplete="name" required></label>', home)
-        self.assertIn('<label>Property address<input name="address" autocomplete="street-address" required></label>', home)
-        self.assertIn('<label>Phone<input name="phone" type="tel" autocomplete="tel" required></label>', home)
+        self.assertIn('<label>Property address<input name="address" autocomplete="address-line1" required></label>', home)
+        self.assertNotIn('autocomplete="street-address"', home)
+        self.assertIn('<label>Phone<input name="phone" type="tel" autocomplete="tel" inputmode="tel" required></label>', home)
         self.assertIn('<label>Email<input name="email" type="email" autocomplete="email" required></label>', home)
         self.assertNotIn('name="form_id" value="1"', home)
         self.assertNotIn('House address', home)
@@ -783,7 +785,7 @@ cta_label: "Page specific heading"
             box = re.search(r'<label class="consent" data-consent-size="12"><input type="checkbox" name="consent" required aria-describedby="consent-err">(.*?)</label>', html)
             self.assertIsNotNone(box, name)
             self.assertNotIn('checked', box.group(0).split('<small>')[0], name)
-            self.assertIn('Address suggestions are powered by Google Maps', box.group(0), name)
+            self.assertIn('Address search by Google Maps', box.group(0), name)
             self.assertIn('href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer"', box.group(0), name)
             self.assertIn('href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer"', box.group(0), name)
             self.assertIn('<p class="consent-err" id="consent-err" role="alert"></p>', html, name)
@@ -1317,7 +1319,7 @@ cta_label: "Page specific heading"
             self.assertEqual(html.count('id="offer"'), 1, slug)
             self.assertEqual(html.count('id="two-stage"'), 1, slug)
             self.assertEqual(html.count('id="ts-form"'), 1, slug)
-            self.assertIn('>Get My Offer</button>', html, slug)
+            self.assertIn('>Get My Offer &rarr;</button>', html, slug)
             self.assertIn('href="#offer">Get Offer</a>', html, slug)
             self.assertIn('tel:+19106366669', html, slug)
             self.assertIn('(910) 636-6669', html, slug)
@@ -1585,6 +1587,54 @@ faq:
         for frag in ('## Key pages', 'https://fsho.co/faq/', 'https://fsho.co/how-it-works/', 'Phone: (910) 636-6669', 'Sitemap: https://fsho.co/sitemap.xml'):
             self.assertIn(frag, llms)
         self.assertNotIn('example-city', llms)
+
+
+    def test_address_first_three_step_form(self):
+        """Andrew + Taylor, Nov 23, 2026: Step 1 address only, Step 2 contact + required consent, Step 3 questions."""
+        self.build(live=True)
+        pages = [p for p in Path(gen.OUT).rglob('index.html') if 'data-public="1"' in p.read_text(encoding='utf-8')]
+        self.assertGreater(len(pages), 5)
+        for fp in pages:
+            html = fp.read_text(encoding='utf-8')
+            name = str(fp.relative_to(gen.OUT))
+            form = re.search(r'<form id="ts-form"[^>]*>(.*?)</form>', html, re.S)
+            self.assertIsNotNone(form, name)
+            body = form.group(1)
+            s1 = re.search(r'<fieldset class="ts-step" id="ts-s1" data-step="1">(.*?)</fieldset>', body, re.S)
+            s2 = re.search(r'<fieldset class="ts-step" id="ts-s2" data-step="2" hidden disabled>(.*?)</fieldset>', body, re.S)
+            self.assertIsNotNone(s1, name)
+            self.assertIsNotNone(s2, name)
+            # Step 1: the address and a button. No name, phone, email, or consent wall.
+            self.assertEqual(re.findall(r'<input\b[^>]*name="([^"]+)"', s1.group(1)), ['address'], name)
+            self.assertIn('autocomplete="address-line1"', s1.group(1), name)
+            self.assertNotIn('street-address', html, name)
+            self.assertNotIn('consent', s1.group(1), name)
+            # Step 2: name, phone, email, then the one required, unchecked consent box right above the button.
+            self.assertEqual(re.findall(r'<input\b[^>]*name="([^"]+)"', s2.group(1)), ['name', 'phone', 'email', 'consent'], name)
+            box = re.search(r'<input type="checkbox" name="consent" required aria-describedby="consent-err">', s2.group(1))
+            self.assertIsNotNone(box, name)
+            self.assertLess(s2.group(1).index('class="consent"'), s2.group(1).rindex('type="submit"'), name)
+            self.assertIn('Google Maps', s2.group(1), name)
+            self.assertEqual(body.count('name="consent"'), 1, name)
+            self.assertIn('id="ts-prog"', body, name)
+            self.assertIn('id="ts-back"', s2.group(1), name)
+            self.assertEqual(html.count('GTM-TM6JSDLB') >= 1, True, name)
+            self.assertNotIn('GTM-WWPBQGDZ', html, name)
+            self.assertLessEqual(html.count('176490.js'), 1, name)
+        css = (Path(__file__).resolve().parent / 'style.css').read_text(encoding='utf-8')
+        self.assertIn('min-height:44px;min-width:44px', re.search(r'\.ts-back\{[^}]*\}', css).group(0))
+        self.assertIn('#ts-form fieldset.ts-step[hidden]{display:none}', css)
+
+    def test_js_squeeze_keeps_strings_regexes_and_newlines(self):
+        src = 'var a = "x // y /* z */"; // gone\n/* gone */\nvar r = /a\\/b[/]c/g.test(a) ? 1 : 2;\nvar b = a - -1, c = a + +1;\nreturn  typeof a\n'
+        out = gen.js_squeeze(src)
+        self.assertIn('"x // y /* z */"', out)
+        self.assertIn('/a\\/b[/]c/g.test(a)', out)
+        self.assertIn('a- -1', out)
+        self.assertIn('a+ +1', out)
+        self.assertNotIn('gone', out)
+        self.assertEqual(out.count('\n'), src.count('\n') - 1)
+        self.assertEqual(gen.js_squeeze(out), out)
 
 
 def home_h1(html):
