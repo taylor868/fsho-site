@@ -963,6 +963,8 @@ def check(site, pages, markets, redirects, errs):
             for k in ('hero_headline', 'hero_sub'):
                 if not p.get(k): E.append(f'{p["_src"]}: template {p["template"]} needs "{k}"')
         if not isinstance(p.get('noindex', False), bool): E.append(f'{p["_src"]}: noindex must be true/false')
+        for hk in ('hero_compact', 'hero_rating'):
+            if not isinstance(p.get(hk, False), bool): E.append(f'{p["_src"]}: {hk} must be true/false')
         check_draft(p['_src'], p, E)
         if p.get('draft') is True and p['slug'] == '':
             E.append(f'{p["_src"]}: home page cannot be draft; the site would have no index')
@@ -1245,9 +1247,15 @@ def build(site, pages, markets, redirects, live):
             '<p id="ts-events" hidden></p><ol id="ts-trace" hidden></ol></div>'
             + stage_boot(ctx, real_flag, src) + addr_boot(S, live, bias) + sticky_guard() + '</div>'
         )
-    def hero(h, sub, intake=False, bias=''):
+    def hero(h, sub, intake=False, bias='', compact=False, rating=False):
         panel = public_intake(bias) if intake else form()
-        return f'<section class="hero" id="offer"><div class="wrap hg"><div><p class="eyebrow">{S["hero_eyebrow"]}</p><h1>{h}</h1><p class="lede">{sub}</p>{trust}</div>{panel}</div></section>'
+        if rating:
+            # Verified Google Business Profile figures (5.0 from 73 reviews). Update only from the live listing.
+            panel = ('<div class="hrate"><a href="https://share.google/xhED38I3oGqYAQE21" target="_blank" rel="noopener noreferrer">'
+                     '<span class="stars" aria-hidden="true">&#9733;&#9733;&#9733;&#9733;&#9733;</span> <b>5.0</b> rating from 73 Google reviews</a></div>' + panel)
+            panel = f'<div class="hform">{panel}</div>'
+        cls = 'hero compact' if compact else 'hero'
+        return f'<section class="{cls}" id="offer"><div class="wrap hg"><div><p class="eyebrow">{S["hero_eyebrow"]}</p><h1>{h}</h1><p class="lede">{sub}</p>{trust}</div>{panel}</div></section>'
     sits = '<div class="grid3">' + ''.join(f'<div class="card"><div class="ic">{x["icon"]}</div><h3>{x["title"]}</h3><p>{x["text"]}</p></div>' for x in S['situations']) + '</div>'
     steps = '<div class="grid3 steps">' + ''.join(f'<div class="card"><b>{x["n"]}</b><h3>{x["title"]}</h3><p>{x["text"]}</p></div>' for x in S['steps']) + '</div>'
     cp = S['comparison']
@@ -1385,7 +1393,7 @@ def build(site, pages, markets, redirects, live):
         faq_items = p.get('faq') or S['faq']
         body = md(shortcodes(p['body'], faq_items, p.get('cta_label'), offer))
         if p['template'] in ('home', 'situation'):
-            body = hero(p['hero_headline'], p['hero_sub'], intake=True) + body
+            body = hero(p['hero_headline'], p['hero_sub'], intake=True, compact=bool(p.get('hero_compact')), rating=bool(p.get('hero_rating'))) + body
         page(path, p['title'], (p.get('meta_description') or '').replace('{{phone}}', PH), body, bool(p.get('noindex', False) or p.get('draft')),
              canonical=p.get('canonical') or None, og_title=p.get('og_title') or None, og_image=p.get('og_image') or None,
              faq_ld=faq_ld_items(body, p.get('faq'), p.get('body'), p['slug']), file_rel=file_rel, offer_href=offer,
