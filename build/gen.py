@@ -1550,6 +1550,20 @@ def build(site, pages, markets, redirects, live):
         if os.path.basename(fp) == 'media.json': continue
         shutil.copy(fp, OUT)
     open(os.path.join(OUT, 'addr.js'), 'w', encoding='utf-8').write(addr_src())
+    # Seller-personalization MOCKUPS (build/mockups.py): deploy previews and local builds only.
+    # Only on Netlify deploy previews / branch deploys, or a local build with FSHO_MOCKUPS=1.
+    # Never written for CONTEXT=production or --live, so they cannot appear on fsho.co.
+    if deploy_context(live) in ('deploy-preview', 'branch-deploy') or (deploy_context(live) == 'local' and os.environ.get('FSHO_MOCKUPS') == '1'):
+        if B not in sys.path: sys.path.insert(0, B)
+        import mockups
+        mk_header = (f'<header class="top"><div class="wrap hd"><a href="/" class="logo"><img src="{S["logo"]}" alt="{logo_alt}" fetchpriority="high"></a><nav>{navl}</nav>'
+                     f'<a class="btn btn-call" href="tel:{TEL}">📞 {PH}</a></div><nav class="mnav" aria-label="Sections"><a href="/how-it-works/">How It Works</a><a href="/reviews/">Reviews</a><a href="/faq/">FAQ</a></nav></header>')
+        mk_footer = (f'<footer class="ft"><div class="wrap fg"><div><img src="{S["logo"]}" alt="" class="inv" loading="lazy"><p>{S["footer"]["about"]}</p>'
+                     f'<p class="contact"><a href="tel:{TEL}">{PH}</a> · call or text · <a class="mail" href="mailto:{EMAIL}">Email {EMAIL}</a></p></div>'
+                     f'<div><strong>Company</strong>{navl}</div><div><strong>Legal</strong>' + ''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S["footer"]["legal"]) +
+                     f'</div></div><p class="wrap copy">{S["footer"]["copyright"]}</p></footer>')
+        mockups.build_mockups(OUT, {'S': S, 'PH': PH, 'TEL': TEL, 'CSS': CSS, 'header': mk_header, 'footer': mk_footer,
+                                    'trust': trust, 'steps': steps, 'ts_steps': ts_steps})
     guard_test_page()
     check_forms()
     return built, skipped, drafts_in

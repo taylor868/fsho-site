@@ -1,0 +1,44 @@
+/* Mockup-only styles (/mockups/*). Reuses the site's tokens: --n navy, --o orange, --t text. */
+.mk-banner{background:#7a1010;color:#fff;text-align:center;font:700 14px/1.4 system-ui,sans-serif;padding:8px 12px}.mk-banner a{color:#fff;text-decoration:underline;margin-left:6px}
+.mk-info{margin:12px auto 0;font-size:14px;color:#33404d}.mk-info summary{cursor:pointer;font-weight:700;color:var(--n);min-height:44px;display:flex;align-items:center}
+.mk-info dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 12px;margin:4px 0 8px}.mk-info dt{font-weight:700}.mk-info dd{margin:0}.mk-info code,.mk-scn code{font-size:12px;background:#eef1f4;padding:1px 4px;border-radius:4px;color:#1b2733;word-break:break-all}
+.mk-tag{text-transform:uppercase;letter-spacing:.06em;font-size:12px;font-weight:800;color:#3d5166;text-align:center;margin:0 0 6px}
+.mk-narrow{max-width:46rem;margin-left:auto;margin-right:auto}
+.mk-ph{border:2px dashed #8a6d00;background:#fffbea;color:#3d3000;padding:14px 16px;border-radius:10px;text-align:center;font-size:15px;max-width:46rem;margin:16px auto 0}
+.mk-ph-i{background:#fff3c4;color:#3d3000;padding:0 4px;border-radius:4px;font-weight:600}
+.hero .mk-ph-i{color:#3d3000}
+.mk-local-line{font-weight:700;margin:4px 0 0}
+.mk-ah{background:#fff7f2;color:#1b2733;border-left:4px solid var(--o);border-radius:8px;padding:10px 12px;font-size:15px;font-weight:600;margin:10px 0 0}
+.mk-resume{background:#f3f6f9;border:1.5px solid #c8d1da;border-radius:12px;padding:14px;margin:0 0 14px}.mk-resume-h{margin:0 0 6px;font-weight:800;color:var(--n);font-size:18px}
+.mk-resume-a{margin:0 0 8px;display:flex;flex-direction:column;font-size:15px}.mk-resume-a span{font-size:12px;font-weight:700;text-transform:uppercase;color:#4a5160}.mk-resume-a b{color:var(--n);overflow-wrap:anywhere}
+.mk-resume-b{display:flex;gap:8px;align-items:center}.mk-resume-b .btn{width:auto;margin:0;flex:1}
+.mk-done{padding:8px 0}.mk-done h2{font-size:22px;margin:0 0 8px}.mk-done p{color:#33404d}
+.mk-chips{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:8px 0 24px}
+.mk-chip{min-height:44px;padding:8px 16px;border-radius:999px;border:2px solid var(--n);background:#fff;color:var(--n);font:700 15px/1.2 system-ui,sans-serif;cursor:pointer}
+.mk-chip[aria-pressed=true]{background:var(--n);color:#fff}.mk-chip:focus-visible,.mk-bar a:focus-visible{outline:3px solid var(--o);outline-offset:2px}
+.mk-story>h3{font-size:clamp(22px,3vw,28px);text-align:center}.mk-story>p{max-width:46rem;margin:0 auto 20px;text-align:center;color:#33404d}
+.mk-story .faq{margin-top:24px}.mk-story .faq p{color:#33404d}.mk-story .more{text-align:center;margin-top:16px;font-weight:700}
+.mk-empty{text-align:center;color:#33404d}
+.mk-cmp{max-width:980px;margin:20px auto 8px;background:#fff;border:1px solid #e3e8ed;border-radius:14px;overflow:hidden;font-size:15px}
+.mk-cmp-r{display:grid;grid-template-columns:1fr 1.4fr 1.4fr;border-bottom:1px solid #e3e8ed}.mk-cmp-r:last-child{border-bottom:0}
+.mk-cmp-r>span{padding:12px 14px}.mk-cmp-r>span[role=rowheader]{font-weight:800;color:var(--n)}.mk-cmp .us{background:#fff3ec}
+.mk-cmp-hd>span{background:#e9eef3;font-weight:800;color:var(--n)}.mk-cmp-hd>span.us{background:var(--n);color:#fff}
+.mk-people{display:grid;grid-template-columns:repeat(2,minmax(0,260px));gap:24px;justify-content:center;margin:20px 0}
+.mk-face{margin:0;text-align:center}.mk-photo{aspect-ratio:1;border:2px dashed #8a6d00;background:#fffbea;color:#3d3000;border-radius:16px;display:grid;place-items:center;padding:12px;font-weight:700;font-size:15px}
+.mk-face figcaption{margin-top:10px;display:flex;flex-direction:column;gap:2px}.mk-face b{color:var(--n)}.mk-face span{font-size:14px;color:#33404d}
+.mk-bar{display:none}
+.mk-ideas li{margin:6px 0}.mk-scn{list-style:none;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}.mk-scn .card p{margin:6px 0}.mk-scn a{font-size:17px}
+@media(max-width:860px){
+body.mk{padding-bottom:0}
+.mk-bar:not([hidden]){display:block;position:fixed;left:0;right:0;bottom:0;z-index:10;box-shadow:0 -4px 14px #0003}
+.mk-ah-bar{margin:0;border-radius:0;border-left:0;border-top:3px solid var(--o);font-size:14px;padding:8px 12px}
+.mk-bar-b{display:flex}.mk-bar-b a{flex:1;display:flex;align-items:center;justify-content:center;min-height:56px;font-weight:800;font-size:17px;text-decoration:none;color:#fff}
+.mk-bar-call{background:var(--n)}.mk-bar-go{background:var(--o)}
+.mk-cmp-hd{display:none}.mk-cmp-r{grid-template-columns:1fr;padding:12px 0}.mk-cmp-r>span{padding:4px 14px}
+.mk-cmp-r>span[role=cell]::before{content:attr(data-h);display:block;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:#4a5160}
+.mk-cmp-r>span.us{margin:6px 10px 0;border-radius:10px;padding:8px 10px}
+.mk-people{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.mk-resume-b{flex-wrap:wrap}
+}
+/* AA fix for the mockup only: the live eyebrow (#B8501C on navy) is about 2.3:1. Peach #ffd2b8 is the hero link color and passes on both gradient ends. */
+.mk .hero .eyebrow{color:#ffd2b8!important}
