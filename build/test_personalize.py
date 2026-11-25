@@ -20,6 +20,7 @@ class PersonalizeTests(unittest.TestCase):
         for b in PZ['buckets']:
             re.compile(b['match'])
             self.assertTrue(b['sub'].startswith('Get a fair cash offer in 24 hours'), b['id'])
+            self.assertIn('we cover closing costs', b['sub'], b['id'])
             for banned in ('guarantee', 'stop foreclosure', 'within days', 'highest', 'best price', 'any condition', '%'):
                 self.assertNotIn(banned, (b['h1'] + ' ' + b['sub']).lower(), b['id'])
 
@@ -44,10 +45,11 @@ class PersonalizeTests(unittest.TestCase):
 
     def test_mobile_bar_after_hours_and_resume_slots(self):
         hrs = json.loads((ROOT / 'content' / 'site.json').read_text(encoding='utf-8'))['phone_hours']
-        self.assertEqual((hrs['tz'], hrs['open'], hrs['close']), ('America/New_York', 8, 20))
+        self.assertEqual((hrs['tz'], hrs['days'], hrs['open'], hrs['close']), ('America/New_York', [1, 2, 3, 4, 5], 10, 17))
         home = self.html('')
         self.assertEqual(home.count('<div class="mbar" id="mbar">'), 1)
-        self.assertIn('<a class="sticky" href="tel:+19106366669"', home)
+        # Default number on purpose: WhatConverts DNI (176490.js) swaps every (910) 636-6669 href and text node.
+        self.assertIn('<a class="sticky" href="tel:+19106366669"><span aria-hidden="true">📞 </span>Call or text<span class="sr-only"> (910) 636-6669</span></a>', home)
         self.assertIn('class="ts-resume"', home)
         self.assertIn('class="tbl" tabindex="0" role="region" aria-label=', home)
         self.assertNotIn('Mobile Call / Get Offer bar', self.html('test-intake'))

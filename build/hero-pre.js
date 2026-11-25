@@ -42,16 +42,18 @@
   }
   if (!city && R && R.c) city = clean(R.c);
   if (city) show(col.querySelector(".hcity"), D.ct.split("{city}").join(city));
-  /* 2b. After-hours note by ET clock. ?fsho_ah=1 / 0 forces it (only flips this note). */
-  function etHour() {
+  /* 2b. After-hours note: outside staff days/hours in ET (weekends included). ?fsho_ah=1 / 0 forces it (only flips this note). */
+  function offHours() {
     try {
-      var p = new Intl.DateTimeFormat("en-US", { timeZone: D.hr.tz, hour: "numeric", hourCycle: "h23" }).formatToParts(new Date());
-      for (var k = 0; k < p.length; k++) if (p[k].type === "hour") return (+p[k].value) % 24;
-    } catch (e) {}
-    return -1;
+      var p = new Intl.DateTimeFormat("en-US", { timeZone: D.hr.tz, weekday: "short", hour: "numeric", hourCycle: "h23" }).formatToParts(new Date()), wd = "", hr = -1;
+      for (var k = 0; k < p.length; k++) { if (p[k].type === "weekday") wd = p[k].value; if (p[k].type === "hour") hr = (+p[k].value) % 24; }
+      var day = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(wd) + 1;
+      if (!day || hr < 0) return false;
+      return D.hr.days.indexOf(day) < 0 || hr < D.hr.open || hr >= D.hr.close;
+    } catch (e) { return false; }
   }
-  var f = get("fsho_ah"), hr = etHour();
-  var after = f === "1" ? true : f === "0" ? false : (hr >= 0 && (hr < D.hr.open || hr >= D.hr.close));
+  var f = get("fsho_ah");
+  var after = f === "1" ? true : f === "0" ? false : offHours();
   if (after) { d.documentElement.classList.add("after-hours"); show(col.querySelector(".ah-note"), D.ah); }
   var rp = col.querySelector(".ts-resume");
   if (R && rp && d.getElementById("offer")) {

@@ -1,32 +1,57 @@
 {
   "_note": "Search-matched hero copy (homepage + general ad landers with personalize: true). First match wins; no match keeps the page's own H1. Claims must stay word-for-word with what the site and ads already say ('fair cash offer in 24 hours', as-is, no repairs, no agent commission). H1s write as-is with a non-breaking hyphen (\\u2011) so it never wraps as 'as- / is'. Matched against utm_term, keyword and utm_campaign. ?fsho_intent=<id> forces a bucket for demos.",
-  "sources": ["utm_term", "keyword", "utm_campaign"],
-  "city_params": ["city", "utm_city"],
+  "sources": [
+    "utm_term",
+    "keyword",
+    "utm_campaign"
+  ],
+  "city_params": [
+    "city",
+    "utm_city"
+  ],
   "city_line": "Selling a house in {city}? Ask for a no-obligation cash offer.",
   "buckets": [
-    {"id": "foreclosure", "label": "Foreclosure / behind on payments",
-     "match": "foreclos|behind on|missed (mortgage )?payment|late (mortgage )?payment|auction|sheriff|notice of default|can.?t pay (my |the )?mortgage",
-     "h1": "Behind on payments? See your options while there's still time.",
-     "sub": "Get a fair cash offer in 24 hours and see if a sale fits your timeline. Sell as-is, with no repairs and no agent commission. No obligation. We are not your lender, and we are not attorneys."},
-    {"id": "probate", "label": "Probate / inherited",
-     "match": "probate|inherit|estate|executor|executrix|administrator|deceased|passed away|heir",
-     "h1": "Selling an inherited or estate house? Sell it as\u2011is.",
-     "sub": "Get a fair cash offer in 24 hours, without clearing out or fixing up the house first. No agent commission, no obligation, and we do not give legal advice."},
-    {"id": "divorce", "label": "Divorce / separation",
-     "match": "divorc|separat|splitting up|ex.?(wife|husband|spouse)",
-     "h1": "Selling the house in a divorce? One clear offer you can both review.",
-     "sub": "Get a fair cash offer in 24 hours. A private, as-is sale without a string of showings, and no agent commission. We do not take sides, and we are not attorneys."},
-    {"id": "landlord", "label": "Landlord / tenants",
-     "match": "landlord|tenant|rental|renter|evict|section 8|duplex|triplex|fourplex|multi ?family",
-     "h1": "Done being a landlord? Sell the rental as\u2011is.",
-     "sub": "Get a fair cash offer in 24 hours, even with tenants still living there. No repairs and no agent commission. We do not promise an eviction or that tenants will leave."},
-    {"id": "repairs", "label": "Repairs / as-is",
-     "match": "repair|as ?is|fixer|damage|condition|mold|roof|foundation|fire|hoard|clean ?out|outdated|ugly",
-     "h1": "House needs work? Sell it as\u2011is.",
-     "sub": "Get a fair cash offer in 24 hours. No repairs, no cleaning, and no agent commission. No obligation to accept."},
-    {"id": "fast", "label": "Relocation / sell fast",
-     "match": "relocat|moving|job transfer|transferr|military|pcs|out of state|downsiz|new job|fast|quick|asap|urgent",
-     "h1": "Need to sell fast? Sell on your timeline.",
-     "sub": "Get a fair cash offer in 24 hours. Sell as-is without a string of showings, with no repairs and no agent commission, then pick the closing date that works for you."}
+    {
+      "id": "foreclosure",
+      "label": "Foreclosure / behind on payments",
+      "match": "foreclos|behind on|missed (mortgage )?payment|late (mortgage )?payment|auction|sheriff|notice of default|can.?t pay (my |the )?mortgage",
+      "h1": "Behind on payments? See your options while there's still time.",
+      "sub": "Get a fair cash offer in 24 hours and see if a sale fits your timeline. Sell as-is with no repairs, no agent commission, and we cover closing costs. We are not your lender or attorneys."
+    },
+    {
+      "id": "probate",
+      "label": "Probate / inherited",
+      "match": "probate|inherit|estate|executor|executrix|administrator|deceased|passed away|heir",
+      "h1": "Selling an inherited or estate house? Sell it as\u2011is.",
+      "sub": "Get a fair cash offer in 24 hours, without clearing out or fixing up the house first. No agent commission, we cover closing costs, and we do not give legal advice."
+    },
+    {
+      "id": "divorce",
+      "label": "Divorce / separation",
+      "match": "divorc|separat|splitting up|ex.?(wife|husband|spouse)",
+      "h1": "Selling the house in a divorce? One clear offer you can both review.",
+      "sub": "Get a fair cash offer in 24 hours. A private, as-is sale with no string of showings, no agent commission, and we cover closing costs. We do not take sides, and we are not attorneys."
+    },
+    {
+      "id": "landlord",
+      "label": "Landlord / tenants",
+      "match": "landlord|tenant|rental|renter|evict|section 8|duplex|triplex|fourplex|multi ?family",
+      "h1": "Done being a landlord? Sell the rental as\u2011is.",
+      "sub": "Get a fair cash offer in 24 hours, even with tenants in place. No repairs, no agent commission, and we cover closing costs. We do not promise an eviction or that tenants will leave."
+    },
+    {
+      "id": "repairs",
+      "label": "Repairs / as-is",
+      "match": "repair|as ?is|fixer|damage|condition|mold|roof|foundation|fire|hoard|clean ?out|outdated|ugly",
+      "h1": "House needs work? Sell it as\u2011is.",
+      "sub": "Get a fair cash offer in 24 hours. No repairs, no cleaning, no agent commission, and we cover closing costs."
+    },
+    {
+      "id": "fast",
+      "label": "Relocation / sell fast",
+      "match": "relocat|moving|job transfer|transferr|military|pcs|out of state|downsiz|new job|fast|quick|asap|urgent",
+      "h1": "Need to sell fast? Sell on your timeline.",
+      "sub": "Get a fair cash offer in 24 hours and pick the closing date that works for you. Sell as-is with no agent commission, and we cover closing costs."
+    }
   ]
 }

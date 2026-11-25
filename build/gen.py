@@ -1364,12 +1364,12 @@ def build(site, pages, markets, redirects, live):
         src = open(os.path.join(B, name), encoding='utf-8').read().strip()
         blob = json.dumps(data, ensure_ascii=False, separators=(',', ':')).replace('</', '<\\/')
         return '<script>' + src.replace(token, blob).replace('</script', '<\\/script') + '</script>'
-    MBAR = inline_js('mbar.js', '__FSHO_B__', {"ah": S['after_hours_text'], "hr": {"tz": HRS['tz'], "open": HRS['open'], "close": HRS['close']}})
+    MBAR = inline_js('mbar.js', '__FSHO_B__', {"ah": S['after_hours_text'], "hr": {"tz": HRS['tz'], "days": HRS['days'], "open": HRS['open'], "close": HRS['close']}})
     def hero_slots(personalize):
         # Seller personalization (hero-pre.js runs before first paint). The server HTML keeps the page's
         # own H1 and lede; the slots below stay hidden unless there is something to show.
         data = {"cp": PZ['city_params'], "ct": PZ['city_line'], "ah": S['after_hours_text'],
-                "hr": {"tz": HRS['tz'], "open": HRS['open'], "close": HRS['close']}}
+                "hr": {"tz": HRS['tz'], "days": HRS['days'], "open": HRS['open'], "close": HRS['close']}}
         if personalize:
             data["src"] = PZ['sources']
             data["b"] = [{"id": b['id'], "m": b['match'], "h": b['h1'], "s": b['sub']} for b in PZ['buckets']]
@@ -1505,7 +1505,7 @@ def build(site, pages, markets, redirects, live):
 <footer class="ft"><div class="wrap fg"><div><img src="{S["logo"]}" alt="" class="inv" loading="lazy"><p>{S["footer"]["about"]}</p><p class="contact"><a href="tel:{TEL}">{PH}</a> · call or text · <a class="mail" href="mailto:{EMAIL}">Email {EMAIL}</a></p>{foot_addr}</div>
 <div><strong>Company</strong>{navl}{''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S["footer"]["company_extra"])}</div>
 <div><strong>Legal</strong>{''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S["footer"]["legal"])}</div></div><p class="wrap copy">{S["footer"]["copyright"]}</p></footer>
-<div class="mbar" id="mbar"><p class="mbar-ah" role="status" hidden></p><div class="mbar-b"><a class="sticky" href="tel:{TEL}" aria-label="Call or text {PH}"><span aria-hidden="true">📞 </span>Call or text</a><a class="sticky s2b" href="{offer_href}">Get Offer</a></div></div>{MBAR if public else ""}
+<div class="mbar" id="mbar"><p class="mbar-ah" role="status" hidden></p><div class="mbar-b"><a class="sticky" href="tel:{TEL}"><span aria-hidden="true">📞 </span>Call or text<span class="sr-only"> {PH}</span></a><a class="sticky s2b" href="{offer_href}">Get Offer</a></div></div>{MBAR if public else ""}
 <script>{JS}</script></body></html>'''
         rel = file_rel or ('index.html' if path == '/' else path.strip('/') + '/index.html')
         dest = os.path.join(OUT, rel)

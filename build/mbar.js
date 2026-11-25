@@ -1,20 +1,22 @@
 /* Mobile Call / Get Offer bar: hides while the hero form is on screen (and, via sticky_guard, while the
-   keyboard is open); shows the after-hours line outside staff hours (ET). Also keeps the
+   keyboard is open); shows the after-hours line outside staff days/hours (ET, weekends included). Also keeps the
    "pick up where you left off" record: saved when Step 2 opens, cleared once contact info is sent.
    Reads form state only. Sends nothing, adds no tracking, never touches the form's submit. */
 (function (D) {
   "use strict";
   var d = document, h = d.documentElement, bar = d.getElementById("mbar");
   var q; try { q = new URLSearchParams(location.search); } catch (e) { q = { get: function () { return null; } }; }
-  function etHour() {
+  function offHours() {
     try {
-      var p = new Intl.DateTimeFormat("en-US", { timeZone: D.hr.tz, hour: "numeric", hourCycle: "h23" }).formatToParts(new Date());
-      for (var k = 0; k < p.length; k++) if (p[k].type === "hour") return (+p[k].value) % 24;
-    } catch (e) {}
-    return -1;
+      var p = new Intl.DateTimeFormat("en-US", { timeZone: D.hr.tz, weekday: "short", hour: "numeric", hourCycle: "h23" }).formatToParts(new Date()), wd = "", hr = -1;
+      for (var k = 0; k < p.length; k++) { if (p[k].type === "weekday") wd = p[k].value; if (p[k].type === "hour") hr = (+p[k].value) % 24; }
+      var day = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(wd) + 1;
+      if (!day || hr < 0) return false;
+      return D.hr.days.indexOf(day) < 0 || hr < D.hr.open || hr >= D.hr.close;
+    } catch (e) { return false; }
   }
-  var f = q.get("fsho_ah"), hr = etHour();
-  var after = f === "1" ? true : f === "0" ? false : (hr >= 0 && (hr < D.hr.open || hr >= D.hr.close));
+  var f = q.get("fsho_ah");
+  var after = f === "1" ? true : f === "0" ? false : offHours();
   var ah = bar && bar.querySelector(".mbar-ah");
   if (after && ah) { ah.textContent = D.ah; ah.hidden = false; h.classList.add("after-hours"); }
   var formBox = d.getElementById("two-stage");

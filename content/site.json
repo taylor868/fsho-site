@@ -536,11 +536,18 @@
   ],
   "_step2_note": "Placeholder fields until the real Carrot Form 6 fields are confirmed",
   "phone_hours": {
-    "_note": "PLACEHOLDER: staff phone hours are not confirmed yet. Drives the after-hours note only. Hours are 24h clock, ET.",
+    "_note": "Staff phone hours confirmed by Taylor 11/24: weekdays 10 AM to 5 PM ET. Outside them (and all weekend) the after-hours note shows. days: 1=Mon ... 7=Sun. 24h clock, ET.",
     "tz": "America/New_York",
-    "open": 8,
-    "close": 20,
-    "confirmed": false
+    "days": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "open": 10,
+    "close": 17,
+    "confirmed": true
   },
   "after_hours_text": "It's after hours. We'll text you back first thing in the morning."
 }
