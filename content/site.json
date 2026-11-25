@@ -216,6 +216,26 @@
     "pwZIyFiirKQ",
     "vSytu6IDw6s"
   ],
+  "proof": {
+    "_note": "Proof block for pages with hero_proof: true (and the Google rating pill on hero_rating pages). Real figures only. google_rating and google_count come from the live Google Business Profile (checked on Google Maps 2026-11-24: 5.0, 74 reviews). Update them only from the live listing. review is copied word for word from Google; never edit or paraphrase it. bbb_rating comes from the BBB profile (checked 2026-11-24: A+, accredited since 2/8/2025).",
+    "google_rating": "5.0",
+    "google_count": 74,
+    "google_url": "https://share.google/xhED38I3oGqYAQE21",
+    "bbb_rating": "A+",
+    "bbb_url": "https://www.bbb.org/us/mi/grand-rapids/profile/real-estate-investing/fair-and-simple-home-offer-0372-38321834",
+    "bbb_img": "/bbb-white.webp",
+    "review": {
+      "quote": "Selling a house has never been easier! Or quicker! I always knew what was going on and where we were in the process. They did all the legwork, lessening our stress tremendously so. If we ever need to sell again, I know just who to call! 1000/10!",
+      "name": "Eryn Galloway",
+      "source": "Google review",
+      "url": "https://share.google/xhED38I3oGqYAQE21"
+    },
+    "video": {
+      "id": "k3iyV-hwVSs",
+      "label": "Watch a seller's story",
+      "title": "How we helped this Veteran solve all the problems he had of selling his home"
+    }
+  },
   "faq": [],
   "faq_answers": {
     "faq_who_lists_market_sale": "On the market-sale path, a licensed real estate partner in your market lists the house. Fair and Simple Home Offer is not a licensed real estate agent or brokerage.",
