@@ -60,7 +60,7 @@ AD_LANDINGS = (
     },
     {
         'slug': 'sell-your-house-fast',
-        'h1': 'Selling your house fast',
+        'h1': 'Sell your house fast, on your timeline',
         'title': 'Sell Your House Fast | Fair & Simple Home Offer',
         'meta': 'Selling your house fast can be a simple process, on a date you choose. No obligation to accept an offer. Call (910) 636-6669.',
         'only': 'not a copy of the homepage',
@@ -530,8 +530,8 @@ faq:
         self.assertEqual(len(own_blocks), 1)
         self.assertEqual([item['name'] for item in own_blocks[0]['mainEntity']], ['Own question?'])
         self.assertEqual(own_blocks[0]['mainEntity'][0]['acceptedAnswer']['text'], 'Own & answer')
-        self.assertTrue(any(b.get('@type') == 'RealEstateAgent' for b in ld_blocks(home)))
-        self.assertTrue(any(b.get('@type') == 'RealEstateAgent' for b in ld_blocks(faq)))
+        self.assertTrue(any(b.get('@type') == 'LocalBusiness' for b in ld_blocks(home)))
+        self.assertTrue(any(b.get('@type') == 'LocalBusiness' for b in ld_blocks(faq)))
         blocks = faq_page_blocks(faq)
         self.assertEqual(len(blocks), 1)
         main = blocks[0]['mainEntity']
@@ -1147,7 +1147,7 @@ cta_label: "Page specific heading"
         self.assertIn('Fair &amp; Simple Cash Offer', home)
         self.assertNotIn('Brett C.', home)
         self.assertIn('og:site_name" content="Fair and Simple Home Offer"', home)
-        agent = next(b for b in ld_blocks(home) if b['@type'] == 'RealEstateAgent')
+        agent = next(b for b in ld_blocks(home) if b['@type'] == 'LocalBusiness')
         self.assertEqual(agent['name'], 'Fair and Simple Home Offer')
         self.assertNotIn('aggregateRating', json.dumps(ld_blocks(home)))
         self.assertNotIn('google-site-verification', home)
@@ -1355,7 +1355,7 @@ cta_label: "Page specific heading"
             self.assertIn('<script src="//s.ksrndkehqnwntyxlhgto.com/176490.js" defer></script>', html, slug)
             self.assertIn('tracking:false', html, slug)
             self.assertIn('clickcease:""', html, slug)
-            agent = next(b for b in ld_blocks(html) if b.get('@type') == 'RealEstateAgent')
+            agent = next(b for b in ld_blocks(html) if b.get('@type') == 'LocalBusiness')
             self.assertEqual(agent['url'], 'https://fsho.co/', slug)
             self.assertEqual(agent['name'], 'Fair and Simple Home Offer', slug)
             faqs = faq_pairs(html)
@@ -1411,7 +1411,7 @@ cta_label: "Page specific heading"
             footed += 1
             self.assertIn(footer_bit, doc, str(path))
             blocks = ld_blocks(doc)
-            agent = next(b for b in blocks if b.get('@type') == 'RealEstateAgent')
+            agent = next(b for b in blocks if b.get('@type') == 'LocalBusiness')
             self.assertEqual(agent['email'], email, str(path))
             self.assertEqual(agent['contactPoint']['@type'], 'ContactPoint', str(path))
             self.assertEqual(agent['contactPoint']['email'], email, str(path))
@@ -1458,7 +1458,7 @@ faq:
         self.build(live=False)
         out = Path(gen.OUT)
         home = ld_blocks((out / 'index.html').read_text(encoding='utf-8'))
-        agent = next(b for b in home if b['@type'] == 'RealEstateAgent')
+        agent = next(b for b in home if b['@type'] == 'LocalBusiness')
         self.assertEqual(agent['@id'], 'https://fsho.co/#business')
         for k in ('sameAs', 'areaServed', 'address'):
             self.assertNotIn(k, agent)
@@ -1484,7 +1484,7 @@ faq:
         sj.write_text(json.dumps(site), encoding='utf-8')
         self.build(live=False)
         home = ld_blocks((Path(gen.OUT) / 'index.html').read_text(encoding='utf-8'))
-        agent = next(b for b in home if b['@type'] == 'RealEstateAgent')
+        agent = next(b for b in home if b['@type'] == 'LocalBusiness')
         self.assertEqual(agent['sameAs'], ['https://example.com/profile'])
         self.assertEqual(agent['areaServed'], [{'@type': 'Place', 'name': 'Wake County'}])
         self.assertEqual(agent['address'], {'@type': 'PostalAddress', 'addressLocality': 'Raleigh', 'addressRegion': 'NC'})
@@ -1493,7 +1493,7 @@ faq:
     def test_site_entity_is_wired_and_address_is_visible(self):
         self.build(live=False)
         out = Path(gen.OUT)
-        agent = next(b for b in ld_blocks((out / 'index.html').read_text(encoding='utf-8')) if b['@type'] == 'RealEstateAgent')
+        agent = next(b for b in ld_blocks((out / 'index.html').read_text(encoding='utf-8')) if b['@type'] == 'LocalBusiness')
         self.assertEqual(agent['address']['postalCode'], '49505')
         self.assertEqual(len(agent['sameAs']), 3)
         self.assertEqual(agent['sameAs'][2], 'https://share.google/xhED38I3oGqYAQE21')
@@ -1635,6 +1635,28 @@ faq:
         self.assertNotIn('gone', out)
         self.assertEqual(out.count('\n'), src.count('\n') - 1)
         self.assertEqual(gen.js_squeeze(out), out)
+
+    def test_hero_proof_pages_and_non_brokerage_schema(self):
+        self.build()
+        out = Path(gen.OUT)
+        site = json.loads((ROOT / 'content' / 'site.json').read_text(encoding='utf-8'))
+        pf = site['proof']
+        for slug in ('companies-that-buy-houses', 'sell-your-house-as-is'):
+            doc = (out / slug / 'index.html').read_text(encoding='utf-8')
+            hero = doc.split('<section class="hero', 1)[1].split('</section>', 1)[0]
+            self.assertIn('hasproof', hero, slug)
+            self.assertIn(f'<b>{pf["google_rating"]}</b> rating from {pf["google_count"]} Google reviews', hero, slug)
+            self.assertIn(pf['bbb_url'], hero, slug)
+            self.assertIn('alt="BBB Accredited Business, A+ rating"', hero, slug)
+            # The review is quoted word for word (only HTML-escaped).
+            self.assertIn(gen.esc(pf['review']['quote']), hero, slug)
+            self.assertNotIn('<iframe', hero, slug)
+        home = (out / 'index.html').read_text(encoding='utf-8')
+        self.assertNotIn('hproof', home.split('<section class="hero', 1)[1].split('</section>', 1)[0])
+        for f in out.rglob('*.html'):
+            self.assertNotIn('RealEstateAgent', f.read_text(encoding='utf-8'), str(f))
+        probate = (out / 'selling-a-house-in-probate' / 'index.html').read_text(encoding='utf-8')
+        self.assertIn(f'rating from {pf["google_count"]} Google reviews', probate)
 
 
 def home_h1(html):
