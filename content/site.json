@@ -534,5 +534,13 @@
       "type": "textarea"
     }
   ],
-  "_step2_note": "Placeholder fields until the real Carrot Form 6 fields are confirmed"
+  "_step2_note": "Placeholder fields until the real Carrot Form 6 fields are confirmed",
+  "phone_hours": {
+    "_note": "PLACEHOLDER: staff phone hours are not confirmed yet. Drives the after-hours note only. Hours are 24h clock, ET.",
+    "tz": "America/New_York",
+    "open": 8,
+    "close": 20,
+    "confirmed": false
+  },
+  "after_hours_text": "It's after hours. We'll text you back first thing in the morning."
 }

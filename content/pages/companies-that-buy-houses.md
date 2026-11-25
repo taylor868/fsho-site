@@ -5,6 +5,7 @@ template: situation
 hero_proof: true
 hero_headline: "Companies who buy houses"
 hero_sub: "If you are comparing companies that buy houses, here is what that kind of sale is, what to look for, and how Fair and Simple works."
+personalize: true
 cta_label: "Want to see how we would handle your house?"
 noindex: false
 faq:

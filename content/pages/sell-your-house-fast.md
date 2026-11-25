@@ -4,6 +4,7 @@ meta_description: "Selling your house fast can be a simple process, on a date yo
 template: situation
 hero_headline: "Sell your house fast, on your timeline"
 hero_sub: "Get a fair cash offer in 24 hours. Sell as-is with no repairs, no cleaning, and no agent commission, then pick the closing date that works for you."
+personalize: true
 cta_label: "Want to see a simple path to sell?"
 noindex: false
 faq:

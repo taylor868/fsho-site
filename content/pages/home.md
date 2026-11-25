@@ -5,6 +5,7 @@ template: home
 slug: ""
 hero_headline: "Sell your house fast, for a fair cash offer, on your timeline."
 hero_sub: "Get a no-obligation cash offer, or let us show you how to net more with a market sale. No repairs, no cleaning, no commissions. You choose."
+personalize: true
 cta_label: "Ready to see your options?"
 noindex: false
 faq: []

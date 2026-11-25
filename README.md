@@ -22,3 +22,14 @@ Every form on the site gets the same consent checkbox from `consent_label()` in 
 - The box is `required` and never pre-checked. The public form JS (`build/two-stage.js`) also blocks the submit when it's unchecked. It shows "Please check the box to continue." in `#consent-err` (role=alert), marks the box `aria-invalid`, moves focus to it, and sends nothing.
 - **Build guard:** after every build, `check_forms()` scans every generated page. The build fails if any `<form>` is missing a required, unchecked consent checkbox, the Google Maps line with both Google links, or the error slot. `build/test_parity.py` (`test_consent_guard_fails_a_form_without_required_consent`) covers the guard, and `build/test_two_stage.js` covers the JS block.
 - The intake payload is unchanged. `consent` is still sent as a boolean, and it's now always `true` because the form can't be sent unchecked.
+
+## Seller personalization (hero + mobile bar)
+
+All client-side, text only, and it never touches the form's submit, the intake functions, GTM/GA4 events, WhatConverts or the Zaps. A conversion still fires only on `seller_form_completed`.
+
+- **Search-matched headline:** pages with `personalize: true` in front matter (home, Sell Fast, Sell For Cash, Companies, As-Is) swap the hero H1 + lede from `content/personalize.json` when `utm_term`, `keyword` or `utm_campaign` matches a bucket. No match keeps the page's own copy, which is also what the server HTML always carries. `build/hero-pre.js` is inlined right after the hero copy so the swap happens before first paint (no flash, CLS 0). `?fsho_intent=<bucket id>` forces a bucket for demos.
+- **Local line:** `?city=` or `?utm_city=` (letters, spaces, hyphens, 2–30 chars, otherwise ignored), else the city from an address typed on Step 1 earlier in the session. Rendered with `textContent` in a hidden subhead slot.
+- **After hours:** `site.json` `phone_hours` (placeholder 8 AM–8 PM ET until confirmed) and `after_hours_text`. `?fsho_ah=1|0` forces the note on or off; it only flips that note.
+- **Mobile bar:** one fixed Call or text / Get Offer bar (`build/mbar.js`), hidden while the hero form is on screen or the keyboard is open.
+- **Pick up where you left off:** when Step 2 opens, `{address, city, time}` is kept in `localStorage` `fsho_resume_v1` for 7 days and cleared once contact info is sent or the visitor taps Start over. Continue fills the address and presses the form's own Step 1 button.
+- Tests: `python3 build/test_personalize.py`.
