@@ -978,8 +978,8 @@ def check_forms():
 def sticky_guard():
     """Mobile: hide the fixed Call/Get Offer bar while a form field has focus or the keyboard is open,
     so it can't ride up over the field or the address suggestions. Fades out; no fade with reduced motion."""
-    return ('<style>.sticky{transition:opacity .18s,transform .18s}html.kb-open .sticky{opacity:0;transform:translateY(110%);pointer-events:none}'
-            '@media(prefers-reduced-motion:reduce){.sticky{transition:none}}</style>'
+    return ('<style>.mbar{transition:opacity .18s,transform .18s,visibility .18s}html.kb-open .mbar{opacity:0;transform:translateY(110%);pointer-events:none;visibility:hidden}'
+            '@media(prefers-reduced-motion:reduce){.mbar{transition:none}}</style>'
             '<script>(function(d,w){var h=d.documentElement,vv=w.visualViewport,base=vv?vv.height:w.innerHeight,f=0;'
             'function field(t){return t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)&&t.type!=="checkbox"&&t.type!=="radio"&&t.type!=="hidden"&&t.type!=="submit"}'
             'function set(){var kb=vv&&base-vv.height>150;h.classList.toggle("kb-open",!!(f||kb))}'
@@ -1358,7 +1358,28 @@ def build(site, pages, markets, redirects, live):
                 + fb + '</div>'
                 f'<blockquote>&ldquo;{esc(r["quote"])}&rdquo;<cite>&mdash; {esc(r["name"])}, <a href="{esc(r["url"])}" target="_blank" rel="noopener noreferrer">{r["source"]}<span class="sr-only"> (opens in a new tab)</span></a></cite></blockquote>'
                 + vid + '</div>')
-    def hero(h, sub, intake=False, bias='', compact=False, rating=False, proof=False):
+    PZ = json.load(open(os.path.join(C, 'personalize.json'), encoding='utf-8'))
+    HRS = S['phone_hours']
+    def inline_js(name, token, data):
+        src = open(os.path.join(B, name), encoding='utf-8').read().strip()
+        blob = json.dumps(data, ensure_ascii=False, separators=(',', ':')).replace('</', '<\\/')
+        return '<script>' + src.replace(token, blob).replace('</script', '<\\/script') + '</script>'
+    MBAR = inline_js('mbar.js', '__FSHO_B__', {"ah": S['after_hours_text'], "hr": {"tz": HRS['tz'], "days": HRS['days'], "open": HRS['open'], "close": HRS['close']}})
+    def hero_slots(personalize):
+        # Seller personalization (hero-pre.js runs before first paint). The server HTML keeps the page's
+        # own H1 and lede; the slots below stay hidden unless there is something to show.
+        data = {"cp": PZ['city_params'], "ct": PZ['city_line'], "ah": S['after_hours_text'],
+                "hr": {"tz": HRS['tz'], "days": HRS['days'], "open": HRS['open'], "close": HRS['close']}}
+        if personalize:
+            data["src"] = PZ['sources']
+            data["b"] = [{"id": b['id'], "m": b['match'], "h": b['h1'], "s": b['sub']} for b in PZ['buckets']]
+        return ('<p class="hcity" hidden></p><p class="ah-note" hidden></p>'
+                '<div class="ts-resume" role="region" aria-label="Pick up where you left off" hidden>'
+                '<p><b>Welcome back.</b> Pick up where you left off with <span class="ts-resume-a"></span>?</p>'
+                '<button type="button" class="btn btn-o ts-resume-go">Continue</button>'
+                '<button type="button" class="ts-resume-over">Start over</button></div>'
+                + inline_js('hero-pre.js', '__FSHO_P__', data))
+    def hero(h, sub, intake=False, bias='', compact=False, rating=False, proof=False, personalize=False):
         panel = public_intake(bias) if intake else form()
         if rating:
             panel = (f'<div class="hrate"><a href="{esc(PF["google_url"])}" target="_blank" rel="noopener noreferrer">'
@@ -1367,11 +1388,11 @@ def build(site, pages, markets, redirects, live):
         cls = 'hero compact' if compact else 'hero'
         if proof: cls += ' hasproof'
         badges = proof_block() if proof else trust
-        return f'<section class="{cls}" id="offer"><div class="wrap hg"><div><p class="eyebrow">{S["hero_eyebrow"]}</p><h1>{h}</h1><p class="lede">{sub}</p>{badges}</div>{panel}</div></section>'
+        return f'<section class="{cls}" id="offer"><div class="wrap hg"><div><p class="eyebrow">{S["hero_eyebrow"]}</p><h1>{h}</h1><p class="lede">{sub}</p>{hero_slots(personalize) if intake else ""}{badges}</div>{panel}</div></section>'
     sits = '<div class="grid3">' + ''.join(f'<div class="card"><div class="ic">{x["icon"]}</div><h3>{x["title"]}</h3><p>{x["text"]}</p></div>' for x in S['situations']) + '</div>'
     steps = '<div class="grid3 steps">' + ''.join(f'<div class="card"><b>{x["n"]}</b><h3>{x["title"]}</h3><p>{x["text"]}</p></div>' for x in S['steps']) + '</div>'
     cp = S['comparison']
-    comp = ('<div class="tbl"><table><thead><tr><th></th>' + ''.join(f'<th{" class=\"us\"" if i == 0 else ""}>{h}</th>' for i, h in enumerate(cp['headers'])) + '</tr></thead><tbody>\n'
+    comp = ('<div class="tbl" tabindex="0" role="region" aria-label="Comparison table: cash offer, market sale, and traditional listing. Scroll sideways to see every column."><table><thead><tr><th></th>' + ''.join(f'<th{" class=\"us\"" if i == 0 else ""}>{h}</th>' for i, h in enumerate(cp['headers'])) + '</tr></thead><tbody>\n'
             + ''.join(f'<tr><td>{r[0]}</td><td class="us">{r[1]}</td><td>{r[2]}</td><td>{r[3]}</td></tr>\n' for r in cp['rows']) + f'</tbody></table><p class="fine">{cp["note"]}</p></div>')
     vids = '<div class="grid3">' + ''.join(f'<button class="vid" data-yt="{v}" aria-label="Play seller video testimonial"><img loading="lazy" decoding="async" src="https://i.ytimg.com/vi_webp/{v}/hqdefault.webp" alt="" width="480" height="360"><span>▶</span></button>' for v in S['video_ids']) + '</div>'
     shown_markets = [m for m in markets if include_drafts or not m.get('draft')]
@@ -1484,7 +1505,7 @@ def build(site, pages, markets, redirects, live):
 <footer class="ft"><div class="wrap fg"><div><img src="{S["logo"]}" alt="" class="inv" loading="lazy"><p>{S["footer"]["about"]}</p><p class="contact"><a href="tel:{TEL}">{PH}</a> · call or text · <a class="mail" href="mailto:{EMAIL}">Email {EMAIL}</a></p>{foot_addr}</div>
 <div><strong>Company</strong>{navl}{''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S["footer"]["company_extra"])}</div>
 <div><strong>Legal</strong>{''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S["footer"]["legal"])}</div></div><p class="wrap copy">{S["footer"]["copyright"]}</p></footer>
-<a class="sticky" href="tel:{TEL}">📞 Call Now</a><a class="sticky s2b" href="{offer_href}">Get Offer</a>
+<div class="mbar" id="mbar"><p class="mbar-ah" role="status" hidden></p><div class="mbar-b"><a class="sticky" href="tel:{TEL}"><span aria-hidden="true">📞 </span>Call or text<span class="sr-only"> {PH}</span></a><a class="sticky s2b" href="{offer_href}">Get Offer</a></div></div>{MBAR if public else ""}
 <script>{JS}</script></body></html>'''
         rel = file_rel or ('index.html' if path == '/' else path.strip('/') + '/index.html')
         dest = os.path.join(OUT, rel)
@@ -1506,7 +1527,7 @@ def build(site, pages, markets, redirects, live):
         faq_items = p.get('faq') or S['faq']
         body = md(shortcodes(p['body'], faq_items, p.get('cta_label'), offer))
         if p['template'] in ('home', 'situation'):
-            body = hero(p['hero_headline'], p['hero_sub'], intake=True, compact=bool(p.get('hero_compact')), rating=bool(p.get('hero_rating')), proof=bool(p.get('hero_proof'))) + body
+            body = hero(p['hero_headline'], p['hero_sub'], intake=True, compact=bool(p.get('hero_compact')), rating=bool(p.get('hero_rating')), proof=bool(p.get('hero_proof')), personalize=bool(p.get('personalize'))) + body
         page(path, p['title'], (p.get('meta_description') or '').replace('{{phone}}', PH), body, bool(p.get('noindex', False) or p.get('draft')),
              canonical=p.get('canonical') or None, og_title=p.get('og_title') or None, og_image=p.get('og_image') or None,
              faq_ld=faq_ld_items(body, p.get('faq'), p.get('body'), p['slug']), file_rel=file_rel, offer_href=offer,

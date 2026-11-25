@@ -5,6 +5,7 @@ template: situation
 hero_proof: true
 hero_headline: "Selling a house as is"
 hero_sub: "Ask for a no-obligation offer on the house in its current condition. You do not have to repair it or clean it first."
+personalize: true
 cta_label: "Want an offer on the house as it sits?"
 noindex: false
 faq:

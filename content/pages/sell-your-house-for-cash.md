@@ -4,6 +4,7 @@ meta_description: "Sell your house for cash. Get a fair cash offer in 24 hours. 
 template: situation
 hero_headline: "Sell Your House For Cash"
 hero_sub: "Get a fair cash offer in 24 hours. We buy as-is, cover closing costs, and close on your timeline."
+personalize: true
 cta_label: "Ready to sell your house for cash?"
 noindex: false
 faq:
