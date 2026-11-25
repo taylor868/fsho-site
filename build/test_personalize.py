@@ -43,9 +43,22 @@ class PersonalizeTests(unittest.TestCase):
             self.assertNotIn('sendBeacon', src, name)
             self.assertNotIn('dataLayer', src, name)
 
-    def test_mobile_bar_after_hours_and_resume_slots(self):
-        hrs = json.loads((ROOT / 'content' / 'site.json').read_text(encoding='utf-8'))['phone_hours']
-        self.assertEqual((hrs['tz'], hrs['days'], hrs['open'], hrs['close']), ('America/New_York', [1, 2, 3, 4, 5], 10, 17))
+    def test_no_after_hours_display_anywhere(self):
+        # Taylor 11/24 10:08 PM ET: no after-hours / closed messaging on the site at any time.
+        site = json.loads((ROOT / 'content' / 'site.json').read_text(encoding='utf-8'))
+        self.assertNotIn('phone_hours', site)
+        self.assertNotIn('after_hours_text', site)
+        srcs = [(ROOT / 'build' / n).read_text(encoding='utf-8') for n in ('hero-pre.js', 'mbar.js', 'style.css', 'gen.py')]
+        srcs.append((ROOT / 'content' / 'personalize.json').read_text(encoding='utf-8'))
+        for t in srcs:
+            for bad in ('fsho_ah', 'ah-note', 'mbar-ah', 'after-hours', 'offHours', 'Intl.DateTimeFormat'):
+                self.assertNotIn(bad, t)
+        for page in self.out.rglob('*.html'):
+            t = page.read_text(encoding='utf-8').lower()
+            for bad in ("it's after hours", 'after-hours', 'ah-note', 'mbar-ah', 'fsho_ah', "we're closed", 'first thing in the morning'):
+                self.assertNotIn(bad, t, str(page))
+
+    def test_mobile_bar_and_resume_slots(self):
         home = self.html('')
         self.assertEqual(home.count('<div class="mbar" id="mbar">'), 1)
         # Default number on purpose: WhatConverts DNI (176490.js) swaps every (910) 636-6669 href and text node.
