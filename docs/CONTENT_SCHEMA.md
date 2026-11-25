@@ -25,7 +25,7 @@ content/
 | `domain` | string | Canonical origin, no trailing slash. |
 | `phone` | string | Display phone, `(910) 636-6669`. |
 | `tel` | string | E.164, `+19106366669`. Validated `+1XXXXXXXXXX`. |
-| `email` | string | Public contact email, `offer@fsho.co`. Footer mailto, RealEstateAgent JSON-LD `email` and `contactPoint.email`, and `dist/llms.txt`. |
+| `email` | string | Public contact email, `offer@fsho.co`. Footer mailto, LocalBusiness JSON-LD `email` and `contactPoint.email`, and `dist/llms.txt`. |
 | `brand.orange` | `#RRGGBB` | Accent/CTA color. `#B8501C` is the darkened accessible version **pending approval** (original `#E67A45`). Swap here only. |
 | `brand.navy` | `#RRGGBB` | Primary text/heading color. |
 | `logo`, `favicon` | path | Files in `content/media/`, copied to site root. |
@@ -152,7 +152,7 @@ A `tel:` tap pushes `click_to_call` onto `dataLayer` and, when `gtag` is already
 
 Open Graph / Twitter: every page emits `og:title`, `og:description`, `og:url`, `og:type`, `og:site_name`, `twitter:card`, `twitter:title`, and `twitter:description`. `og_title` defaults to `title`. `og_image` is emitted only when set (absolute URL, or a root path such as `/logo.webp`). `twitter:card` is `summary_large_image` when an image is set, otherwise `summary`.
 
-FAQPage JSON-LD is emitted next to the sitewide RealEstateAgent block when the page has its own `faq` items, or when the body renders `{{faq}}` / `{{faq:N}}` and falls back to `site.json` `faq`. A capped shortcode (`{{faq:5}}` with no unlimited `{{faq}}` on the same page) limits the schema to those items. Text is JSON-escaped.
+FAQPage JSON-LD is emitted next to the sitewide LocalBusiness block when the page has its own `faq` items, or when the body renders `{{faq}}` / `{{faq:N}}` and falls back to `site.json` `faq`. A capped shortcode (`{{faq:5}}` with no unlimited `{{faq}}` on the same page) limits the schema to those items. Text is JSON-escaped.
 
 ## content/markets/&lt;slug&gt;.json
 

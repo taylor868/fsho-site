@@ -2,6 +2,7 @@
 title: "Sell Your House As-Is | Fair & Simple Home Offer"
 meta_description: "Sell your house as-is, in its current condition. No repairs or cleaning to ask for a no-obligation offer. Call (910) 636-6669."
 template: situation
+hero_proof: true
 hero_headline: "Selling a house as is"
 hero_sub: "Ask for a no-obligation offer on the house in its current condition. You do not have to repair it or clean it first."
 cta_label: "Want an offer on the house as it sits?"

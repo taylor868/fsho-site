@@ -1025,7 +1025,7 @@ def check(site, pages, markets, redirects, errs):
             for k in ('hero_headline', 'hero_sub'):
                 if not p.get(k): E.append(f'{p["_src"]}: template {p["template"]} needs "{k}"')
         if not isinstance(p.get('noindex', False), bool): E.append(f'{p["_src"]}: noindex must be true/false')
-        for hk in ('hero_compact', 'hero_rating'):
+        for hk in ('hero_compact', 'hero_rating', 'hero_proof'):
             if not isinstance(p.get(hk, False), bool): E.append(f'{p["_src"]}: {hk} must be true/false')
         check_draft(p['_src'], p, E)
         if p.get('draft') is True and p['slug'] == '':
@@ -1328,15 +1328,46 @@ def build(site, pages, markets, redirects, live):
             '<p id="ts-events" hidden></p><ol id="ts-trace" hidden></ol></div>'
             + stage_boot(ctx, real_flag, src) + addr_boot(S, live, bias) + sticky_guard() + '</div>'
         )
-    def hero(h, sub, intake=False, bias='', compact=False, rating=False):
+    PF = S.get('proof') or {}
+    def g_rating_text():
+        # Verified Google Business Profile figures from site.json "proof". Update only from the live listing.
+        return f'<b>{PF["google_rating"]}</b> rating from {PF["google_count"]} Google reviews'
+    PROOF_CSS = ('<style>.hproof{margin:16px 0 0}.hproof-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px}'
+                 '.hproof .gpill{display:inline-block;background:#fff;color:#1F3C56!important;text-decoration:none;font-weight:600;font-size:15px;padding:8px 14px;border-radius:999px;line-height:1.3}'
+                 '.hproof .gpill .stars{color:#A35F00;letter-spacing:1px}.hproof .gpill b{font-weight:800}'
+                 '.hproof a.bbb,.hproof a.badge{display:inline-flex;align-items:center;line-height:0}.hproof a.bbb img,.hproof a.badge img{height:46px;width:auto;display:block}'
+                 '.hproof blockquote{margin:12px 0 0;padding:0 0 0 12px;border-left:3px solid #ffd2b8;font-size:16px;line-height:1.45;color:#fff;font-style:italic}'
+                 '.hproof cite{display:block;font-style:normal;font-size:14px;margin-top:4px;color:#e8eef4}.hproof cite a{color:#ffd2b8}'
+                 '.hproof .hvid{display:inline-block;margin-top:8px;font-size:14px;font-weight:700;color:#ffd2b8}'
+                 '.hero.hasproof .eyebrow{color:#ffd2b8!important}'
+                 '@media(max-width:860px){.hero.hasproof{padding:14px 0}.hero.hasproof .eyebrow{display:none}.hero.hasproof h1{font-size:26px;margin:0 0 6px}'
+                 '.hero.hasproof .lede{font-size:15px;margin:0}.hero.hasproof .hg{gap:12px}.hproof{margin:10px 0 0}.hproof-row{gap:8px 10px}.hproof .gpill{font-size:13px;padding:6px 10px;white-space:nowrap}.hproof .gpill .stars{letter-spacing:0}'
+                 '.hproof a.bbb img,.hproof a.badge img{height:38px}.hproof blockquote{font-size:14px;margin-top:8px}.hproof cite{font-size:13px}.hproof .hvid{font-size:13px;margin-top:4px}'
+                 '.hero.hasproof#offer{padding-bottom:96px}}</style>')
+    def proof_block():
+        # Google stars + BBB A+ seal + one real Google review, word for word, all linked to their sources.
+        # The video opens on YouTube on click; nothing heavy loads above the fold.
+        r, v = PF['review'], PF.get('video') or {}
+        vid = (f'<a class="hvid" href="https://www.youtube.com/watch?v={esc(v["id"])}" target="_blank" rel="noopener noreferrer">&#9654; {v["label"]}'
+               '<span class="sr-only"> (video, opens in a new tab)</span></a>') if v.get('id') else ''
+        # Keep the existing Facebook profile badge from trust_badges beside the BBB seal.
+        fb = ''.join(t for t in S['trust_badges'] if 'facebook.com' in t)
+        return (PROOF_CSS + '<div class="hproof"><div class="hproof-row">'
+                f'<a class="gpill" href="{esc(PF["google_url"])}" target="_blank" rel="noopener noreferrer"><span class="stars" aria-hidden="true">&#9733;&#9733;&#9733;&#9733;&#9733;</span> {g_rating_text()}<span class="sr-only"> (opens in a new tab)</span></a>'
+                f'<a class="bbb" href="{esc(PF["bbb_url"])}" target="_blank" rel="noopener noreferrer"><img src="{PF["bbb_img"]}" alt="BBB Accredited Business, {PF["bbb_rating"]} rating" width="160" height="112"></a>'
+                + fb + '</div>'
+                f'<blockquote>&ldquo;{esc(r["quote"])}&rdquo;<cite>&mdash; {esc(r["name"])}, <a href="{esc(r["url"])}" target="_blank" rel="noopener noreferrer">{r["source"]}<span class="sr-only"> (opens in a new tab)</span></a></cite></blockquote>'
+                + vid + '</div>')
+    def hero(h, sub, intake=False, bias='', compact=False, rating=False, proof=False):
         panel = public_intake(bias) if intake else form()
         if rating:
-            # Verified Google Business Profile figures (5.0 from 73 reviews). Update only from the live listing.
-            panel = ('<div class="hrate"><a href="https://share.google/xhED38I3oGqYAQE21" target="_blank" rel="noopener noreferrer">'
-                     '<span class="stars" aria-hidden="true">&#9733;&#9733;&#9733;&#9733;&#9733;</span> <b>5.0</b> rating from 73 Google reviews</a></div>' + panel)
+            panel = (f'<div class="hrate"><a href="{esc(PF["google_url"])}" target="_blank" rel="noopener noreferrer">'
+                     f'<span class="stars" aria-hidden="true">&#9733;&#9733;&#9733;&#9733;&#9733;</span> {g_rating_text()}</a></div>' + panel)
             panel = f'<div class="hform">{panel}</div>'
         cls = 'hero compact' if compact else 'hero'
-        return f'<section class="{cls}" id="offer"><div class="wrap hg"><div><p class="eyebrow">{S["hero_eyebrow"]}</p><h1>{h}</h1><p class="lede">{sub}</p>{trust}</div>{panel}</div></section>'
+        if proof: cls += ' hasproof'
+        badges = proof_block() if proof else trust
+        return f'<section class="{cls}" id="offer"><div class="wrap hg"><div><p class="eyebrow">{S["hero_eyebrow"]}</p><h1>{h}</h1><p class="lede">{sub}</p>{badges}</div>{panel}</div></section>'
     sits = '<div class="grid3">' + ''.join(f'<div class="card"><div class="ic">{x["icon"]}</div><h3>{x["title"]}</h3><p>{x["text"]}</p></div>' for x in S['situations']) + '</div>'
     steps = '<div class="grid3 steps">' + ''.join(f'<div class="card"><b>{x["n"]}</b><h3>{x["title"]}</h3><p>{x["text"]}</p></div>' for x in S['steps']) + '</div>'
     cp = S['comparison']
@@ -1410,10 +1441,11 @@ def build(site, pages, markets, redirects, live):
             og += [f'<meta property="og:image" content="{esc(img)}">', f'<meta name="twitter:image" content="{esc(img)}">']
             card = 'summary_large_image'
         og += [f'<meta name="twitter:card" content="{card}">', f'<meta name="twitter:title" content="{esc(ot)}">', f'<meta name="twitter:description" content="{esc(desc)}">']
-        # RealEstateAgent is a LocalBusiness and an Organization. Email and contactPoint
+        # LocalBusiness (also an Organization), not RealEstateAgent: the business buys houses as a
+        # principal and is not a licensed brokerage (see the footer). Email and contactPoint
         # use the public phone and offer@ address already published on the site.
         same_as, area_served, address = entity_cfg(S)
-        entity = {"@context": "https://schema.org", "@type": "RealEstateAgent", "name": site_name, "legalName": S["legal_name"], "telephone": TEL, "email": S["email"], "url": S["domain"] + "/", "logo": S["domain"] + S["logo"], "contactPoint": {"@type": "ContactPoint", "contactType": "customer service", "telephone": TEL, "email": S["email"]}}
+        entity = {"@context": "https://schema.org", "@type": "LocalBusiness", "name": site_name, "legalName": S["legal_name"], "telephone": TEL, "email": S["email"], "url": S["domain"] + "/", "logo": S["domain"] + S["logo"], "contactPoint": {"@type": "ContactPoint", "contactType": "customer service", "telephone": TEL, "email": S["email"]}}
         # The /test-intake/ page has a hard 100 KB budget, so it never carries the optional entity facts.
         if path.rstrip('/') == '/test-intake': address, area_served, same_as = {}, [], []
         if path.rstrip('/') != '/test-intake': entity = dict(list(entity.items())[:2], **{"@id": ENTITY_ID}, **dict(list(entity.items())[2:]))
@@ -1474,7 +1506,7 @@ def build(site, pages, markets, redirects, live):
         faq_items = p.get('faq') or S['faq']
         body = md(shortcodes(p['body'], faq_items, p.get('cta_label'), offer))
         if p['template'] in ('home', 'situation'):
-            body = hero(p['hero_headline'], p['hero_sub'], intake=True, compact=bool(p.get('hero_compact')), rating=bool(p.get('hero_rating'))) + body
+            body = hero(p['hero_headline'], p['hero_sub'], intake=True, compact=bool(p.get('hero_compact')), rating=bool(p.get('hero_rating')), proof=bool(p.get('hero_proof'))) + body
         page(path, p['title'], (p.get('meta_description') or '').replace('{{phone}}', PH), body, bool(p.get('noindex', False) or p.get('draft')),
              canonical=p.get('canonical') or None, og_title=p.get('og_title') or None, og_image=p.get('og_image') or None,
              faq_ld=faq_ld_items(body, p.get('faq'), p.get('body'), p['slug']), file_rel=file_rel, offer_href=offer,
