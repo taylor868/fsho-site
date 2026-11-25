@@ -9,3 +9,9 @@
 # Custom 404: gen.py writes dist/404.html and appends `/* /404.html 404` to dist/_redirects.
 # Draft pages (frontmatter draft: true) are included on Netlify deploy-preview,
 # branch-deploy, and netlify dev, and skipped when CONTEXT=production.
+
+[build.environment]
+  # The Google Places browser key in content/site.json is public by design (it ships in every page)
+  # and is locked to fsho.co referrers + Places API (New) in Google Cloud. Netlify smart secret
+  # detection flags any new AIza value, so this one value is allowlisted. Only this exact value is skipped.
+  SECRETS_SCAN_SMART_DETECTION_OMIT_VALUES = "AIzaSyBZkUIlqx9UjVap-EajykaYaGIXAm2Odoo"
