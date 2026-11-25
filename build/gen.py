@@ -1359,21 +1359,19 @@ def build(site, pages, markets, redirects, live):
                 f'<blockquote>&ldquo;{esc(r["quote"])}&rdquo;<cite>&mdash; {esc(r["name"])}, <a href="{esc(r["url"])}" target="_blank" rel="noopener noreferrer">{r["source"]}<span class="sr-only"> (opens in a new tab)</span></a></cite></blockquote>'
                 + vid + '</div>')
     PZ = json.load(open(os.path.join(C, 'personalize.json'), encoding='utf-8'))
-    HRS = S['phone_hours']
     def inline_js(name, token, data):
         src = open(os.path.join(B, name), encoding='utf-8').read().strip()
         blob = json.dumps(data, ensure_ascii=False, separators=(',', ':')).replace('</', '<\\/')
         return '<script>' + src.replace(token, blob).replace('</script', '<\\/script') + '</script>'
-    MBAR = inline_js('mbar.js', '__FSHO_B__', {"ah": S['after_hours_text'], "hr": {"tz": HRS['tz'], "days": HRS['days'], "open": HRS['open'], "close": HRS['close']}})
+    MBAR = '<script>' + open(os.path.join(B, 'mbar.js'), encoding='utf-8').read().strip().replace('</script', '<\\/script') + '</script>'
     def hero_slots(personalize):
         # Seller personalization (hero-pre.js runs before first paint). The server HTML keeps the page's
         # own H1 and lede; the slots below stay hidden unless there is something to show.
-        data = {"cp": PZ['city_params'], "ct": PZ['city_line'], "ah": S['after_hours_text'],
-                "hr": {"tz": HRS['tz'], "days": HRS['days'], "open": HRS['open'], "close": HRS['close']}}
+        data = {"cp": PZ['city_params'], "ct": PZ['city_line']}
         if personalize:
             data["src"] = PZ['sources']
             data["b"] = [{"id": b['id'], "m": b['match'], "h": b['h1'], "s": b['sub']} for b in PZ['buckets']]
-        return ('<p class="hcity" hidden></p><p class="ah-note" hidden></p>'
+        return ('<p class="hcity" hidden></p>'
                 '<div class="ts-resume" role="region" aria-label="Pick up where you left off" hidden>'
                 '<p><b>Welcome back.</b> Pick up where you left off with <span class="ts-resume-a"></span>?</p>'
                 '<button type="button" class="btn btn-o ts-resume-go">Continue</button>'
@@ -1505,7 +1503,7 @@ def build(site, pages, markets, redirects, live):
 <footer class="ft"><div class="wrap fg"><div><img src="{S["logo"]}" alt="" class="inv" loading="lazy"><p>{S["footer"]["about"]}</p><p class="contact"><a href="tel:{TEL}">{PH}</a> · call or text · <a class="mail" href="mailto:{EMAIL}">Email {EMAIL}</a></p>{foot_addr}</div>
 <div><strong>Company</strong>{navl}{''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S["footer"]["company_extra"])}</div>
 <div><strong>Legal</strong>{''.join(f'<a href="{n["href"]}">{n["label"]}</a>' for n in S["footer"]["legal"])}</div></div><p class="wrap copy">{S["footer"]["copyright"]}</p></footer>
-<div class="mbar" id="mbar"><p class="mbar-ah" role="status" hidden></p><div class="mbar-b"><a class="sticky" href="tel:{TEL}"><span aria-hidden="true">📞 </span>Call or text<span class="sr-only"> {PH}</span></a><a class="sticky s2b" href="{offer_href}">Get Offer</a></div></div>{MBAR if public else ""}
+<div class="mbar" id="mbar"><div class="mbar-b"><a class="sticky" href="tel:{TEL}"><span aria-hidden="true">📞 </span>Call or text<span class="sr-only"> {PH}</span></a><a class="sticky s2b" href="{offer_href}">Get Offer</a></div></div>{MBAR if public else ""}
 <script>{JS}</script></body></html>'''
         rel = file_rel or ('index.html' if path == '/' else path.strip('/') + '/index.html')
         dest = os.path.join(OUT, rel)

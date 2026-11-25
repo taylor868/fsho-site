@@ -1,24 +1,9 @@
-/* Mobile Call / Get Offer bar: hides while the hero form is on screen (and, via sticky_guard, while the
-   keyboard is open); shows the after-hours line outside staff days/hours (ET, weekends included). Also keeps the
-   "pick up where you left off" record: saved when Step 2 opens, cleared once contact info is sent.
+/* Mobile Call / Get Offer bar: always on (no time-of-day logic); hides only while the hero form is on screen
+   (and, via sticky_guard, while the keyboard is open). Also keeps the "pick up where you left off" record: saved when Step 2 opens, cleared once contact info is sent.
    Reads form state only. Sends nothing, adds no tracking, never touches the form's submit. */
-(function (D) {
+(function () {
   "use strict";
-  var d = document, h = d.documentElement, bar = d.getElementById("mbar");
-  var q; try { q = new URLSearchParams(location.search); } catch (e) { q = { get: function () { return null; } }; }
-  function offHours() {
-    try {
-      var p = new Intl.DateTimeFormat("en-US", { timeZone: D.hr.tz, weekday: "short", hour: "numeric", hourCycle: "h23" }).formatToParts(new Date()), wd = "", hr = -1;
-      for (var k = 0; k < p.length; k++) { if (p[k].type === "weekday") wd = p[k].value; if (p[k].type === "hour") hr = (+p[k].value) % 24; }
-      var day = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(wd) + 1;
-      if (!day || hr < 0) return false;
-      return D.hr.days.indexOf(day) < 0 || hr < D.hr.open || hr >= D.hr.close;
-    } catch (e) { return false; }
-  }
-  var f = q.get("fsho_ah");
-  var after = f === "1" ? true : f === "0" ? false : offHours();
-  var ah = bar && bar.querySelector(".mbar-ah");
-  if (after && ah) { ah.textContent = D.ah; ah.hidden = false; h.classList.add("after-hours"); }
+  var d = document, h = d.documentElement;
   var formBox = d.getElementById("two-stage");
   if (formBox && "IntersectionObserver" in window) {
     new IntersectionObserver(function (es) {
@@ -53,4 +38,4 @@
     if (c) { try { window.sessionStorage.setItem("fsho_city", c); } catch (e) {} }
   }
   new MutationObserver(sync).observe(form, { attributes: true, subtree: true, attributeFilter: ["hidden"] });
-})(__FSHO_B__);
+})();
