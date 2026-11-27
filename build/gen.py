@@ -1027,6 +1027,8 @@ def check(site, pages, markets, redirects, errs):
         if not isinstance(p.get('noindex', False), bool): E.append(f'{p["_src"]}: noindex must be true/false')
         for hk in ('hero_compact', 'hero_rating', 'hero_proof'):
             if not isinstance(p.get(hk, False), bool): E.append(f'{p["_src"]}: {hk} must be true/false')
+        if p.get('hero_eyebrow') is not None and (not isinstance(p.get('hero_eyebrow'), str) or not p['hero_eyebrow'].strip()):
+            E.append(f'{p["_src"]}: hero_eyebrow must be a non-empty string when set')
         check_draft(p['_src'], p, E)
         if p.get('draft') is True and p['slug'] == '':
             E.append(f'{p["_src"]}: home page cannot be draft; the site would have no index')
@@ -1358,6 +1360,20 @@ def build(site, pages, markets, redirects, live):
                 + fb + '</div>'
                 f'<blockquote>&ldquo;{esc(r["quote"])}&rdquo;<cite>&mdash; {esc(r["name"])}, <a href="{esc(r["url"])}" target="_blank" rel="noopener noreferrer">{r["source"]}<span class="sr-only"> (opens in a new tab)</span></a></cite></blockquote>'
                 + vid + '</div>')
+    def proof_band():
+        # Below-the-form trust band: the same verified Google rating, BBB A+ seal and word-for-word
+        # Google review as proof_block(), plus phone and the office address from site.json entity.
+        # Static images only (lazy, with width/height); no widget or iframe.
+        r = PF['review']
+        addr = address_line(S)
+        return ('<section class="pband"><div class="wrap pad"><h2 class="c">Why families call us</h2>'
+                '<div class="pband-row">'
+                f'<a class="gpill" href="{esc(PF["google_url"])}" target="_blank" rel="noopener noreferrer"><span class="stars" aria-hidden="true">&#9733;&#9733;&#9733;&#9733;&#9733;</span> {g_rating_text()}<span class="sr-only"> (opens in a new tab)</span></a>'
+                f'<a class="bbb" href="{esc(PF["bbb_url"])}" target="_blank" rel="noopener noreferrer"><img src="/bbb-white.webp" alt="BBB Accredited Business, {PF["bbb_rating"]} rating" width="160" height="112" loading="lazy" decoding="async"><span class="sr-only"> (opens in a new tab)</span></a>'
+                '</div>'
+                f'<blockquote class="testi">&ldquo;{esc(r["quote"])}&rdquo;<cite>&mdash; {esc(r["name"])}, <a href="{esc(r["url"])}" target="_blank" rel="noopener noreferrer">{r["source"]}<span class="sr-only"> (opens in a new tab)</span></a></cite></blockquote>'
+                f'<p class="c pband-c">Call or text <a href="tel:{TEL}">{PH}</a>' + (f' &middot; <span class="pband-a">{addr}</span>' if addr else '') + '</p>'
+                '</div></section>')
     PZ = json.load(open(os.path.join(C, 'personalize.json'), encoding='utf-8'))
     def inline_js(name, token, data):
         src = open(os.path.join(B, name), encoding='utf-8').read().strip()
@@ -1377,7 +1393,7 @@ def build(site, pages, markets, redirects, live):
                 '<button type="button" class="btn btn-o ts-resume-go">Continue</button>'
                 '<button type="button" class="ts-resume-over">Start over</button></div>'
                 + inline_js('hero-pre.js', '__FSHO_P__', data))
-    def hero(h, sub, intake=False, bias='', compact=False, rating=False, proof=False, personalize=False):
+    def hero(h, sub, intake=False, bias='', compact=False, rating=False, proof=False, personalize=False, eyebrow=None):
         panel = public_intake(bias) if intake else form()
         if rating:
             panel = (f'<div class="hrate"><a href="{esc(PF["google_url"])}" target="_blank" rel="noopener noreferrer">'
@@ -1386,7 +1402,7 @@ def build(site, pages, markets, redirects, live):
         cls = 'hero compact' if compact else 'hero'
         if proof: cls += ' hasproof'
         badges = proof_block() if proof else trust
-        return f'<section class="{cls}" id="offer"><div class="wrap hg"><div><p class="eyebrow">{S["hero_eyebrow"]}</p><h1>{h}</h1><p class="lede">{sub}</p>{hero_slots(personalize) if intake else ""}{badges}</div>{panel}</div></section>'
+        return f'<section class="{cls}" id="offer"><div class="wrap hg"><div><p class="eyebrow">{eyebrow or S["hero_eyebrow"]}</p><h1>{h}</h1><p class="lede">{sub}</p>{hero_slots(personalize) if intake else ""}{badges}</div>{panel}</div></section>'
     sits = '<div class="grid3">' + ''.join(f'<div class="card"><div class="ic">{x["icon"]}</div><h3>{x["title"]}</h3><p>{x["text"]}</p></div>' for x in S['situations']) + '</div>'
     steps = '<div class="grid3 steps">' + ''.join(f'<div class="card"><b>{x["n"]}</b><h3>{x["title"]}</h3><p>{x["text"]}</p></div>' for x in S['steps']) + '</div>'
     cp = S['comparison']
@@ -1407,6 +1423,7 @@ def build(site, pages, markets, redirects, live):
             if k == 'testimonials': return testis(S['testimonials'])
             if k == 'reviews': return reviewsh(S.get('reviews') or [])
             if k == 'trust': return trust
+            if k == 'proof_band': return proof_band()
             if k == 'faq': return faqh(faq_items, int(arg) if arg else 99)
             if k == 'faq_page': return render_faq_page(S)
             if k == 'cta': return cta(arg or cta_label or None, offer_href)
@@ -1525,7 +1542,7 @@ def build(site, pages, markets, redirects, live):
         faq_items = p.get('faq') or S['faq']
         body = md(shortcodes(p['body'], faq_items, p.get('cta_label'), offer))
         if p['template'] in ('home', 'situation'):
-            body = hero(p['hero_headline'], p['hero_sub'], intake=True, compact=bool(p.get('hero_compact')), rating=bool(p.get('hero_rating')), proof=bool(p.get('hero_proof')), personalize=bool(p.get('personalize'))) + body
+            body = hero(p['hero_headline'], p['hero_sub'], intake=True, compact=bool(p.get('hero_compact')), rating=bool(p.get('hero_rating')), proof=bool(p.get('hero_proof')), personalize=bool(p.get('personalize')), eyebrow=p.get('hero_eyebrow') or None) + body
         page(path, p['title'], (p.get('meta_description') or '').replace('{{phone}}', PH), body, bool(p.get('noindex', False) or p.get('draft')),
              canonical=p.get('canonical') or None, og_title=p.get('og_title') or None, og_image=p.get('og_image') or None,
              faq_ld=faq_ld_items(body, p.get('faq'), p.get('body'), p['slug']), file_rel=file_rel, offer_href=offer,

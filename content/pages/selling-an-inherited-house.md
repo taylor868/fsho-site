@@ -1,31 +1,44 @@
 ---
-title: "Selling an Inherited House | Fair & Simple Home Offer"
-meta_description: "Inherited a house you do not want to keep? Ask about an as-is offer without a cleanup first. Call (910) 636-6669."
+title: "Sell Your Inherited House As-Is | Fair & Simple Home Offer"
+meta_description: "Sell your inherited house as-is for a fair cash offer. No repairs, no cleanout, no fees. Probate or co-heir questions? Call (910) 636-6669."
 template: situation
-hero_headline: "Selling an inherited house"
-hero_sub: "You received a house you may not have planned to keep. You can ask for an offer as-is, without cleaning it out or fixing it up first."
-cta_label: "Want to talk about the house you received?"
+hero_eyebrow: "No repairs · No cleanout · No fees"
+hero_headline: "Sell Your Inherited House As-Is"
+hero_sub: "Want to sell your inherited house without fixing it up or emptying it first? Ask for a no-obligation cash offer on the house as it sits."
+cta_label: "Ready to talk about the house you inherited?"
 noindex: false
+# TODO(testimonial): add an estate or inherited-house review in the "Why families call us" band ({{proof_band}})
+# only once Taylor sends a real one with the seller's permission. Never invent one. Not rendered.
 faq:
-  - q: "Do I have to clean the house out before I call?"
-    a: "No. You can ask for an offer as-is and leave what you do not want. You do not have to repair the house, sort every room, or live there to start the conversation."
-  - q: "Do all the heirs have to agree?"
-    a: "We need the person or people who have the right to sell. We do not decide who that is, and we do not take sides between family members. If you are not sure who has to sign, ask the estate's attorney before anyone agrees to sell."
-  - q: "What if the estate is still in probate?"
-    a: "Receiving a house and the court process are different. If a court is still handling the estate, read <a href=\"/selling-a-house-in-probate/\">selling a house in probate</a>, and talk with the estate's attorney before anyone signs. We are not attorneys."
+  - q: "Can I sell an inherited house before probate is finished?"
+    a: "Sometimes. It depends on the state and the estate. In many cases the court first has to give someone, often called the executor or personal representative, the authority to sell, and some sales also need the court's approval. Ask the estate's attorney what applies to this estate. We can talk about the house and make an offer at any point. We are not attorneys."
+  - q: "What if my siblings or other heirs inherited the house too?"
+    a: "We need the person or people who have the right to sell, and that can mean every co-owner signs. We do not decide who that is, we do not take sides between family members, and we do not split the money. You can share our offer with everyone, and if you accept, we wait until everyone who needs to sign is ready."
+  - q: "Can I sell the house with the belongings still inside?"
+    a: "Yes. Take what matters to you and leave what you do not want. You do not have to clean the house out, hold an estate sale, or rent a dumpster before you ask for an offer."
+  - q: "What if there are back taxes, a mortgage or liens on the house?"
+    a: "Tell us up front. Back property taxes, a mortgage or a lien does not always stop a sale. The title company looks for them before closing, and payoffs are usually paid from the sale at closing. That is not a fee we add. If what is owed may be more than the house is worth, talk with the estate's attorney first."
+  - q: "Do I have to make repairs or clean before I call?"
+    a: "No. You can ask for an offer on the house as-is. You do not have to repair it, sort every room, or live there to start the conversation."
   - q: "Will I pay a commission or closing costs?"
     a: "Not on our cash offer. There is no commission, and we cover closing costs. A mortgage or lien payoff, if the house has one, goes to the lender at closing. That is not a fee we add."
+  - q: "I live in another state. Can I still sell?"
+    a: "Yes. You can call from anywhere. Tell us where the house is. We only buy in the states on our <a href=\"/service-areas/\">service areas</a> page."
 ---
-<section class="wrap pad"><h2>A house you received, not a project you planned</h2><p>An inherited house can show up with someone else's furniture still in it, a yard you do not live near, and decisions you did not ask for. The bills can keep coming while the family works out what to do. You might want to keep it. You might want to be done. This page is for the second feeling.</p><p>You can ask for a no-obligation offer without cleaning the house out or fixing it up. There is no cost to ask. If we are not the right fit, we will say so.</p></section>
+<section class="wrap pad"><div style="max-width:860px;margin:0 auto"><p class="nrf">No repairs, no cleanout, no fees.</p><h2>Sell my inherited house: where do I start?</h2><p>An inherited house can come with someone else's furniture still inside, a yard you do not live near, and bills that keep coming while the family decides what to do. If you have decided to sell inherited property like this, you can ask us for a fair cash offer on the house as-is. There is no commission, we cover closing costs, and there is no obligation to accept. If we are not the right fit, we will say so.</p></div></section>
 
-<section class="alt"><div class="wrap pad"><h2 class="c">What you do not have to do first</h2><div class="grid2"><div class="card"><h3>Empty every room</h3><p>Take what matters to you and leave the rest. An as-is conversation is not a weekend of hauling.</p></div><div class="card"><h3>Make repairs</h3><p>A roof, a floor, or years of postponed work can stay as they are while you ask for an offer.</p></div><div class="card"><h3>Live nearby</h3><p>You can call from another state. Tell us where the house is. We only buy in the states on our <a href="/service-areas/">service areas</a> page.</p></div><div class="card"><h3>Figure out the court alone</h3><p>If the estate is still in probate, that is a different question. Start with <a href="/selling-a-house-in-probate/">selling a house in probate</a>, and with the estate's attorney.</p></div></div></div></section>
+{{proof_band}}
 
-<section class="wrap pad"><h2 class="c">How it usually goes</h2><div class="grid3 steps"><div class="card"><b>1</b><h3>Tell us about the house</h3><p>Where it is, what shape it is in, and who you think has to sign. Rough answers are fine. Use the form, or call or text <a href="tel:+19106366669">(910) 636-6669</a>.</p></div><div class="card"><b>2</b><h3>Get your cash offer</h3><p>We send you a fair cash offer within 24 hours, for the house as-is. You can share it with the rest of the family. There is no obligation to accept.</p></div><div class="card"><b>3</b><h3>Close on your timeline</h3><p>If you accept, a reputable title company handles the closing, and you pick the date. If more than one person has to sign, we wait until everyone who needs to sign is ready.</p></div></div></section>
+<section class="wrap pad"><h2 class="c">How to sell an inherited house to us, step by step</h2><div class="grid2 steps"><div class="card"><b>1</b><h3>Tell us about the house</h3><p>Where it is, what shape it is in, and who you think has to sign. Rough answers are fine. Use the form above, or call or text <a href="tel:+19106366669">(910) 636-6669</a>.</p></div><div class="card"><b>2</b><h3>Get your cash offer</h3><p>We send you a fair cash offer within 24 hours, for the house as-is. Share it with the rest of the family. There is no obligation to accept.</p></div><div class="card"><b>3</b><h3>Confirm who can sign</h3><p>The title company checks the title. If the estate is still in probate, the estate's attorney can tell you who has the authority to sign and when.</p></div><div class="card"><b>4</b><h3>Close on your timeline</h3><p>If you accept, a reputable title company handles the closing, and you pick the date. Take what you want from the house and leave the rest.</p></div></div></section>
 
-<section class="alt"><div class="wrap pad"><h2>Inherited is not the same as probate</h2><p>Inherited means the house came to you. Probate is the legal process a court may still be running. If you already have the right to sell and the court work is done, you are in the right place. If you are not sure you are allowed to sign, do not guess. Ask the estate's attorney or the court. We are not attorneys, and we will not tell you that you can sign.</p><p>When you are ready to talk about the house itself, use the form or call. We look at single-family houses and multi-family properties with 2–4 units.</p><p style="display:flex;flex-wrap:wrap;gap:12px;align-items:center"><a class="btn btn-o" href="#offer">Get a no-obligation offer</a> <a class="btn btn-call" href="tel:+19106366669">Call or text (910) 636-6669</a></p></div></section>
+<section class="alt"><div class="wrap pad"><div style="max-width:860px;margin:0 auto"><h2>Can you sell inherited property before probate is finished?</h2><p>Sometimes. Inheriting a house and the court process are two different things. In many states, the court first appoints someone, often called the executor or personal representative, who may then have the authority to sell. Some sales also need the court's approval, and some houses pass outside probate entirely, for example through a trust. State laws vary, so ask the estate's attorney what applies before anyone signs. We are not attorneys, and we do not give legal advice.</p><p>You can still talk with us about the house and get an offer while the estate is open. If the court is still handling things, read <a href="/selling-a-house-in-probate/">selling a house in probate</a>.</p></div></div></section>
+
+<section class="wrap pad"><div style="max-width:860px;margin:0 auto"><h2>Selling an inherited home with siblings or co-heirs</h2><p>When more than one person inherits a house, everyone who owns a share, or the person the court has given authority to sell, usually has to sign. We do not decide who that is, and we do not take sides between family members. How the money is divided is up to the will, the estate or your family's agreement, not us.</p><p>You can share our offer with every heir so everyone sees the same numbers. If you accept, we wait until everyone who needs to sign is ready. If the family disagrees about selling, talk with the estate's attorney before anyone signs.</p></div></section>
+
+<section class="alt"><div class="wrap pad"><div style="max-width:860px;margin:0 auto"><h2>Selling with the belongings still inside</h2><p>You do not have to empty every room. Take the photos, papers and keepsakes that matter to you, and leave the rest. There is no cleanout to schedule, no estate sale to run, and no dumpster to rent before you ask for an offer.</p><h2>Back taxes, liens or a mortgage on the house</h2><p>Back property taxes, a mortgage or a lien does not always stop a sale. The title company looks for them before closing, and payoffs are usually paid from the sale at closing. That is not a fee we add. Tell us what you know up front. If what is owed may be more than the house is worth, talk with the estate's attorney before you decide.</p><p style="display:flex;flex-wrap:wrap;gap:12px;align-items:center"><a class="btn btn-o" href="#offer">Get a no-obligation offer</a> <a class="btn btn-call" href="tel:+19106366669">Call or text (910) 636-6669</a></p></div></div></section>
 
 <section class="wrap pad">{{qualifier}}</section>
 
-<section class="alt"><div class="wrap pad"><h2 class="c">Questions about an inherited house</h2>{{faq}}<p class="c"><a href="/faq/">More answers are on the FAQ page.</a></p></div></section>
+<section class="alt"><div class="wrap pad"><h2 class="c">Questions about selling an inherited house</h2>{{faq}}<p class="c">Still in probate? Read <a href="/selling-a-house-in-probate/">selling a house in probate</a>. New here? Start on our <a href="/">homepage</a>. <a href="/faq/">More answers are on the FAQ page.</a></p></div></section>
 
 {{cta}}

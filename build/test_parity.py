@@ -80,11 +80,13 @@ AD_LANDINGS = (
         'only': 'We do not split proceeds',
     },
     {
+        # Inherited ad group (Andrew, Nov 2026): keyword-matched H1 + title.
         'slug': 'selling-an-inherited-house',
-        'h1': 'Selling an inherited house',
-        'title': 'Selling an Inherited House | Fair & Simple Home Offer',
-        'meta': 'Inherited a house you do not want to keep? Ask about an as-is offer without a cleanup first. Call (910) 636-6669.',
-        'only': 'A house you received, not a project you planned',
+        'h1': 'Sell Your Inherited House As-Is',
+        'title': 'Sell Your Inherited House As-Is | Fair & Simple Home Offer',
+        'meta': 'Sell your inherited house as-is for a fair cash offer. No repairs, no cleanout, no fees. Probate or co-heir questions? Call (910) 636-6669.',
+        'only': 'Selling an inherited home with siblings or co-heirs',
+        'max_faq': 7,
     },
     {
         'slug': 'selling-a-house-in-probate',
@@ -963,7 +965,9 @@ cta_label: "Page specific heading"
             self.assertEqual(sticky.findall(html), ['#offer'], path)
             self.assertEqual(cash.findall(html), ['#offer'], path)
             self.assertNotIn('href="/#offer"', html, path)
-            self.assertIn('Sell your house as-is · No fees · No repairs', html, path)
+            # The inherited lander carries its own eyebrow (Andrew's "no repairs, no cleanout, no fees" line).
+            eyebrow = 'No repairs · No cleanout · No fees' if 'selling-an-inherited-house' in str(path) else 'Sell your house as-is · No fees · No repairs'
+            self.assertIn(f'<p class="eyebrow">{eyebrow}</p>', html, path)
         home = (out / 'index.html').read_text(encoding='utf-8')
         self.assertIn('<h1>Sell your house fast, for a fair cash offer, on your timeline.</h1>', home)
         self.assertNotIn('Brett C.', home)
@@ -1657,6 +1661,59 @@ faq:
             self.assertNotIn('RealEstateAgent', f.read_text(encoding='utf-8'), str(f))
         probate = (out / 'selling-a-house-in-probate' / 'index.html').read_text(encoding='utf-8')
         self.assertIn(f'rating from {pf["google_count"]} Google reviews', probate)
+
+
+    def test_inherited_landing_matches_the_ad_group(self):
+        self.build()
+        out = Path(gen.OUT)
+        site = json.loads((ROOT / 'content' / 'site.json').read_text(encoding='utf-8'))
+        pf = site['proof']
+        doc = (out / 'selling-an-inherited-house' / 'index.html').read_text(encoding='utf-8')
+        head = doc.split('</head>', 1)[0]
+        main = doc.split('<main>', 1)[1].split('</main>', 1)[0]
+        hero, below = main.split('</section>', 1)
+        self.assertIn('<title>Sell Your Inherited House As-Is | Fair and Simple Home Offer</title>', head)
+        self.assertIn('<h1>Sell Your Inherited House As-Is</h1>', hero)
+        self.assertIn('No repairs · No cleanout · No fees', hero)
+        # Same address-first public form, in the hero (right under the headline), not below.
+        self.assertIn('<div id="ts-app" data-public="1"><form id="ts-form" action="#" method="post">', hero)
+        self.assertNotIn('id="ts-form"', below)
+        self.assertNotIn('data-b=', hero)
+        page = (self.root / 'content' / 'pages' / 'selling-an-inherited-house.md').read_text(encoding='utf-8')
+        self.assertNotIn('personalize: true', page)
+        low = re.sub(r'<[^>]+>', ' ', below).lower()
+        for kw in ('sell my inherited house', 'sell inherited property', 'selling an inherited home', 'sell an inherited house'):
+            self.assertIn(kw, low, kw)
+        first_p = re.search(r'<p>(.*?)</p>', below, re.S).group(1).lower()
+        self.assertIn('sell inherited property', first_p)
+        self.assertIn('no repairs, no cleanout, no fees.', low)
+        for topic in ('before probate is finished', 'siblings or co-heirs', 'belongings still inside', 'back taxes, liens'):
+            self.assertIn(topic, low, topic)
+        self.assertIn('we are not attorneys', low)
+        self.assertNotIn('7 days', low)
+        # Trust: verified Google figures, BBB seal, review word for word, phone, office address.
+        self.assertIn(f'<b>{pf["google_rating"]}</b> rating from {pf["google_count"]} Google reviews', below)
+        self.assertIn(pf['bbb_url'], below)
+        self.assertIn(gen.esc(pf['review']['quote']), below)
+        self.assertIn('href="tel:+19106366669"', below)
+        self.assertIn('1971 E Beltline Ave NE Ste 106, Grand Rapids, MI 49505', below)
+        self.assertNotIn('<iframe', main)
+        for img in re.findall(r'<img\b[^>]*>', below):
+            self.assertIn('loading="lazy"', img)
+            self.assertRegex(img, r'width="\d+"')
+        # Links, indexability, sitemap, FAQ schema.
+        self.assertIn('href="/selling-a-house-in-probate/"', below)
+        self.assertIn('href="/"', below)
+        self.assertNotIn('noindex', head)
+        self.assertIn('<link rel="canonical" href="https://fsho.co/selling-an-inherited-house/">', head)
+        sitemap = (out / 'sitemap.xml').read_text(encoding='utf-8')
+        self.assertIn('<loc>https://fsho.co/selling-an-inherited-house/</loc>', sitemap)
+        faq = next(b for b in ld_blocks(doc) if b['@type'] == 'FAQPage')
+        names = [q['name'] for q in faq['mainEntity']]
+        self.assertEqual(names, [html_mod.unescape(q) for q, _ in faq_pairs(below)])
+        joined = ' '.join(names).lower()
+        for topic in ('probate', 'siblings', 'belongings', 'back taxes'):
+            self.assertIn(topic, joined, topic)
 
 
 def home_h1(html):

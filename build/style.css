@@ -60,3 +60,4 @@ button.vid{border:0;padding:0;cursor:pointer;background:#000;width:100%;aspect-r
 #ts-s2 .row label{min-width:0}
 #ts-s2 label.consent{margin:12px 0 0}
 @media(max-width:480px){#ts-s2 .row{grid-template-columns:1fr;gap:0}}
+.pband{background:var(--n);color:#fff}.pband h2{color:#fff}.pband-row{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:12px 18px}.pband .gpill{display:inline-block;background:#fff;color:var(--n);text-decoration:none;font-weight:600;font-size:15px;padding:8px 14px;border-radius:999px}.pband .gpill .stars{color:#A35F00;letter-spacing:1px}.pband a.bbb{line-height:0}.pband a.bbb img{height:46px;width:auto}.pband .testi{color:#fff}.pband .testi cite,.pband .testi cite a,.pband-c a{color:#ffd2b8}.pband-c{margin:0}.nrf{font-size:20px;font-weight:800;color:var(--n);margin:0 0 .6em}
