@@ -22,6 +22,8 @@ faq:
 
 <section class="wrap pad"><h2>What as-is does not promise</h2><p>An as-is offer is not a promise that the price will match what a repaired house might sell for on the open market. A cash offer is typically below full retail, because the repairs, the closing costs, and the risk move to us. If you have time and want to aim closer to retail, a market-sale option may fit better. We show you both.</p><p>We buy single-family houses and multi-family properties with 2–4 units. If you want to know whether we buy in your state, check our <a href="/service-areas/">service areas</a> or call. We will not tell you we buy somewhere we do not.</p><p style="display:flex;flex-wrap:wrap;gap:12px;align-items:center"><a class="btn btn-o" href="#offer">Get a no-obligation offer</a> <a class="btn btn-call" href="tel:+19106366669">Call or text (910) 636-6669</a></p></section>
 
+{{yt:sell-your-house-as-is}}
+
 <section class="alt"><div class="wrap pad">{{qualifier}}</div></section>
 
 <section class="wrap pad"><h2 class="c">Questions about selling as-is</h2>{{faq}}<p class="c"><a href="/faq/">More answers are on the FAQ page.</a></p></section>

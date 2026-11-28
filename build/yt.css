@@ -1,0 +1,12 @@
+.yt{margin:0 auto 18px}.yt-l{max-width:720px}.yt-s{max-width:300px}.ytbox{position:relative;border-radius:12px;overflow:hidden;background:#000}
+.yt-l .ytbox{aspect-ratio:16/9}.yt-s .ytbox{aspect-ratio:9/16}.yt-t .ytbox{aspect-ratio:4/3}
+.ytbox button.vid,.ytbox .vidf{aspect-ratio:auto;width:100%;height:100%;border-radius:0;display:block}.ytbox button.vid img{aspect-ratio:auto;width:100%;height:100%;object-fit:cover}
+.ytbox button.vid span i{display:grid;place-items:center;width:64px;height:64px;border-radius:50%;background:{{orange}};color:#fff;font-style:normal;font-size:26px;text-shadow:none;padding-left:4px;box-shadow:0 4px 16px #0006}
+.ytbox button.vid:focus-visible{outline:3px solid #ffd2b8;outline-offset:-6px}
+.yt figcaption{margin-top:8px;font-size:15px;line-height:1.45;color:#445}.yt figcaption strong{color:{{navy}}}.ytd{font-size:13px;color:#667}
+.ytmain{max-width:720px;margin:0 auto}.ytx h3{margin:18px 0 6px;font-size:18px}.ytch{margin:0;padding-left:20px;line-height:1.7}.ytt{display:inline-block;min-width:3.2em;font-variant-numeric:tabular-nums;color:#667}
+.ytr{margin-top:14px;border:1px solid #dde3ea;border-radius:10px;padding:10px 14px}.ytr summary{cursor:pointer;font-weight:700;color:{{navy}}}
+.ytgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;margin:0 0 20px}.ytgrid .yt{margin:0}
+.yts.two .yt-s{display:inline-block;vertical-align:top;width:calc(50% - 12px);max-width:300px;margin:0 6px 18px}.yts.two{text-align:center}.yts.two figcaption{text-align:left}
+.yts .ytmain+.yt-s{margin-top:24px}
+@media(max-width:640px){.yts.two .yt-s{width:100%;margin:0 auto 18px;display:block}}

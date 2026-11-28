@@ -26,6 +26,8 @@ faq:
 
 <section class="alt"><div class="wrap pad"><h2 class="c">Our two options next to a traditional listing</h2><p>This is the same comparison we show homeowners on the site. It is a guide, not a quote for your house. Your costs and your dates can differ.</p>{{comparison}}</div></section>
 
+{{yt:companies-that-buy-houses}}
+
 <section class="wrap pad">{{qualifier}}</section>
 
 <section class="alt"><div class="wrap pad"><h2 class="c">Questions people ask while they compare</h2>{{faq}}<p class="c"><a href="/faq/">More answers are on the FAQ page.</a></p></div></section>
