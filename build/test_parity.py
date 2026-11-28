@@ -107,9 +107,9 @@ AD_LANDINGS = (
         'slug': 'sell-your-house-for-cash',
         'h1': 'Sell Your House For Cash, Fair Offer In 24 Hours',
         'title': 'Sell Your House For Cash, Fair Offer In 24 Hours',
-        'meta': 'Sell your house for cash and get a fair offer in 24 hours. We buy as-is, cover closing costs, and close on your timeline. Call (910) 636-6669.',
-        'only': "We'll beat any cash offer by $2k",
-        'max_faq': 6,
+        'meta': 'Sell your house for cash and get a fair offer in 24 hours. We buy as-is with no repairs or fees, and you close on your timeline. Call (910) 636-6669.',
+        'only': 'What if I want more than a cash offer?',
+        'max_faq': 5,
     },
 )
 
@@ -754,6 +754,7 @@ cta_label: "Page specific heading"
             'north-carolina': Path(gen.OUT) / 'sell-your-house-fast-in-north-carolina' / 'index.html',
             'sell-your-house-as-is': Path(gen.OUT) / 'sell-your-house-as-is' / 'index.html',
             'companies-that-buy-houses': Path(gen.OUT) / 'companies-that-buy-houses' / 'index.html',
+            'sell-your-house-for-cash': Path(gen.OUT) / 'sell-your-house-for-cash' / 'index.html',
             'sell-your-house-fast': Path(gen.OUT) / 'sell-your-house-fast' / 'index.html',
             'selling-a-house-in-pre-foreclosure': Path(gen.OUT) / 'selling-a-house-in-pre-foreclosure' / 'index.html',
             'selling-a-house-in-divorce': Path(gen.OUT) / 'selling-a-house-in-divorce' / 'index.html',
@@ -807,8 +808,14 @@ cta_label: "Page specific heading"
             self.assertNotIn('&amp;', re.search(r'property="og:site_name" content="[^"]*"', html).group(0), name)
             self.assertNotIn('&amp;', re.search(r'name="twitter:title" content="[^"]*"', html).group(0), name)
             self.assertIn(f'href="{google}" {link}', html, name)
-            self.assertIn(f'href="{facebook}" {link}', html, name)
             self.assertIn(f'href="{bbb}" {link}', html, name)
+            # Compact-trust heroes (cash + companies) keep the Facebook profile in LocalBusiness sameAs
+            # but drop the Facebook badge from the form hero so the offer button fits on a small phone.
+            if name in ('companies-that-buy-houses', 'sell-your-house-for-cash') or html.find('class="hero hasproof hlite"') != -1:
+                self.assertIn(facebook, html, name)
+                self.assertNotIn('fb-white.webp', html.split('<main>',1)[1].split('</main>',1)[0], name)
+            else:
+                self.assertIn(f'href="{facebook}" {link}', html, name)
         quiet = {
             'faq': Path(gen.OUT) / 'faq' / 'index.html',
             'our-company': Path(gen.OUT) / 'our-company' / 'index.html',
@@ -1646,7 +1653,7 @@ faq:
         out = Path(gen.OUT)
         site = json.loads((ROOT / 'content' / 'site.json').read_text(encoding='utf-8'))
         pf = site['proof']
-        for slug in ('companies-that-buy-houses', 'sell-your-house-as-is'):
+        for slug in ('sell-your-house-as-is',):
             doc = (out / slug / 'index.html').read_text(encoding='utf-8')
             hero = doc.split('<section class="hero', 1)[1].split('</section>', 1)[0]
             self.assertIn('hasproof', hero, slug)
@@ -1746,13 +1753,21 @@ faq:
             self.assertNotIn('ytimg.com', main, slug)
             self.assertNotIn('youtube.com/watch', hero, slug)
             self.assertLess(doc.index('id="ts-form"'), doc.index('data-yt="k3iyV-hwVSs"'), slug)
+        for slug in ('sell-your-house-for-cash', 'companies-that-buy-houses'):
+            page = (out / slug / 'index.html').read_text(encoding='utf-8')
+            hero = page.split('<section class="hero', 1)[1].split('</section>', 1)[0]
+            self.assertIn(f'<b>{pf["google_rating"]}</b> rating from {pf["google_count"]} Google reviews', hero, slug)
+            self.assertIn('alt="BBB Accredited Business, A+ rating"', hero, slug)
+            self.assertIn('As-is, no repairs or fees, close on your timeline.', hero, slug)
+            self.assertIn(gen.esc(pf['review']['quote']), hero, slug)
+            self.assertLess(hero.index('id="ts-form"'), hero.index('class="hq"'), slug)
+            self.assertNotIn("We'll beat any cash offer by $2k", page, slug)
+            self.assertNotIn('$2k', page, slug)
+            self.assertNotIn('$2,000', page, slug)
+            self.assertNotIn('7–14 days', page, slug)
+            self.assertNotIn('7-14 days', page, slug)
         cash = (out / 'sell-your-house-for-cash' / 'index.html').read_text(encoding='utf-8')
         hero = cash.split('<section class="hero', 1)[1].split('</section>', 1)[0]
-        self.assertIn(f'<b>{pf["google_rating"]}</b> rating from {pf["google_count"]} Google reviews', hero)
-        self.assertIn('alt="BBB Accredited Business, A+ rating"', hero)
-        self.assertIn('As-is, no repairs or fees, close on your timeline.', hero)
-        self.assertIn(gen.esc(pf['review']['quote']), hero)
-        self.assertLess(hero.index('id="ts-form"'), hero.index('class="hq"'))
         lede = cash.split('<p class="lede">', 1)[1].split('</p>', 1)[0].lower()
         self.assertIn('sell your house for cash', lede)
         # Other pages keep the original synchronous loaders and the clickcease preconnect.

@@ -2,9 +2,9 @@
 title: "Companies Who Buy Houses | Fair & Simple Home Offer"
 meta_description: "Comparing companies that buy houses? See what that sale means, what to look for, and how Fair and Simple works. Call (910) 636-6669."
 template: situation
-hero_proof: true
-hero_video: false
+hero_proof_lite: true
 late_third_party: true
+hero_trust_line: "As-is, no repairs or fees, close on your timeline."
 hero_headline: "Companies who buy houses"
 hero_sub: "If you are comparing companies that buy houses, here is what that kind of sale is, what to look for, and how Fair and Simple works."
 personalize: true
