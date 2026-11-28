@@ -37,6 +37,8 @@ faq:
 
 <section class="alt"><div class="wrap pad"><div style="max-width:860px;margin:0 auto"><h2>Selling with the belongings still inside</h2><p>You do not have to empty every room. Take the photos, papers and keepsakes that matter to you, and leave the rest. There is no cleanout to schedule, no estate sale to run, and no dumpster to rent before you ask for an offer.</p><h2>Back taxes, liens or a mortgage on the house</h2><p>Back property taxes, a mortgage or a lien does not always stop a sale. The title company looks for them before closing, and payoffs are usually paid from the sale at closing. That is not a fee we add. Tell us what you know up front. If what is owed may be more than the house is worth, talk with the estate's attorney before you decide.</p><p style="display:flex;flex-wrap:wrap;gap:12px;align-items:center"><a class="btn btn-o" href="#offer">Get a no-obligation offer</a> <a class="btn btn-call" href="tel:+19106366669">Call or text (910) 636-6669</a></p></div></div></section>
 
+{{yt:selling-an-inherited-house}}
+
 <section class="wrap pad">{{qualifier}}</section>
 
 <section class="alt"><div class="wrap pad"><h2 class="c">Questions about selling an inherited house</h2>{{faq}}<p class="c">Still in probate? Read <a href="/selling-a-house-in-probate/">selling a house in probate</a>. New here? Start on our <a href="/">homepage</a>. <a href="/faq/">More answers are on the FAQ page.</a></p></div></section>

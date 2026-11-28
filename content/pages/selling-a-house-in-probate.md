@@ -27,6 +27,8 @@ faq:
 
 <section class="alt"><div class="wrap pad"><h2>A sale still has to fit the house</h2><p>If the person with authority wants an offer, we look at single-family houses and multi-family properties with 2–4 units, as-is. There is no cost to ask and no obligation to accept. If you already received the house and the court work is finished, read <a href="/selling-an-inherited-house/">selling an inherited house</a> instead.</p><p>Probate rules are one reason the state matters. Another is that we only buy in the states on our <a href="/service-areas/">service areas</a> page.</p><p style="display:flex;flex-wrap:wrap;gap:12px;align-items:center"><a class="btn btn-o" href="#offer">Get a no-obligation offer</a> <a class="btn btn-call" href="tel:+19106366669">Call or text (910) 636-6669</a></p></div></section>
 
+{{yt:selling-a-house-in-probate}}
+
 <section class="wrap pad">{{qualifier}}</section>
 
 <section class="alt"><div class="wrap pad"><h2 class="c">Questions about a house in probate</h2>{{faq}}<p class="c"><a href="/faq/">More answers are on the FAQ page.</a></p></div></section>

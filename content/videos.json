@@ -1,0 +1,422 @@
+{
+  "_note": "YouTube videos on fsho.co. Read by build/gen.py. Each video's VideoObject schema goes only on its schema_page, and only when the video is on that page. Never copy YouTube descriptions here; name is the YouTube title, description/summary/caption are our own words using approved claims only (fair cash offer in 24 hours; as-is, no repairs or fees; close on your timeline). Unconfirmed slots keep id empty and render nothing; to turn one on, move proposed_id into id and set confirmed true. transcript: paste Andrew's cleaned script (never YouTube auto-captions); empty = the transcript section is left off live pages and shows a placeholder on previews. Thumbnails are self-hosted in content/media (yt-<id>-*.webp, made by build/yt_thumbs.py) so pages make no YouTube request until a visitor taps play.",
+  "channel": "https://www.youtube.com/@FairandSimpleHomeOffer",
+  "videos": {
+    "cash-offers": {
+      "id": "rc5rfDZgO2A",
+      "kind": "long",
+      "youtube_title": "How Do Cash Home Buyers Make Offers? (And How to Compare Them)",
+      "duration_s": 248,
+      "upload_date": "2026-11-25",
+      "confirmed": true,
+      "name": "How Do Cash Home Buyers Make Offers? (And How to Compare Them)",
+      "display_title": "How do cash home buyers make offers?",
+      "schema_page": "/sell-your-house-for-cash/",
+      "alt": "Video thumbnail: How do cash home buyers make offers?",
+      "caption": "How a cash offer is built, and how to compare offers side by side.",
+      "description": "How cash home buyers build an offer, what a cash sale trades compared with listing, and a six-point checklist for comparing offers. Fair and Simple Home Offer makes a fair cash offer in 24 hours, buys as-is with no repairs or fees, and lets you close on your timeline.",
+      "summary": "Most cash buyers start from what a house could sell for after repairs, then subtract the repairs, holding and resale costs, and their margin. That is why a cash offer usually comes in below a full retail listing. This video walks through that math, when a cash sale or a listing fits better, and a six-point checklist for comparing offers. With us, you get a fair cash offer in 24 hours, sell as-is with no repairs or fees, and close on your timeline.",
+      "chapters": [
+        {
+          "t": 0,
+          "title": "Intro"
+        },
+        {
+          "t": 25,
+          "title": "The basic math: after-repair value"
+        },
+        {
+          "t": 38,
+          "title": "Minus repairs"
+        },
+        {
+          "t": 52,
+          "title": "Holding and resale costs, plus margin"
+        },
+        {
+          "t": 71,
+          "title": "Why a cash offer is below retail"
+        },
+        {
+          "t": 85,
+          "title": "What a cash sale gives you"
+        },
+        {
+          "t": 105,
+          "title": "Listing compared"
+        },
+        {
+          "t": 123,
+          "title": "Which path fits you"
+        },
+        {
+          "t": 153,
+          "title": "6-point checklist for comparing offers"
+        },
+        {
+          "t": 185,
+          "title": "How we handle it"
+        },
+        {
+          "t": 207,
+          "title": "List-it-for-more option"
+        },
+        {
+          "t": 219,
+          "title": "Bottom line"
+        }
+      ],
+      "transcript": ""
+    },
+    "inherited-options": {
+      "id": "iPPR1uitKqY",
+      "kind": "long",
+      "youtube_title": "Inherited a House? 5 Options for Selling, Keeping, or Renting It",
+      "duration_s": 272,
+      "upload_date": "2026-11-22",
+      "confirmed": true,
+      "name": "Inherited a House? 5 Options for Selling, Keeping, or Renting It",
+      "display_title": "Inherited a house? 5 options",
+      "schema_page": "/selling-an-inherited-house/",
+      "alt": "Video thumbnail: Inherited a house? 5 options for selling, keeping, or renting it",
+      "caption": "Your main options for an inherited house, and the questions to ask before you decide.",
+      "description": "The main options for an inherited house, from keeping it or renting it out to listing it or selling it as-is for cash, plus a note on probate and questions to ask first. Fair and Simple Home Offer makes a fair cash offer in 24 hours, buys as-is with no repairs or fees, and lets you close on your timeline.",
+      "summary": "If you inherited a house, you usually have a few paths: live in it, rent it out, fix it up and list it, or sell it as-is. This video covers the tradeoffs of each, a quick note on probate, and the questions to ask before you decide. If selling as-is fits, you get a fair cash offer in 24 hours, with no repairs or fees, and you close on your timeline.",
+      "chapters": [
+        {
+          "t": 0,
+          "title": "Intro"
+        },
+        {
+          "t": 34,
+          "title": "A quick note on probate"
+        },
+        {
+          "t": 65,
+          "title": "Option 1: Keep it and live in it"
+        },
+        {
+          "t": 81,
+          "title": "Option 2: Keep it as a rental"
+        },
+        {
+          "t": 102,
+          "title": "Option 3: Fix it up and list it"
+        },
+        {
+          "t": 128,
+          "title": "Option 4: Sell it as-is for cash"
+        },
+        {
+          "t": 154,
+          "title": "How it works with us"
+        },
+        {
+          "t": 180,
+          "title": "Option 5: List-it-for-more"
+        },
+        {
+          "t": 197,
+          "title": "Questions to ask before you decide"
+        },
+        {
+          "t": 224,
+          "title": "Comparing offers"
+        },
+        {
+          "t": 242,
+          "title": "Wrap-up"
+        }
+      ],
+      "transcript": ""
+    },
+    "inherited-short": {
+      "id": "2eDKVnfiDCs",
+      "kind": "short",
+      "youtube_title": "Inherited a House You Don't Want? Sell It As-Is, No Repairs",
+      "duration_s": 38,
+      "upload_date": "2026-11-20",
+      "confirmed": true,
+      "name": "Inherited a House You Don't Want? Sell It As-Is, No Repairs",
+      "display_title": "Inherited a house you don't want?",
+      "schema_page": "/selling-an-inherited-house/",
+      "alt": "Video thumbnail: Inherited a house you don't want? Sell it as-is",
+      "caption": "Selling an inherited house as-is, with no repairs and no cleanout.",
+      "description": "A short look at selling an inherited house as-is: no repairs, no cleanout, and no fees, with a fair cash offer in 24 hours and a closing on your timeline."
+    },
+    "veteran": {
+      "id": "k3iyV-hwVSs",
+      "kind": "short",
+      "youtube_title": "How we helped this Veteran solve all the problems he had of selling his home",
+      "duration_s": 85,
+      "upload_date": "2026-02-12",
+      "confirmed": true,
+      "grid": true,
+      "name": "How we helped this Veteran solve all the problems he had of selling his home",
+      "display_title": "How we helped a veteran sell his home",
+      "schema_page": "/reviews/",
+      "alt": "Video thumbnail: a veteran homeowner talks about selling his home with us",
+      "caption": "A veteran homeowner shares how we helped him solve the problems that came with selling.",
+      "description": "A veteran homeowner shares how Fair and Simple Home Offer helped him solve the problems that came with selling his home."
+    },
+    "process": {
+      "id": "vSytu6IDw6s",
+      "kind": "short",
+      "youtube_title": "Hear what solutions we can offer to help you sell your home",
+      "duration_s": 155,
+      "upload_date": "2026-03-24",
+      "confirmed": true,
+      "grid": true,
+      "name": "Hear what solutions we can offer to help you sell your home",
+      "display_title": "The ways we can help you sell",
+      "schema_page": "/reviews/",
+      "alt": "Video thumbnail: the options Fair and Simple Home Offer can offer to help you sell",
+      "caption": "A walkthrough of the ways we can help you sell your house.",
+      "description": "A walkthrough of the ways Fair and Simple Home Offer can help homeowners sell their house."
+    },
+    "eviction-seller": {
+      "id": "pwZIyFiirKQ",
+      "kind": "short",
+      "youtube_title": "Another happy seller we helped with an eviction,  and lawsuit to get her home sold",
+      "duration_s": 92,
+      "upload_date": "2026-03-24",
+      "confirmed": true,
+      "grid": true,
+      "name": "Another happy seller we helped with an eviction, and lawsuit to get her home sold",
+      "display_title": "A seller we helped through an eviction and a lawsuit",
+      "schema_page": "/reviews/",
+      "alt": "Video thumbnail: a seller talks about selling her home during an eviction and a lawsuit",
+      "caption": "This seller got her home sold with us while dealing with an eviction and a lawsuit.",
+      "description": "A seller shares how Fair and Simple Home Offer helped her get her home sold while dealing with an eviction and a lawsuit."
+    },
+    "homeowners": {
+      "id": "EmvtFr5n55g",
+      "kind": "short",
+      "youtube_title": "Hear what homeowners are saying about us !",
+      "duration_s": 61,
+      "upload_date": "2026-02-12",
+      "confirmed": true,
+      "grid": true,
+      "name": "Hear what homeowners are saying about us",
+      "display_title": "Hear what homeowners are saying",
+      "schema_page": "/reviews/",
+      "alt": "Video thumbnail: homeowners talk about selling their house to Fair and Simple Home Offer",
+      "caption": "Homeowners share what it was like to sell their house with us.",
+      "description": "Homeowners share what it was like to sell their house to Fair and Simple Home Offer."
+    },
+    "winamac": {
+      "id": "eJZs1pBf0Jk",
+      "kind": "short",
+      "youtube_title": "Storm-Damaged House Sold As-Is in Winamac, Indiana",
+      "duration_s": 43,
+      "upload_date": "2026-11-17",
+      "confirmed": true,
+      "name": "Storm-Damaged House Sold As-Is in Winamac, Indiana",
+      "display_title": "Storm-damaged house sold as-is in Winamac, Indiana",
+      "schema_page": "/sell-your-house-fast-in-indiana/",
+      "alt": "Video thumbnail: storm-damaged house in Winamac, Indiana",
+      "caption": "A storm-damaged house in Winamac, Indiana, sold as-is with no repairs.",
+      "description": "A storm-damaged house in Winamac, Indiana, with roof damage and a failing bedroom wall, sold as-is with no repairs."
+    },
+    "as-is-1": {
+      "id": "",
+      "kind": "short",
+      "youtube_title": "What Does Selling a House As-Is Actually Mean? #Shorts",
+      "duration_s": 46,
+      "upload_date": "2026-11-13",
+      "proposed_id": "KVgXB9_VoE8",
+      "alternatives": [
+        "KjcM5jxBpK8",
+        "ZDakBf2HnIo"
+      ],
+      "confirmed": false,
+      "schema_page": "/sell-your-house-as-is/",
+      "name": "What Does Selling a House As-Is Actually Mean?",
+      "display_title": "What does selling as-is actually mean?",
+      "alt": "Video thumbnail: what does selling a house as-is actually mean?",
+      "caption": "What as-is means: you sell the house in its current condition, with no repairs.",
+      "description": "What selling a house as-is means: the buyer takes the house in its current condition, with no repairs or fees, and you close on your timeline."
+    },
+    "as-is-2": {
+      "id": "",
+      "kind": "short",
+      "youtube_title": "Selling Your House As-Is? Here's What It Really Means #Shorts",
+      "duration_s": 45,
+      "upload_date": "2026-11-12",
+      "proposed_id": "tg7bSB94urI",
+      "alternatives": [
+        "KjcM5jxBpK8",
+        "ZDakBf2HnIo"
+      ],
+      "confirmed": false,
+      "schema_page": "/sell-your-house-as-is/",
+      "name": "Selling Your House As-Is? Here's What It Really Means",
+      "display_title": "Selling your house as-is?",
+      "alt": "Video thumbnail: selling your house as-is, here's what it really means",
+      "caption": "A quick look at selling a house as-is, with no repairs or fees.",
+      "description": "A quick look at selling a house as-is: no repairs or fees, and a closing on your timeline."
+    },
+    "pre-foreclosure": {
+      "id": "",
+      "kind": "short",
+      "youtube_title": "Behind on Mortgage Payments? Your Options, Including a Cash Sale",
+      "duration_s": 35,
+      "upload_date": "2026-11-23",
+      "proposed_id": "hw7VmL-YNlM",
+      "alternatives": [
+        "SCqXC5Xqvpc"
+      ],
+      "confirmed": false,
+      "schema_page": "/selling-a-house-in-pre-foreclosure/",
+      "name": "Behind on Mortgage Payments? Your Options, Including a Cash Sale",
+      "display_title": "Behind on mortgage payments? Your options",
+      "alt": "Video thumbnail: behind on mortgage payments? Your options, including a cash sale",
+      "caption": "If you're behind on payments, it helps to know your options early.",
+      "description": "If you're behind on mortgage payments, it helps to know your options early: talk to your lender, list the house, or sell as-is for cash, with a fair cash offer in 24 hours."
+    },
+    "stop-foreclosure": {
+      "id": "",
+      "kind": "short",
+      "youtube_title": "Behind on Mortgage Payments? Here's How We Could Help #Shorts",
+      "duration_s": 51,
+      "upload_date": "2026-11-15",
+      "proposed_id": "SCqXC5Xqvpc",
+      "alternatives": [
+        "hw7VmL-YNlM"
+      ],
+      "confirmed": false,
+      "schema_page": "/stop-foreclosure/",
+      "name": "Behind on Mortgage Payments? Here's How We Could Help",
+      "display_title": "Behind on mortgage payments? How we could help",
+      "alt": "Video thumbnail: behind on mortgage payments? Here's how we could help",
+      "caption": "An example of how we could help a homeowner who is behind on payments.",
+      "description": "An example scenario showing how Fair and Simple Home Offer could help a homeowner who is behind on mortgage payments, as one option alongside talking with the lender."
+    },
+    "sell-fast": {
+      "id": "",
+      "kind": "short",
+      "youtube_title": "Can't Afford Home Repairs? Here's How We Could Help You Sell #Shorts",
+      "duration_s": 50,
+      "upload_date": "2026-11-14",
+      "proposed_id": "rjmlQX08KYQ",
+      "alternatives": [
+        "oIN3zBL5uUc",
+        "wY0SenywqVA",
+        "y-Rw1Wpq-x0"
+      ],
+      "confirmed": false,
+      "schema_page": "/sell-your-house-fast/",
+      "name": "Can't Afford Home Repairs? Here's How We Could Help You Sell",
+      "display_title": "Can't afford home repairs?",
+      "alt": "Video thumbnail: can't afford home repairs? Here's how we could help you sell",
+      "caption": "An example of how we could help when a house needs repairs you can't afford.",
+      "description": "An example scenario showing how Fair and Simple Home Offer could help when a house needs major repairs: sell as-is with no repairs or fees, and close on your timeline."
+    }
+  },
+  "pages": {
+    "home": {
+      "path": "/",
+      "heading": "How do cash home buyers make offers?",
+      "videos": [
+        "cash-offers"
+      ]
+    },
+    "how-it-works": {
+      "path": "/how-it-works/",
+      "heading": "How do cash home buyers make offers?",
+      "videos": [
+        "cash-offers"
+      ]
+    },
+    "companies-that-buy-houses": {
+      "path": "/companies-that-buy-houses/",
+      "heading": "How do cash home buyers make offers?",
+      "videos": [
+        "cash-offers"
+      ]
+    },
+    "sell-your-house-for-cash": {
+      "path": "/sell-your-house-for-cash/",
+      "heading": "How do cash home buyers make offers?",
+      "videos": [
+        "cash-offers"
+      ]
+    },
+    "selling-an-inherited-house": {
+      "path": "/selling-an-inherited-house/",
+      "heading": "Inherited a house? Watch your options",
+      "videos": [
+        "inherited-options",
+        "inherited-short"
+      ]
+    },
+    "selling-a-house-in-probate": {
+      "path": "/selling-a-house-in-probate/",
+      "heading": "Inherited a house? 5 options",
+      "videos": [
+        "inherited-options"
+      ]
+    },
+    "our-company": {
+      "path": "/our-company/",
+      "heading": "Hear from homeowners we've helped",
+      "grid": [
+        "veteran",
+        "homeowners"
+      ]
+    },
+    "sell-your-house-as-is": {
+      "path": "/sell-your-house-as-is/",
+      "heading": "Selling as-is, explained",
+      "videos": [
+        "as-is-1",
+        "as-is-2"
+      ]
+    },
+    "selling-a-house-in-pre-foreclosure": {
+      "path": "/selling-a-house-in-pre-foreclosure/",
+      "heading": "Behind on payments? Know your options",
+      "videos": [
+        "pre-foreclosure"
+      ]
+    },
+    "stop-foreclosure": {
+      "path": "/stop-foreclosure/",
+      "heading": "Behind on payments? Here's how we could help",
+      "videos": [
+        "stop-foreclosure"
+      ]
+    },
+    "sell-your-house-fast": {
+      "path": "/sell-your-house-fast/",
+      "heading": "Selling a house that needs repairs",
+      "videos": [
+        "sell-fast"
+      ]
+    },
+    "sell-your-house-fast-in-indiana": {
+      "path": "/sell-your-house-fast-in-indiana/",
+      "heading": "A real Indiana sale",
+      "videos": [
+        "winamac"
+      ]
+    }
+  },
+  "grids": {
+    "home": [
+      "veteran",
+      "process",
+      "eviction-seller"
+    ],
+    "reviews": [
+      "veteran",
+      "process",
+      "eviction-seller",
+      "homeowners"
+    ],
+    "our-company": [
+      "veteran",
+      "homeowners"
+    ]
+  }
+}

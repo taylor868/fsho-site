@@ -19,7 +19,7 @@ var s2=document.querySelector("form.step2");if(s2){var L={};try{L=JSON.parse(ses
 ["address","phone","email"].forEach(function(k){var x=s2.querySelector("[name="+k+"]");if(x&&L[k])x.value=L[k]});
 s2.onsubmit=function(e){e.preventDefault();if(!ok(s2))return;send(data(s2),"/thank-you/")}}
 document.addEventListener("click",function(e){var v=e.target.closest(".vid");if(!v)return;var f=document.createElement("iframe");
-f.src="https://www.youtube-nocookie.com/embed/"+v.dataset.yt+"?autoplay=1";f.allow="autoplay;encrypted-media;picture-in-picture";f.allowFullscreen=true;f.title="Seller video";f.className="vidf";v.replaceWith(f)});
+f.src="https://www.youtube-nocookie.com/embed/"+v.dataset.yt+"?autoplay=1";f.allow="autoplay;encrypted-media;picture-in-picture";f.allowFullscreen=true;f.title=v.dataset.title||"Seller video";f.className="vidf";v.replaceWith(f)});
 if(FSHO.tracking)addEventListener("load",function(){setTimeout(function(){
 if(FSHO.gtm){window.dataLayer=window.dataLayer||[];dataLayer.push({"gtm.start":Date.now(),event:"gtm.js"});var g=document.createElement("script");g.async=1;g.src="https://www.googletagmanager.com/gtm.js?id="+FSHO.gtm;document.head.appendChild(g)}
 if(FSHO.clickcease){var c=document.createElement("script");c.async=1;c.src="https://www.clickcease.com/monitor/stat.js";document.head.appendChild(c)}},1500)})})();

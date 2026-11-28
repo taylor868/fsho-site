@@ -15,4 +15,6 @@ noindex: false
 
 <section class="alt"><div class="wrap pad"><h2 class="c">A common question</h2><p>A sale date does not, by itself, tell you that it is too late or that a sale will stop the foreclosure. The short answer, with no promises about the outcome or your credit, is in the <a href="/faq/#foreclosure">foreclosure section of the FAQ</a>. This page stays the longer look at lender, counselor, cash, and market-sale options.</p></div></section>
 
+{{yt:stop-foreclosure}}
+
 {{cta}}

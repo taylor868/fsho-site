@@ -10,6 +10,8 @@ noindex: false
 
 <section class="alt"><div class="wrap pad"><h2 class="c">Compare your options</h2>{{comparison}}</div></section>
 
+{{yt:how-it-works}}
+
 <section class="wrap pad"><h2 class="c">Questions</h2><p class="c">Answers about price, timelines, costs, and condition are on the <a href="/faq/">FAQ page</a>.</p></section>
 
 {{cta}}

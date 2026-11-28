@@ -21,6 +21,8 @@ faq:
 
 <section class="wrap pad"><h2>Fast and fair are a tradeoff</h2><p>A cash offer can move with fewer steps: no repair list, no cleaning, and no agent commission on that offer. The price is typically below full retail, because we take on the work and the risk.</p><p>If you can wait, the market-sale option may put more money in your pocket and usually takes longer. We will not pretend those are the same thing. The form on this page is where you start. You can also read <a href="/how-it-works/">how it works</a>.</p><p>The house needs to be in a state we already buy in. The list is on our <a href="/service-areas/">service areas</a> page.</p><p style="display:flex;flex-wrap:wrap;gap:12px;align-items:center"><a class="btn btn-o" href="#offer">Get a no-obligation offer</a> <a class="btn btn-call" href="tel:+19106366669">Call or text (910) 636-6669</a></p></section>
 
+{{yt:sell-your-house-fast}}
+
 <section class="alt"><div class="wrap pad">{{qualifier}}</div></section>
 
 <section class="wrap pad"><h2 class="c">Questions about selling fast</h2>{{faq}}<p class="c"><a href="/faq/">More answers are on the FAQ page.</a></p></section>

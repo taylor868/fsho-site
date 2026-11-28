@@ -455,7 +455,7 @@ draft: false
         self.assertEqual(blob[12:16], b'VP8X')
         width = 1 + int.from_bytes(blob[24:27], 'little')
         height = 1 + int.from_bytes(blob[27:30], 'little')
-        manifest = json.loads((self.root / 'content' / 'media' / 'media.json').read_text(encoding='utf-8'))
+        manifest = [m for m in json.loads((self.root / 'content' / 'media' / 'media.json').read_text(encoding='utf-8')) if not m['file'].startswith('yt-')]  # yt-*: video thumbnails (test_videos.py)
         self.assertEqual(manifest, [
             {'file': 'logo.webp', 'alt': 'Fair & Simple Home Offer', 'width': width, 'height': height},
             {'file': 'andrew-family-768.webp', 'alt': 'Andrew Collier with his wife and baby', 'width': 768, 'height': 720},
@@ -1499,7 +1499,8 @@ faq:
         out = Path(gen.OUT)
         agent = next(b for b in ld_blocks((out / 'index.html').read_text(encoding='utf-8')) if b['@type'] == 'LocalBusiness')
         self.assertEqual(agent['address']['postalCode'], '49505')
-        self.assertEqual(len(agent['sameAs']), 3)
+        self.assertEqual(len(agent['sameAs']), 4)
+        self.assertEqual(agent['sameAs'][3], 'https://www.youtube.com/@FairandSimpleHomeOffer')
         self.assertEqual(agent['sameAs'][2], 'https://share.google/xhED38I3oGqYAQE21')
         line = '1971 E Beltline Ave NE Ste 106, Grand Rapids, MI 49505'
         for rel in ('index.html', 'contact-us/index.html', 'reviews/index.html'):

@@ -585,6 +585,7 @@ def load_all():
     redirects = json.load(open(os.path.join(C, 'redirects.json'), encoding='utf-8'))
     site['_qualifier'] = load_qualifier(errs)
     site['_media'] = load_media(errs)
+    site['_videos'] = load_videos(errs)
     return site, pages, markets, redirects, errs
 
 QF = os.path.join(C, 'forms', 'qualifier.json')
@@ -988,6 +989,88 @@ def sticky_guard():
             'if(vv)vv.addEventListener("resize",function(){if(!d.activeElement||!field(d.activeElement))base=Math.max(base,vv.height);set()})'
             '})(document,window)</script>')
 
+# ---- YouTube videos (content/videos.json) ----
+YT_ID = re.compile(r'^[A-Za-z0-9_-]{11}$')
+# Claims fsho.co does not use. Video copy must stick to: fair cash offer in 24 hours; as-is, no repairs or fees; close on your timeline.
+YT_BANNED = re.compile(r'\$\s*2[,.]?000|\$\s*2k|\b2,000\b|7\s*(?:-|–|—|to)\s*14\s*days|\bbeat (?:any|it|your)\b', re.I)
+YT_MAX_PER_PAGE = 2
+
+def load_videos(errs):
+    vf = os.path.join(C, 'videos.json')
+    if not os.path.exists(vf): return None
+    try: return json.load(open(vf, encoding='utf-8'))
+    except Exception as e: errs.append(f'content/videos.json: {e}'); return None
+
+def yt_on(v):
+    """A video renders only when it has a real id and is confirmed."""
+    return bool(v and v.get('confirmed') and isinstance(v.get('id'), str) and YT_ID.match(v['id']))
+
+def iso_dur(sec):
+    sec = int(sec); h, r = divmod(sec, 3600); m, s_ = divmod(r, 60)
+    return 'PT' + (f'{h}H' if h else '') + (f'{m}M' if m else '') + (f'{s_}S' if s_ or not (h or m) else '')
+
+def mmss(sec):
+    sec = int(sec); h, r = divmod(sec, 3600); m, s_ = divmod(r, 60)
+    return f'{h}:{m:02d}:{s_:02d}' if h else f'{m}:{s_:02d}'
+
+def yt_watch(v):
+    return (f'https://www.youtube.com/shorts/{v["id"]}' if v['kind'] == 'short' else f'https://www.youtube.com/watch?v={v["id"]}')
+
+def yt_thumb_url(v):
+    # Google-facing thumbnail (schema + video sitemap). The page itself shows the self-hosted WebP.
+    return f'https://i.ytimg.com/vi/{v["id"]}/{"maxresdefault" if v["kind"] == "long" else "hqdefault"}.jpg'
+
+def check_videos(site, pages, markets, E, W):
+    VJ = site.get('_videos')
+    if VJ is None: return
+    src = 'content/videos.json'
+    V, P, G = VJ.get('videos') or {}, VJ.get('pages') or {}, VJ.get('grids') or {}
+    for k, v in V.items():
+        if v.get('kind') not in ('long', 'short'): E.append(f'{src}: {k} kind must be long|short')
+        vid = v.get('id', '')
+        if vid and not YT_ID.match(vid): E.append(f'{src}: {k} id "{vid}" is not an 11-character YouTube id')
+        if v.get('confirmed') and not vid: E.append(f'{src}: {k} is confirmed but has no id')
+        if vid and not v.get('confirmed'): E.append(f'{src}: {k} has an id but confirmed is false (unsure ids stay in proposed_id)')
+        if not re.match(r'^\d{4}-\d{2}-\d{2}$', str(v.get('upload_date', ''))): E.append(f'{src}: {k} upload_date must be YYYY-MM-DD')
+        if not pos_int(v.get('duration_s')): E.append(f'{src}: {k} duration_s must be a positive integer')
+        for f in ('name', 'display_title', 'alt', 'caption', 'description', 'schema_page'):
+            if not isinstance(v.get(f), str) or not v[f].strip(): E.append(f'{src}: {k} needs "{f}"')
+        for f in ('display_title', 'alt', 'caption', 'description', 'summary', 'transcript'):
+            if isinstance(v.get(f), str) and YT_BANNED.search(v[f]): E.append(f'{src}: {k} {f} uses a claim fsho.co does not use ({YT_BANNED.search(v[f]).group(0)})')
+        last = -1
+        for c in v.get('chapters') or []:
+            if not isinstance(c.get('t'), int) or c['t'] <= last or c['t'] >= int(v.get('duration_s') or 0): E.append(f'{src}: {k} chapter times must increase and stay inside the video')
+            last = c.get('t') if isinstance(c.get('t'), int) else last
+        if yt_on(v):
+            need = []
+            if any(k in (pg.get('videos') or []) for pg in P.values()):
+                need += [f'yt-{vid}-640.webp', f'yt-{vid}-960.webp'] if v['kind'] == 'long' else [f'yt-{vid}-360.webp']
+            if any(k in g for g in G.values()) or any(k in (pg.get('grid') or []) for pg in P.values()): need.append(f'yt-{vid}-4x3.webp')
+            for n in need:
+                if not os.path.isfile(os.path.join(C, 'media', n)): E.append(f'{src}: {k} needs content/media/{n} (run python3 build/yt_thumbs.py)')
+    slugs = {p['slug'] for p in pages} | {m['slug'] for m in markets}
+    for pk, pg in P.items():
+        slug = pk if pk != 'home' else ''
+        if slug not in slugs: E.append(f'{src}: pages.{pk} has no page or market with that slug (do not create pages for videos)')
+        if pg.get('path') != ('/' + slug + '/' if slug else '/'): E.append(f'{src}: pages.{pk} path must be /{slug}/')
+        for k in (pg.get('videos') or []) + (pg.get('grid') or []):
+            if k not in V: E.append(f'{src}: pages.{pk} lists unknown video {k}')
+        if len(pg.get('videos') or []) + len(pg.get('grid') or []) > YT_MAX_PER_PAGE: E.append(f'{src}: pages.{pk} has more than {YT_MAX_PER_PAGE} videos')
+    for gk, g in G.items():
+        for k in g:
+            if k not in V: E.append(f'{src}: grids.{gk} lists unknown video {k}')
+    # A video's schema page must actually show the video.
+    for k, v in V.items():
+        if not yt_on(v): continue
+        sp = v['schema_page']; key = sp.strip('/') or 'home'
+        shown = k in ((P.get(key) or {}).get('videos') or []) or k in ((P.get(key) or {}).get('grid') or []) or k in (G.get(key) or [])
+        if not shown: E.append(f'{src}: {k} schema_page {sp} does not show the video')
+    for p in pages:
+        for m in re.finditer(r'\{\{(yt|videos)(?::([^}]*))?\}\}', p.get('body', '')):
+            arg = m.group(2) or ('home' if m.group(1) == 'videos' else '')
+            if m.group(1) == 'yt' and arg not in P: E.append(f'{p["_src"]}: {{{{yt:{arg}}}}} is not in content/videos.json pages')
+            if m.group(1) == 'videos' and arg not in G: E.append(f'{p["_src"]}: {{{{videos:{arg}}}}} is not in content/videos.json grids')
+
 def check(site, pages, markets, redirects, errs):
     E = list(errs) + check_qualifier(site.get('_qualifier'))
     W = []
@@ -1081,6 +1164,7 @@ def check(site, pages, markets, redirects, errs):
         if sz > MAX_IMG: E.append(f'content/media/{n}: {sz//1024} KB is over the 200 KB limit')
         if not n.lower().endswith('.webp') and n != 'favicon.png': E.append(f'content/media/{n}: images must be .webp (favicon.png is the only exception)')
     check_media(site, pages, markets, E, W)
+    check_videos(site, pages, markets, E, W)
     blobs = []
     walk_text(site, blobs); walk_text([m for m in markets], blobs); walk_text([c for c in site.get('_cities') or []], blobs)
     for p in pages: walk_text(p, blobs)
@@ -1408,7 +1492,81 @@ def build(site, pages, markets, redirects, live):
     cp = S['comparison']
     comp = ('<div class="tbl" tabindex="0" role="region" aria-label="Comparison table: cash offer, market sale, and traditional listing. Scroll sideways to see every column."><table><thead><tr><th></th>' + ''.join(f'<th{" class=\"us\"" if i == 0 else ""}>{h}</th>' for i, h in enumerate(cp['headers'])) + '</tr></thead><tbody>\n'
             + ''.join(f'<tr><td>{r[0]}</td><td class="us">{r[1]}</td><td>{r[2]}</td><td>{r[3]}</td></tr>\n' for r in cp['rows']) + f'</tbody></table><p class="fine">{cp["note"]}</p></div>')
-    vids = '<div class="grid3">' + ''.join(f'<button class="vid" data-yt="{v}" aria-label="Play seller video testimonial"><img loading="lazy" decoding="async" src="https://i.ytimg.com/vi_webp/{v}/hqdefault.webp" alt="" width="480" height="360"><span>▶</span></button>' for v in S['video_ids']) + '</div>'
+    # Click-to-load YouTube player (content/videos.json). Self-hosted WebP thumbnail + play button;
+    # the youtube-nocookie iframe is only created by app.js after a tap, so no YouTube request on load.
+    VJ = S.get('_videos') or {'videos': {}, 'pages': {}, 'grids': {}}
+    YV, YP, YG = VJ.get('videos') or {}, VJ.get('pages') or {}, VJ.get('grids') or {}
+    yt_shown = {}  # page path -> [video keys], for the video sitemap
+    def yt_button(v, tile=False):
+        vid, t = v['id'], esc(v['display_title'])
+        if tile: img = f'<img loading="lazy" decoding="async" src="/yt-{vid}-4x3.webp" alt="{esc(v["alt"])}" width="480" height="360">'
+        elif v['kind'] == 'long': img = (f'<img loading="lazy" decoding="async" src="/yt-{vid}-640.webp" srcset="/yt-{vid}-640.webp 640w, /yt-{vid}-960.webp 960w" '
+                                         f'sizes="(max-width:760px) 92vw, 720px" alt="{esc(v["alt"])}" width="640" height="360">')
+        else: img = f'<img loading="lazy" decoding="async" src="/yt-{vid}-360.webp" alt="{esc(v["alt"])}" width="360" height="640">'
+        return (f'<button type="button" class="vid" data-yt="{vid}" data-title="{t}" aria-label="Play video: {t} ({mmss(v["duration_s"])})">{img}'
+                '<span aria-hidden="true"><i>&#9654;</i></span></button>')
+    def yt_fig(v, tile=False):
+        box = 'yt-t' if tile else ('yt-l' if v['kind'] == 'long' else 'yt-s')
+        return (f'<figure class="yt {box}" data-ytkey="{v["id"]}"><div class="ytbox">{yt_button(v, tile)}</div>'
+                f'<figcaption><strong>{esc(v["display_title"])}</strong> <span class="ytd">{mmss(v["duration_s"])}</span><br>{esc(v["caption"])}</figcaption>'
+                f'<noscript><a href="{yt_watch(v)}" target="_blank" rel="noopener noreferrer">Watch on YouTube<span class="sr-only"> (opens in a new tab)</span></a></noscript></figure>')
+    def yt_main_extra(v):
+        # Main page of a long-form video: summary, visible chapter list, collapsed transcript.
+        out = f'<div class="ytx"><p>{esc(v["summary"])}</p>' if v.get('summary') else '<div class="ytx">'
+        ch = v.get('chapters') or []
+        if ch:
+            out += ('<h3>Chapters</h3><ol class="ytch">' + ''.join(f'<li><span class="ytt">{mmss(c["t"])}</span> {esc(c["title"])}</li>' for c in ch) + '</ol>')
+        elif include_drafts:
+            out += '<p class="ph">TODO: chapter list (no YouTube chapters yet).</p>'
+        if (v.get('transcript') or '').strip():
+            paras = ''.join(f'<p>{esc(x.strip())}</p>' for x in re.split(r'\n\s*\n', v['transcript'].strip()) if x.strip())
+            out += f'<details class="ytr"><summary>Read the transcript</summary>{paras}</details>'
+        elif include_drafts:
+            out += '<details class="ytr"><summary>Read the transcript</summary><p class="ph">PLACEHOLDER: Andrew&rsquo;s cleaned-up script goes here. Not shown on the live site until it is filled in.</p></details>'
+        return out + '</div>'
+    def yt_page(key, path):
+        pg = YP.get(key) or {}
+        vs = [YV[k] for k in (pg.get('videos') or []) if yt_on(YV.get(k))]
+        gs = [YV[k] for k in (pg.get('grid') or []) if yt_on(YV.get(k))]
+        if not vs and not gs: return ''
+        yt_shown.setdefault(path, []).extend(k for k in (pg.get('videos') or []) + (pg.get('grid') or []) if yt_on(YV.get(k)))
+        body = ''
+        for v in vs:
+            main = v['kind'] == 'long' and v.get('schema_page') == path
+            body += (f'<div class="ytmain">{yt_fig(v)}{yt_main_extra(v)}</div>' if main else yt_fig(v))
+        if gs: body += '<div class="ytgrid">' + ''.join(yt_fig(v, tile=True) for v in gs) + '</div>'
+        h = esc(pg.get("heading") or vs[0]["display_title"])
+        body = body.replace(f'<strong>{h}</strong> ', '', 1)  # no repeat of the section heading in the caption
+        cls = 'yts two' if len(vs) == 2 and all(v['kind'] == 'short' for v in vs) else 'yts'
+        return f'<!--ytcss--><section class="wrap pad {cls}"><h2 class="c">{h}</h2>{body}</section>'
+    def yt_grid(key, path):
+        gs = [YV[k] for k in (YG.get(key) or []) if yt_on(YV.get(k))]
+        if not gs: return ''
+        yt_shown.setdefault(path, []).extend(k for k in (YG.get(key) or []) if yt_on(YV.get(k)))
+        return '<!--ytcss--><div class="ytgrid">' + ''.join(yt_fig(v, tile=True) for v in gs) + '</div>'
+    YT_CSS = open(os.path.join(B, 'yt.css'), encoding='utf-8').read().replace('{{orange}}', S['brand']['orange']).replace('{{navy}}', S['brand']['navy'])
+    YT_CSS = '<style>' + re.sub(r'\n+', '', YT_CSS) + '</style>'
+    def yt_css(body):
+        # Player CSS ships only on pages that show a video (keeps every other page, incl. /test-intake/, the same size).
+        if '<!--ytcss-->' not in body: return body
+        return body.replace('<!--ytcss-->', YT_CSS, 1).replace('<!--ytcss-->', '')
+    def yt_schema(path, canon, body):
+        # VideoObject only on each video's schema_page, and only when the page really shows it.
+        out = []
+        ids = set(re.findall(r'data-ytkey="([A-Za-z0-9_-]{11})"', body))
+        for k, v in YV.items():
+            if not yt_on(v) or v.get('schema_page') != path or v['id'] not in ids: continue
+            o = {"@context": "https://schema.org", "@type": "VideoObject", "@id": f'{canon}#video-{v["id"]}', "name": v['name'],
+                 "description": v['description'], "thumbnailUrl": [yt_thumb_url(v)], "uploadDate": v['upload_date'],
+                 "duration": iso_dur(v['duration_s']), "embedUrl": f'https://www.youtube.com/embed/{v["id"]}', "contentUrl": yt_watch(v),
+                 "publisher": {"@id": ENTITY_ID}}
+            ch = v.get('chapters') or []
+            if ch:
+                o["hasPart"] = [{"@type": "Clip", "name": c['title'], "startOffset": c['t'],
+                                 "endOffset": (ch[i + 1]['t'] if i + 1 < len(ch) else int(v['duration_s'])),
+                                 "url": f'https://www.youtube.com/watch?v={v["id"]}&t={c["t"]}'} for i, c in enumerate(ch)]
+            out.append(ld_script(o))
+        return ''.join(out)
     shown_markets = [m for m in markets if include_drafts or not m.get('draft')]
     states = '<div class="states">' + ''.join(f'<a href="/{m["slug"]}/">{m["state"]}</a>' for m in shown_markets) + '</div>'
 
@@ -1419,7 +1577,8 @@ def build(site, pages, markets, redirects, live):
             if k == 'situations': return sits
             if k == 'steps': return steps
             if k == 'comparison': return comp
-            if k == 'videos': return vids
+            if k == 'videos': return yt_grid(arg or 'home', '/' if (arg or 'home') == 'home' else f'/{arg}/')
+            if k == 'yt': return yt_page(arg, '/' if arg == 'home' else f'/{arg}/')
             if k == 'testimonials': return testis(S['testimonials'])
             if k == 'reviews': return reviewsh(S.get('reviews') or [])
             if k == 'trust': return trust
@@ -1488,7 +1647,8 @@ def build(site, pages, markets, redirects, live):
         if address: entity["address"] = dict({"@type": "PostalAddress"}, **address)
         if area_served: entity["areaServed"] = [{"@type": "Place", "name": a} for a in area_served]
         if same_as: entity["sameAs"] = same_as
-        scripts = ld_script(entity)
+        scripts = ld_script(entity) + yt_schema(path, canon, body)
+        body = yt_css(body)
         if faq_ld:
             scripts += ld_script({"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
                 {"@type": "Question", "name": html.unescape(f["q"]), "acceptedAnswer": {"@type": "Answer", "text": html.unescape(f["a"])}} for f in faq_ld]})
@@ -1564,6 +1724,7 @@ def build(site, pages, markets, redirects, live):
         local_html = f'<div class="ph">{note}</div>' if note else ''
         body = (hero(m['headline'], m['hero_sub'], intake=True, bias=state_bias(m['state'])) + f'<section class="wrap pad"><div class="qual">{S["qualifier"]}</div><h2 class="c">Common reasons {s} homeowners call us</h2>{sits}{cities_txt}{city_links_html}</section>'
                 + f'<section class="alt"><div class="wrap pad"><h2 class="c">How it works in {s}</h2>{steps}<p class="c"><a href="/faq/">Questions about selling? Read the FAQ.</a></p></div></section>'
+                + yt_page(m['slug'], path)
                 + f'<section class="wrap pad">{testis(m.get("testimonials") or S["testimonials"])}{local_html}</section>' + cta(m.get('cta_label'), '#offer'))
         page(path, m['title'], m['meta_description'], body, bool(m.get('noindex', False) or m.get('draft')),
              canonical=m.get('canonical') or None, og_title=m.get('og_title') or None, og_image=m.get('og_image') or None,
@@ -1608,11 +1769,22 @@ def build(site, pages, markets, redirects, live):
         days = [d for d in (git_lastmod(src) for src in lastmods.get(u, [])) if d]
         return f'<lastmod>{max(days)}</lastmod>' if days else ''
     open(os.path.join(OUT, 'sitemap.xml'), 'w').write('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ''.join(f'<url><loc>{S["domain"]}{u}</loc>{lastmod_tag(u)}</url>' for u in urls) + '</urlset>')
+    # Video sitemap: each video once, on its schema_page (its main page), for indexable pages that show it.
+    vurls = []
+    for u in urls:
+        ks = [k for k in dict.fromkeys(yt_shown.get(u, [])) if YV[k].get('schema_page') == u]
+        if not ks: continue
+        vx = ''.join('<video:video>' + f'<video:thumbnail_loc>{esc(yt_thumb_url(YV[k]))}</video:thumbnail_loc><video:title>{esc(YV[k]["name"])}</video:title>'
+                     f'<video:description>{esc(YV[k]["description"])}</video:description><video:player_loc>https://www.youtube.com/embed/{YV[k]["id"]}</video:player_loc>'
+                     f'<video:duration>{int(YV[k]["duration_s"])}</video:duration><video:publication_date>{YV[k]["upload_date"]}</video:publication_date></video:video>' for k in ks)
+        vurls.append(f'<url><loc>{S["domain"]}{u}</loc>{vx}</url>')
+    if vurls:
+        open(os.path.join(OUT, 'video-sitemap.xml'), 'w', encoding='utf-8').write('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:video="http://www.google.com/schemas/sitemap-video/1.1">' + ''.join(vurls) + '</urlset>')
     if preview:
         open(os.path.join(OUT, 'robots.txt'), 'w').write('User-agent: *\nDisallow: /\n')
         open(os.path.join(OUT, '_headers'), 'w').write('/*\n  X-Robots-Tag: noindex, nofollow\n')
     else:
-        open(os.path.join(OUT, 'robots.txt'), 'w').write(f'User-agent: *\nDisallow: /step-2/\nDisallow: /thank-you/\nSitemap: {S["domain"]}/sitemap.xml\n')
+        open(os.path.join(OUT, 'robots.txt'), 'w').write(f'User-agent: *\nDisallow: /step-2/\nDisallow: /thank-you/\nSitemap: {S["domain"]}/sitemap.xml\n' + (f'Sitemap: {S["domain"]}/video-sitemap.xml\n' if vurls else ''))
     open(os.path.join(OUT, 'llms.txt'), 'w', encoding='utf-8').write(llms_text(S, pages, markets, S.get('_cities') or []))
     for fp in glob.glob(os.path.join(C, 'media', '*')):
         if os.path.basename(fp) == 'media.json': continue

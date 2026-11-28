@@ -25,6 +25,8 @@ faq:
 
 <section class="alt"><div class="wrap pad"><h2 class="c">How our cash offer works</h2><div class="grid3 steps"><div class="card"><b>1</b><h3>Tell us about the house</h3><p>Fill out the short form on this page, or call or text <a href="tel:{{tel}}">{{phone}}</a>.</p></div><div class="card"><b>2</b><h3>Get your cash offer in 24 hours</h3><p>We send you a fair cash offer within 24 hours, for the house as-is.</p></div><div class="card"><b>3</b><h3>Pick your closing date</h3><p>You choose the closing date, and we cover closing costs.</p></div></div></div></section>
 
+{{yt:sell-your-house-for-cash}}
+
 <section class="wrap pad">{{qualifier}}</section>
 
 <section class="alt"><div class="wrap pad"><h2 class="c">Questions about a cash offer</h2>{{faq}}<p class="c"><a href="/faq/">More answers are on the FAQ page.</a></p></div></section>
