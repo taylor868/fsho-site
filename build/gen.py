@@ -430,26 +430,29 @@ def pixels_on(site):
         return False
     return True
 
-def clickcease_visitor():
+def clickcease_visitor(late=False):
+    inject = 'script.src=target;var elem=document.head;elem.appendChild(script);'
+    if late: inject = 'window.__fshoLate(function(){' + inject + '});'
     return (
         '<script>var script=document.createElement("script");'
         'script.async=true;script.type="text/javascript";'
         'var target="' + CC_MONITOR + '";'
-        'script.src=target;var elem=document.head;elem.appendChild(script);'
+        + inject +
         '</script>'
         '<noscript><a href="https://www.clickcease.com" rel="nofollow">'
         '<img src="' + CC_STATS_IMG + '" alt="ClickCease"></a></noscript>'
     )
 
-def meta_pixel(pid):
+def meta_pixel(pid, late=False):
+    inject = "t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)"
+    if late: inject = "window.__fshoLate(function(){" + inject + "})"
     return (
         "<script>!function(f,b,e,v,n,t,s)"
         "{if(f.fbq)return;n=f.fbq=function(){n.callMethod?"
         "n.callMethod.apply(n,arguments):n.queue.push(arguments)};"
         "if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';"
         "n.queue=[];t=b.createElement(e);t.async=!0;"
-        "t.src=v;s=b.getElementsByTagName(e)[0];"
-        "s.parentNode.insertBefore(t,s)}(window,document,'script',"
+        + inject + "}(window,document,'script',"
         "'https://connect.facebook.net/en_US/fbevents.js');"
         "fbq('init', '" + pid + "');"
         "fbq('track', 'PageView');"
@@ -458,31 +461,44 @@ def meta_pixel(pid):
         'src="https://www.facebook.com/tr?id=' + pid + '&amp;ev=PageView&amp;noscript=1"></noscript>'
     )
 
-def openai_pixel(pid):
+def openai_pixel(pid, late=False):
+    inject = 'var f=d.getElementsByTagName(s)[0];f.parentNode.insertBefore(js,f);'
+    if late: inject = 'w.__fshoLate(function(){' + inject + '});'
     return (
         '<script>(function(w,d,s,u){'
         'if(w.oaiq)return;'
         'var q=function(){q.q.push(arguments)};'
         'q.q=[];w.oaiq=q;'
         'var js=d.createElement(s);js.async=true;js.src=u;'
-        'var f=d.getElementsByTagName(s)[0];'
-        'f.parentNode.insertBefore(js,f);'
+        + inject +
         '})(window,document,"script","' + OPENAI_SRC + '");'
         'oaiq("init", { pixelId: "' + pid + '" });'
         '</script>'
     )
 
-def approved_head(site):
-    """ClickCease visitor, Meta PageView, and OpenAI init. No conversion on parse."""
+LATE_SCHED = (
+    '<script>(function(w,d){var q=[],on=0;w.__fshoLate=function(f){on?f():q.push(f)};'
+    'function run(){if(on)return;on=1;while(q.length)try{q.shift()()}catch(e){}}'
+    'function idle(){w.requestIdleCallback?w.requestIdleCallback(run,{timeout:2000}):setTimeout(run,1500)}'
+    'd.readyState==="complete"?idle():w.addEventListener("load",idle,{once:true});'
+    'w.addEventListener("pointerdown",run,{once:true,passive:true});'
+    'w.addEventListener("keydown",run,{once:true,passive:true})})(window,document)</script>'
+)
+
+def approved_head(site, late=False):
+    """ClickCease visitor, Meta PageView, and OpenAI init. No conversion on parse.
+    late=True (page frontmatter late_third_party: true) keeps every init/queue call in the head but
+    injects the three vendor files after window load (idle, 2 s cap) or at the first tap/keypress.
+    The Google tag, GTM loader and WhatConverts are not touched by this."""
     if not pixels_on(site):
         return ''
     px = site['pixels']
     return (
-        '<link rel="preconnect" href="' + CC_PRECONNECT + '">'
-        '<link rel="dns-prefetch" href="' + CC_DNS + '">'
-        + clickcease_visitor()
-        + meta_pixel(px['meta_pixel_id'])
-        + openai_pixel(px['openai_pixel_id'])
+        (LATE_SCHED if late else '<link rel="preconnect" href="' + CC_PRECONNECT + '">'
+        '<link rel="dns-prefetch" href="' + CC_DNS + '">')
+        + clickcease_visitor(late)
+        + meta_pixel(px['meta_pixel_id'], late)
+        + openai_pixel(px['openai_pixel_id'], late)
     )
 
 def gtm_noscript(site):
@@ -1027,6 +1043,11 @@ def check(site, pages, markets, redirects, errs):
         if not isinstance(p.get('noindex', False), bool): E.append(f'{p["_src"]}: noindex must be true/false')
         for hk in ('hero_compact', 'hero_rating', 'hero_proof'):
             if not isinstance(p.get(hk, False), bool): E.append(f'{p["_src"]}: {hk} must be true/false')
+        for hk in ('hero_proof_lite', 'late_third_party'):
+            if not isinstance(p.get(hk, False), bool): E.append(f'{p["_src"]}: {hk} must be true/false')
+        if p.get('hero_video') is not None and not isinstance(p.get('hero_video'), bool): E.append(f'{p["_src"]}: hero_video must be true/false')
+        if p.get('hero_trust_line') is not None and (not isinstance(p.get('hero_trust_line'), str) or not p['hero_trust_line'].strip()):
+            E.append(f'{p["_src"]}: hero_trust_line must be a non-empty string when set')
         if p.get('hero_eyebrow') is not None and (not isinstance(p.get('hero_eyebrow'), str) or not p['hero_eyebrow'].strip()):
             E.append(f'{p["_src"]}: hero_eyebrow must be a non-empty string when set')
         check_draft(p['_src'], p, E)
@@ -1346,12 +1367,12 @@ def build(site, pages, markets, redirects, live):
                  '.hero.hasproof .lede{font-size:15px;margin:0}.hero.hasproof .hg{gap:12px}.hproof{margin:10px 0 0}.hproof-row{gap:8px 10px}.hproof .gpill{font-size:13px;padding:6px 10px;white-space:nowrap}.hproof .gpill .stars{letter-spacing:0}'
                  '.hproof a.bbb img,.hproof a.badge img{height:38px}.hproof blockquote{font-size:14px;margin-top:8px}.hproof cite{font-size:13px}.hproof .hvid{font-size:13px;margin-top:4px}'
                  '.hero.hasproof#offer{padding-bottom:96px}}</style>')
-    def proof_block():
+    def proof_block(video=True):
         # Google stars + BBB A+ seal + one real Google review, word for word, all linked to their sources.
         # The video opens on YouTube on click; nothing heavy loads above the fold.
         r, v = PF['review'], PF.get('video') or {}
         vid = (f'<a class="hvid" href="https://www.youtube.com/watch?v={esc(v["id"])}" target="_blank" rel="noopener noreferrer">&#9654; {v["label"]}'
-               '<span class="sr-only"> (video, opens in a new tab)</span></a>') if v.get('id') else ''
+               '<span class="sr-only"> (video, opens in a new tab)</span></a>') if (v.get('id') and video) else ''
         # Keep the existing Facebook profile badge from trust_badges beside the BBB seal.
         fb = ''.join(t for t in S['trust_badges'] if 'facebook.com' in t)
         return (PROOF_CSS + '<div class="hproof"><div class="hproof-row">'
@@ -1374,6 +1395,44 @@ def build(site, pages, markets, redirects, live):
                 f'<blockquote class="testi">&ldquo;{esc(r["quote"])}&rdquo;<cite>&mdash; {esc(r["name"])}, <a href="{esc(r["url"])}" target="_blank" rel="noopener noreferrer">{r["source"]}<span class="sr-only"> (opens in a new tab)</span></a></cite></blockquote>'
                 f'<p class="c pband-c">Call or text <a href="tel:{TEL}">{PH}</a>' + (f' &middot; <span class="pband-a">{addr}</span>' if addr else '') + '</p>'
                 '</div></section>')
+    LITE_CSS = ('<style>.hlite{margin:14px 0 0}.hlite .hproof-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}'
+                '.hlite .gpill{display:inline-block;background:#fff;color:#1F3C56!important;text-decoration:none;font-weight:600;font-size:15px;padding:8px 14px;border-radius:999px;line-height:1.3}'
+                '.hlite .gpill .stars{color:#A35F00;letter-spacing:1px}.hlite .gpill b{font-weight:800}'
+                '.hlite a.bbb{display:inline-flex;align-items:center;line-height:0}.hlite a.bbb img{height:44px;width:auto;display:block}'
+                '.hline{margin:10px 0 0;font-size:16px;font-weight:700;color:#fff}'
+                '.hq{grid-column:1/-1;max-width:860px;margin:0 auto}.hq blockquote{margin:0;padding:0 0 0 14px;border-left:3px solid #ffd2b8;font-size:17px;line-height:1.45;color:#fff;font-style:italic}'
+                '.hq cite{display:block;font-style:normal;font-size:14px;margin-top:6px;color:#e8eef4}.hq cite a{color:#ffd2b8}'
+                '@media(max-width:860px){.hlite{margin:10px 0 0}.hlite .gpill{font-size:13px;padding:6px 10px;white-space:nowrap}.hlite .gpill .stars{letter-spacing:0}.hlite a.bbb img{height:36px}'
+                '.hline{font-size:14px;margin:8px 0 0}.hq blockquote{font-size:14px}.hq cite{font-size:13px}.hero.hlite .lede{margin:0}}</style>')
+    def proof_lite(line):
+        # Compact trust for the form: verified Google rating pill + BBB A+ seal + the "as-is" line.
+        # The one real review (site.json proof.review, word for word) renders below the form via review_below().
+        return (LITE_CSS + '<div class="hlite"><div class="hproof-row">'
+                f'<a class="gpill" href="{esc(PF["google_url"])}" target="_blank" rel="noopener noreferrer"><span class="stars" aria-hidden="true">&#9733;&#9733;&#9733;&#9733;&#9733;</span> {g_rating_text()}<span class="sr-only"> (opens in a new tab)</span></a>'
+                f'<a class="bbb" href="{esc(PF["bbb_url"])}" target="_blank" rel="noopener noreferrer"><img src="{PF["bbb_img"]}" alt="BBB Accredited Business, {PF["bbb_rating"]} rating" width="160" height="112"><span class="sr-only"> (opens in a new tab)</span></a>'
+                '</div>' + (f'<p class="hline">{line}</p>' if line else '') + '</div>')
+    def review_below():
+        r = PF['review']
+        return (f'<div class="hq"><blockquote>&ldquo;{esc(r["quote"])}&rdquo;<cite>&mdash; {esc(r["name"])}, <a href="{esc(r["url"])}" target="_blank" rel="noopener noreferrer">{r["source"]}<span class="sr-only"> (opens in a new tab)</span></a></cite></blockquote></div>')
+    def video_lite():
+        # Click-to-load YouTube facade: local WebP thumbnail + play button, no iframe and no YouTube
+        # request until the visitor clicks. The shared click handler in app.js swaps in the
+        # youtube-nocookie iframe. The fixed 16:9 box keeps the layout from shifting on click.
+        v = PF.get('video') or {}
+        if not v.get('id'): return ''
+        vid = esc(v['id']); title = esc(v.get('title') or 'Seller video')
+        return ('<section class="wrap pad vlite-s"><h2 class="c">Hear a seller&rsquo;s story</h2>'
+                '<style>.vlite-box{aspect-ratio:16/9;max-width:640px;margin:0 auto;border-radius:12px;overflow:hidden;background:#000}'
+                '.vlite-box button.vid{aspect-ratio:auto;height:100%;border-radius:0}.vlite-box button.vid img{aspect-ratio:auto;height:100%;object-fit:cover}'
+                '.vlite-box .vidf{aspect-ratio:auto;height:100%;border-radius:0;display:block}'
+                '.vlite-box button.vid i{display:grid;place-items:center;width:68px;height:68px;border-radius:50%;background:#B94F19;color:#fff;font-style:normal;font-size:28px;text-shadow:none;padding-left:4px;box-shadow:0 4px 16px #0006}'
+                '.vlite-box button.vid:focus-visible{outline:3px solid #ffd2b8;outline-offset:-6px}.vlite-cap{max-width:640px;margin:10px auto 0;font-size:15px;color:#445}</style>'
+                f'<div class="vlite-box"><button type="button" class="vid" data-yt="{vid}" aria-label="Play video: {title}">'
+                '<img loading="lazy" decoding="async" src="/video-veteran-960.webp" srcset="/video-veteran-480.webp 480w, /video-veteran-960.webp 960w" sizes="(max-width:700px) 92vw, 640px" alt="" width="960" height="540">'
+                '<span aria-hidden="true"><i>&#9654;</i></span></button></div>'
+                f'<p class="vlite-cap c">{esc(v.get("title") or "")}</p>'
+                f'<noscript><p class="c"><a href="https://www.youtube.com/watch?v={vid}" target="_blank" rel="noopener noreferrer">Watch on YouTube<span class="sr-only"> (opens in a new tab)</span></a></p></noscript>'
+                '</section>')
     PZ = json.load(open(os.path.join(C, 'personalize.json'), encoding='utf-8'))
     def inline_js(name, token, data):
         src = open(os.path.join(B, name), encoding='utf-8').read().strip()
@@ -1393,16 +1452,18 @@ def build(site, pages, markets, redirects, live):
                 '<button type="button" class="btn btn-o ts-resume-go">Continue</button>'
                 '<button type="button" class="ts-resume-over">Start over</button></div>'
                 + inline_js('hero-pre.js', '__FSHO_P__', data))
-    def hero(h, sub, intake=False, bias='', compact=False, rating=False, proof=False, personalize=False, eyebrow=None):
+    def hero(h, sub, intake=False, bias='', compact=False, rating=False, proof=False, personalize=False, eyebrow=None, lite=False, trust_line='', pvideo=True):
         panel = public_intake(bias) if intake else form()
         if rating:
             panel = (f'<div class="hrate"><a href="{esc(PF["google_url"])}" target="_blank" rel="noopener noreferrer">'
                      f'<span class="stars" aria-hidden="true">&#9733;&#9733;&#9733;&#9733;&#9733;</span> {g_rating_text()}</a></div>' + panel)
             panel = f'<div class="hform">{panel}</div>'
         cls = 'hero compact' if compact else 'hero'
-        if proof: cls += ' hasproof'
-        badges = proof_block() if proof else trust
-        return f'<section class="{cls}" id="offer"><div class="wrap hg"><div><p class="eyebrow">{eyebrow or S["hero_eyebrow"]}</p><h1>{h}</h1><p class="lede">{sub}</p>{hero_slots(personalize) if intake else ""}{badges}</div>{panel}</div></section>'
+        if proof or lite: cls += ' hasproof'
+        if lite: cls += ' hlite'
+        badges = (PROOF_CSS + proof_lite(trust_line)) if lite else (proof_block(pvideo) if proof else trust)
+        below = review_below() if lite else ''
+        return f'<section class="{cls}" id="offer"><div class="wrap hg"><div><p class="eyebrow">{eyebrow or S["hero_eyebrow"]}</p><h1>{h}</h1><p class="lede">{sub}</p>{hero_slots(personalize) if intake else ""}{badges}</div>{panel}{below}</div></section>'
     sits = '<div class="grid3">' + ''.join(f'<div class="card"><div class="ic">{x["icon"]}</div><h3>{x["title"]}</h3><p>{x["text"]}</p></div>' for x in S['situations']) + '</div>'
     steps = '<div class="grid3 steps">' + ''.join(f'<div class="card"><b>{x["n"]}</b><h3>{x["title"]}</h3><p>{x["text"]}</p></div>' for x in S['steps']) + '</div>'
     cp = S['comparison']
@@ -1424,6 +1485,7 @@ def build(site, pages, markets, redirects, live):
             if k == 'reviews': return reviewsh(S.get('reviews') or [])
             if k == 'trust': return trust
             if k == 'proof_band': return proof_band()
+            if k == 'video_lite': return video_lite()
             if k == 'faq': return faqh(faq_items, int(arg) if arg else 99)
             if k == 'faq_page': return render_faq_page(S)
             if k == 'cta': return cta(arg or cta_label or None, offer_href)
@@ -1462,7 +1524,7 @@ def build(site, pages, markets, redirects, live):
         if src.startswith('http://') or src.startswith('https://'): return src
         if not src.startswith('/'): src = '/' + src
         return S['domain'] + src
-    def page(path, title, desc, body, noindex, canonical=None, og_title=None, og_image=None, faq_ld=None, file_rel=None, offer_href='#offer', crumbs=None, service=None):
+    def page(path, title, desc, body, noindex, canonical=None, og_title=None, og_image=None, faq_ld=None, file_rel=None, offer_href='#offer', crumbs=None, service=None, late=False):
         canon = canonical or (S['domain'] + path)
         robots = '<meta name="robots" content="noindex,nofollow">' if (preview or noindex) else ''
         banner = '<div style="background:#c00;color:#fff;text-align:center;font:700 13px system-ui;padding:4px">PREVIEW: not the live site. Form data is only logged, never sent.</div>' if preview else ''
@@ -1508,7 +1570,7 @@ def build(site, pages, markets, redirects, live):
         # Form set for $wc_leads.track.form, only on public pages that carry the public form.
         if wc and wc_form_set(S) and 'data-public="1"' in body:
             wc += f'<script>window.FSHO_WC_FORM_SET="{wc_form_set(S)}";</script>'
-        extra = approved_head(S) if public else ''
+        extra = approved_head(S, late) if public else ''
         gtml = gtm_loader(S) if public else ''
         gtm_ns = gtm_noscript(S) if public else ''
         px = pixels_script(S) if public else ''
@@ -1542,10 +1604,10 @@ def build(site, pages, markets, redirects, live):
         faq_items = p.get('faq') or S['faq']
         body = md(shortcodes(p['body'], faq_items, p.get('cta_label'), offer))
         if p['template'] in ('home', 'situation'):
-            body = hero(p['hero_headline'], p['hero_sub'], intake=True, compact=bool(p.get('hero_compact')), rating=bool(p.get('hero_rating')), proof=bool(p.get('hero_proof')), personalize=bool(p.get('personalize')), eyebrow=p.get('hero_eyebrow') or None) + body
+            body = hero(p['hero_headline'], p['hero_sub'], intake=True, compact=bool(p.get('hero_compact')), rating=bool(p.get('hero_rating')), proof=bool(p.get('hero_proof')), personalize=bool(p.get('personalize')), eyebrow=p.get('hero_eyebrow') or None, lite=bool(p.get('hero_proof_lite')), trust_line=p.get('hero_trust_line') or '', pvideo=p.get('hero_video', True) is not False) + body
         page(path, p['title'], (p.get('meta_description') or '').replace('{{phone}}', PH), body, bool(p.get('noindex', False) or p.get('draft')),
              canonical=p.get('canonical') or None, og_title=p.get('og_title') or None, og_image=p.get('og_image') or None,
-             faq_ld=faq_ld_items(body, p.get('faq'), p.get('body'), p['slug']), file_rel=file_rel, offer_href=offer,
+             faq_ld=faq_ld_items(body, p.get('faq'), p.get('body'), p['slug']), file_rel=file_rel, offer_href=offer, late=bool(p.get('late_third_party')),
              service=[] if (p['template'] in ('home', 'situation') and p['slug'] not in ('contact-us', '404')) else None)
         built += 1
         if p.get('sitemap', True) and not p.get('noindex') and not p.get('draft') and p['slug'] not in SITEMAP_SKIP and p['slug'] != '404':

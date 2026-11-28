@@ -103,13 +103,12 @@ AD_LANDINGS = (
         'only': 'We do not evict tenants',
     },
     {
-        # Cash Offer ad group. Title is the approved keyword copy, so it runs past 60 characters.
+        # Cash Offer ad group. Headline and title are the approved keyword copy (Andrew, Nov 28).
         'slug': 'sell-your-house-for-cash',
-        'h1': 'Sell Your House For Cash',
-        'title': 'Sell Your House For Cash | Get a Cash Offer | Fair and Simple Home Offer',
-        'meta': 'Sell your house for cash. Get a fair cash offer in 24 hours. We buy as-is, cover closing costs, and close on your timeline. Call (910) 636-6669.',
+        'h1': 'Sell Your House For Cash, Fair Offer In 24 Hours',
+        'title': 'Sell Your House For Cash, Fair Offer In 24 Hours',
+        'meta': 'Sell your house for cash and get a fair offer in 24 hours. We buy as-is, cover closing costs, and close on your timeline. Call (910) 636-6669.',
         'only': "We'll beat any cash offer by $2k",
-        'max_title': 72,
         'max_faq': 6,
     },
 )
@@ -463,6 +462,8 @@ draft: false
             {'file': 'google-ratings.webp', 'alt': '5-star rated on Google', 'width': 195, 'height': 91},
             {'file': 'bbb-white.webp', 'alt': 'A+ BBB rating', 'width': 160, 'height': 112},
             {'file': 'fb-white.webp', 'alt': '5-star rated on Facebook', 'width': 100, 'height': 46},
+            {'file': 'video-veteran-480.webp', 'alt': 'Seller video thumbnail: a Veteran tells how we helped him sell his home', 'width': 480, 'height': 270},
+            {'file': 'video-veteran-960.webp', 'alt': 'Seller video thumbnail: a Veteran tells how we helped him sell his home', 'width': 960, 'height': 540},
         ])
         self.assertEqual((width, height), (320, 122))
 
@@ -1714,6 +1715,55 @@ faq:
         joined = ' '.join(names).lower()
         for topic in ('probate', 'siblings', 'belongings', 'back taxes'):
             self.assertIn(topic, joined, topic)
+
+    def test_cash_and_companies_quality_score_pages(self):
+        self.build()
+        out = Path(gen.OUT)
+        site = json.loads((ROOT / 'content' / 'site.json').read_text(encoding='utf-8'))
+        pf = site['proof']
+        for slug in ('sell-your-house-for-cash', 'companies-that-buy-houses'):
+            doc = (out / slug / 'index.html').read_text(encoding='utf-8')
+            head = doc.split('</head>', 1)[0]
+            main = doc.split('<main>', 1)[1].split('</main>', 1)[0]
+            hero = main.split('</section>', 1)[0]
+            # Form markup is identical to the other public landers.
+            self.assertIn('<div id="ts-app" data-public="1"><form id="ts-form" action="#" method="post">', hero, slug)
+            # Late third-party loaders: queue/init calls stay in the head, only the vendor file waits.
+            self.assertIn('w.__fshoLate=function', head, slug)
+            self.assertIn("fbq('init', '959620977142967');fbq('track', 'PageView');", head, slug)
+            self.assertIn('oaiq("init", { pixelId: "AMsRexCaeaxScDiV9SGJcP" });', head, slug)
+            self.assertIn('window.__fshoLate(function(){t.src=v;', head, slug)
+            self.assertIn('https://www.clickcease.com/monitor/stat.js', head, slug)
+            # GTM loader and WhatConverts are untouched.
+            self.assertIn('GTM-TM6JSDLB', head, slug)
+            self.assertIn('176490.js', head, slug)
+            gtm = head.split('window.dataLayer=window.dataLayer', 1)[1].split('</script>', 1)[0]
+            self.assertNotIn('__fshoLate', gtm, slug)
+            # Video: lite facade below the form, no iframe and no YouTube/ytimg URL as a resource.
+            self.assertNotIn('<iframe', main, slug)
+            self.assertIn('class="vid" data-yt="k3iyV-hwVSs"', main, slug)
+            self.assertIn('aria-label="Play video:', main, slug)
+            self.assertNotIn('ytimg.com', main, slug)
+            self.assertNotIn('youtube.com/watch', hero, slug)
+            self.assertLess(doc.index('id="ts-form"'), doc.index('data-yt="k3iyV-hwVSs"'), slug)
+        cash = (out / 'sell-your-house-for-cash' / 'index.html').read_text(encoding='utf-8')
+        hero = cash.split('<section class="hero', 1)[1].split('</section>', 1)[0]
+        self.assertIn(f'<b>{pf["google_rating"]}</b> rating from {pf["google_count"]} Google reviews', hero)
+        self.assertIn('alt="BBB Accredited Business, A+ rating"', hero)
+        self.assertIn('As-is, no repairs or fees, close on your timeline.', hero)
+        self.assertIn(gen.esc(pf['review']['quote']), hero)
+        self.assertLess(hero.index('id="ts-form"'), hero.index('class="hq"'))
+        lede = cash.split('<p class="lede">', 1)[1].split('</p>', 1)[0].lower()
+        self.assertIn('sell your house for cash', lede)
+        # Other pages keep the original synchronous loaders and the clickcease preconnect.
+        home = (out / 'index.html').read_text(encoding='utf-8').split('</head>', 1)[0]
+        self.assertNotIn('__fshoLate', home)
+        self.assertIn('rel="preconnect" href="https://www.clickcease.com"', home)
+        # Companies page: the "Watch a seller's story" link left the hero.
+        comp = (out / 'companies-that-buy-houses' / 'index.html').read_text(encoding='utf-8')
+        self.assertNotIn("Watch a seller", comp)
+        as_is = (out / 'sell-your-house-as-is' / 'index.html').read_text(encoding='utf-8')
+        self.assertIn("Watch a seller", as_is)
 
 
 def home_h1(html):
