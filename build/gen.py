@@ -1355,7 +1355,7 @@ def build(site, pages, markets, redirects, live):
     def g_rating_text():
         # Verified Google Business Profile figures from site.json "proof". Update only from the live listing.
         return f'<b>{PF["google_rating"]}</b> rating from {PF["google_count"]} Google reviews'
-    PROOF_CSS = ('<style>.hproof{margin:16px 0 0}.hproof-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px}'
+    PROOF_CSS = ('<style data-head>.hproof{margin:16px 0 0}.hproof-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px}'
                  '.hproof .gpill{display:inline-block;background:#fff;color:#1F3C56!important;text-decoration:none;font-weight:600;font-size:15px;padding:8px 14px;border-radius:999px;line-height:1.3}'
                  '.hproof .gpill .stars{color:#A35F00;letter-spacing:1px}.hproof .gpill b{font-weight:800}'
                  '.hproof a.bbb,.hproof a.badge{display:inline-flex;align-items:center;line-height:0}.hproof a.bbb img,.hproof a.badge img{height:46px;width:auto;display:block}'
@@ -1395,7 +1395,7 @@ def build(site, pages, markets, redirects, live):
                 f'<blockquote class="testi">&ldquo;{esc(r["quote"])}&rdquo;<cite>&mdash; {esc(r["name"])}, <a href="{esc(r["url"])}" target="_blank" rel="noopener noreferrer">{r["source"]}<span class="sr-only"> (opens in a new tab)</span></a></cite></blockquote>'
                 f'<p class="c pband-c">Call or text <a href="tel:{TEL}">{PH}</a>' + (f' &middot; <span class="pband-a">{addr}</span>' if addr else '') + '</p>'
                 '</div></section>')
-    LITE_CSS = ('<style>.hlite{margin:14px 0 0}.hlite .hproof-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}'
+    LITE_CSS = ('<style data-head>.hlite{margin:14px 0 0}.hlite .hproof-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}'
                 '.hlite .gpill{display:inline-block;background:#fff;color:#1F3C56!important;text-decoration:none;font-weight:600;font-size:15px;padding:8px 14px;border-radius:999px;line-height:1.3}'
                 '.hlite .gpill .stars{color:#A35F00;letter-spacing:1px}.hlite .gpill b{font-weight:800}'
                 '.hlite a.bbb{display:inline-flex;align-items:center;line-height:0}.hlite a.bbb img{height:44px;width:auto;display:block}'
@@ -1422,7 +1422,7 @@ def build(site, pages, markets, redirects, live):
         if not v.get('id'): return ''
         vid = esc(v['id']); title = esc(v.get('title') or 'Seller video')
         return ('<section class="wrap pad vlite-s"><h2 class="c">Hear a seller&rsquo;s story</h2>'
-                '<style>.vlite-box{aspect-ratio:16/9;max-width:640px;margin:0 auto;border-radius:12px;overflow:hidden;background:#000}'
+                '<style data-head>.vlite-box{aspect-ratio:16/9;max-width:640px;margin:0 auto;border-radius:12px;overflow:hidden;background:#000}'
                 '.vlite-box button.vid{aspect-ratio:auto;height:100%;border-radius:0}.vlite-box button.vid img{aspect-ratio:auto;height:100%;object-fit:cover}'
                 '.vlite-box .vidf{aspect-ratio:auto;height:100%;border-radius:0;display:block}'
                 '.vlite-box button.vid i{display:grid;place-items:center;width:68px;height:68px;border-radius:50%;background:#B94F19;color:#fff;font-style:normal;font-size:28px;text-shadow:none;padding-left:4px;box-shadow:0 4px 16px #0006}'
@@ -1575,7 +1575,12 @@ def build(site, pages, markets, redirects, live):
         gtm_ns = gtm_noscript(S) if public else ''
         px = pixels_script(S) if public else ''
         foot_addr = f'<div class="contact"><address style="font-style:normal">{address_line(S)}</address></div>' if address_line(S) and public else ''
-        doc = f'''<!doctype html><html lang="en"><head>{robots}<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{wc}{extra}{gtml}<title>{esc(title)}</title><meta name="description" content="{esc(desc)}"><link rel="icon" href="/favicon.png"><link rel="canonical" href="{esc(canon)}">{''.join(og)}<style>{CSS}</style>
+        # Hero/video <style data-head> blocks are emitted next to their markup; hoist them into the head so the
+        # rules are in place at first paint (a <style> mid-body re-lays out the hero after paint = layout shift).
+        hoisted = ''.join(dict.fromkeys(re.findall(r'<style data-head>.*?</style>', body, re.S)))
+        body = re.sub(r'<style data-head>.*?</style>', '', body, flags=re.S)
+        hoisted = hoisted.replace('<style data-head>', '<style>')
+        doc = f'''<!doctype html><html lang="en"><head>{robots}<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{wc}{extra}{gtml}<title>{esc(title)}</title><meta name="description" content="{esc(desc)}"><link rel="icon" href="/favicon.png"><link rel="canonical" href="{esc(canon)}">{''.join(og)}<style>{CSS}</style>{hoisted}
 {scripts}</head><body>{gtm_ns}{px}{banner}
 <header class="top"><div class="wrap hd"><a href="/" class="logo"><img src="{S["logo"]}" alt="{logo_alt}" fetchpriority="high"></a><nav>{navl}</nav><a class="btn btn-call" href="tel:{TEL}">📞 {PH}</a></div><nav class="mnav" aria-label="Sections"><a href="/how-it-works/">How It Works</a><a href="/reviews/">Reviews</a><a href="/faq/">FAQ</a></nav></header>
 <main>{body}</main>
