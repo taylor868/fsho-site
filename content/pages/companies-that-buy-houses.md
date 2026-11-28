@@ -2,7 +2,9 @@
 title: "Companies Who Buy Houses | Fair & Simple Home Offer"
 meta_description: "Comparing companies that buy houses? See what that sale means, what to look for, and how Fair and Simple works. Call (910) 636-6669."
 template: situation
-hero_proof: true
+hero_proof_lite: true
+late_third_party: true
+hero_trust_line: "As-is, no repairs or fees, close on your timeline."
 hero_headline: "Companies who buy houses"
 hero_sub: "If you are comparing companies that buy houses, here is what that kind of sale is, what to look for, and how Fair and Simple works."
 personalize: true
@@ -18,6 +20,8 @@ faq:
   - q: "Who is Fair and Simple?"
     a: "Fair and Simple Home Offer is operated by Andrew Collier LLC. You talk with us, not a call center. Call or text <a href=\"tel:+19106366669\">(910) 636-6669</a>, or use the form on this page. Asking does not obligate you to sell."
 ---
+{{video_lite}}
+
 <section class="wrap pad"><h2>What it means to sell to a buying company</h2><p>A company that buys houses offers to purchase the property, or to show you a sale path, without the usual run of showings. Some people want that because they do not want to repair, clean, or wait on a listing. Some people are only researching. Both are fair reasons to be here.</p><p>Selling to a company is not automatically the best price. A cash purchase is typically below full retail, because the buyer takes on repairs, costs, and risk. A listing can aim higher and can also take longer, or not sell. A careful seller compares those paths instead of taking the first number.</p></section>
 
 <section class="alt"><div class="wrap pad"><h2 class="c">What to look for</h2><div class="grid2"><div class="card"><h3>Who you are talking to</h3><p>Get a real company name and a real person. Fair and Simple Home Offer is operated by Andrew Collier LLC. We buy property as principals.</p></div><div class="card"><h3>A number you can read</h3><p>Ask for the offer in writing before you decide. This page does not quote a price. Your house is not a sample number.</p></div><div class="card"><h3>Fees, in plain words</h3><p>Ask what you would pay. On our cash offer there is no agent commission. Ask any company the same question, including us, and read the answer.</p></div><div class="card"><h3>The right to say no</h3><p>A real offer lets you walk away. There is no cost to ask us, and no obligation to accept. If a company will not let you compare, treat that as information.</p></div></div><p class="fine">We will not tell you another company is dishonest. Look at the terms, then decide.</p></div></section>

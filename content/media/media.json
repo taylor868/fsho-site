@@ -34,5 +34,17 @@
     "alt": "5-star rated on Facebook",
     "width": 100,
     "height": 46
+  },
+  {
+    "file": "video-veteran-480.webp",
+    "alt": "Seller video thumbnail: a Veteran tells how we helped him sell his home",
+    "width": 480,
+    "height": 270
+  },
+  {
+    "file": "video-veteran-960.webp",
+    "alt": "Seller video thumbnail: a Veteran tells how we helped him sell his home",
+    "width": 960,
+    "height": 540
   }
 ]
